@@ -498,6 +498,7 @@ dependencies = [
  "crush-circuit",
  "crush-translation",
  "derive_more 1.0.0",
+ "itertools 0.14.0",
  "openvm-circuit",
  "openvm-circuit-derive",
  "openvm-circuit-primitives",
@@ -508,8 +509,10 @@ dependencies = [
  "openvm-stark-sdk",
  "openvm-transpiler",
  "powdr-autoprecompiles",
+ "powdr-number",
  "powdr-openvm",
  "powdr-riscv-elf",
+ "pretty_assertions",
  "serde",
  "strum 0.26.3",
 ]
