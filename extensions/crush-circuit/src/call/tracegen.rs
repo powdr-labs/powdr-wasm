@@ -37,12 +37,12 @@ impl<F: PrimeField32> TraceFiller<F> for CallFiller {
         core_row.is_ret = F::from_bool(local_opcode == CallOpcode::RET);
 
         // return_pc_data
-        core_row.return_pc_data = record.return_pc_data.map(F::from_canonical_u8);
+        core_row.return_pc_data = record.return_pc_data.map(F::from_u8);
         // old_fp_data
-        core_row.old_fp_data = record.old_fp_data.map(F::from_canonical_u8);
+        core_row.old_fp_data = record.old_fp_data.map(F::from_u8);
         // to_pc_data
-        core_row.to_pc_data = record.to_pc_data.map(F::from_canonical_u8);
+        core_row.to_pc_data = record.to_pc_data.map(F::from_u8);
         // new_fp_data
-        core_row.new_fp_data = record.new_fp_data.map(F::from_canonical_u8);
+        core_row.new_fp_data = record.new_fp_data.map(F::from_u8);
     }
 }

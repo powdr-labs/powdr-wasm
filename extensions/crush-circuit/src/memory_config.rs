@@ -24,7 +24,7 @@ pub fn memory_config_with_fp() -> MemoryConfig {
     // GPU requires num_cells to be divisible by DIGEST_WIDTH (8).
     // We only need 4 bytes (size_of::<u32>()), but round up to 8.
     addr_spaces[FP_AS as usize].num_cells = 8;
-    MemoryConfig::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17, 32)
+    MemoryConfig::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17)
 }
 
 /// Utility trait to read the frame pointer from memory, used in preflight and execution.
@@ -45,6 +45,6 @@ impl FpMemory for GuestMemory {
 
     fn set_fp<F: PrimeField32>(&mut self, value: u32) {
         // SAFETY: FP_AS uses native32 cell type (F), so T=F is the correct type.
-        unsafe { self.write::<F, 1>(FP_AS, 0, [F::from_canonical_u32(value)]) }
+        unsafe { self.write::<F, 1>(FP_AS, 0, [F::from_u32(value)]) }
     }
 }

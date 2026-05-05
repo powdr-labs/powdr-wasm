@@ -15,6 +15,8 @@ openvm-circuit = { workspace = true }
 openvm-circuit-derive = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-sdk = { workspace = true }
+openvm-sdk-config = { workspace = true }
+openvm-cpu-backend = { workspace = true }
 openvm-rv32im-transpiler = { workspace = true }
 openvm-rv32im-circuit = { workspace = true }
 openvm-transpiler = { workspace = true }
@@ -54,7 +56,6 @@ aot = ["openvm-circuit/aot", "openvm-circuit-derive/aot"]
 mimalloc = ["openvm-circuit/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc"]
 jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
-nightly-features = ["openvm-circuit/nightly-features"]
 
 cuda = [
   "dep:openvm-stark-sdk",

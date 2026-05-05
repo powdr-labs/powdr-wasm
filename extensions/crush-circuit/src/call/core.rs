@@ -4,10 +4,10 @@ use openvm_circuit::arch::{AdapterAirContext, VmCoreAir};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_crush_transpiler::CallOpcode;
 use openvm_stark_backend::{
+    BaseAirWithPublicValues, ColumnsAir,
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra},
-    rap::{BaseAirWithPublicValues, ColumnsAir},
+    p3_field::{Field, PrimeCharacteristicRing},
 };
 use struct_reflection::{StructReflection, StructReflectionHelper};
 use strum::IntoEnumIterator;
@@ -108,21 +108,21 @@ impl<AB: InteractionBuilder> VmCoreAir<AB, CallAdapterInterface<AB>> for CallCor
             .iter()
             .enumerate()
             .fold(AB::Expr::ZERO, |acc, (i, &limb)| {
-                acc + limb.into() * AB::Expr::from_canonical_u32(1u32 << (i * 8))
+                acc + limb.into() * AB::Expr::from_u32(1u32 << (i * 8))
             });
         builder.when(is_valid.clone()).assert_eq(
             return_pc_composed,
-            from_pc + AB::Expr::from_canonical_u32(openvm_instructions::program::DEFAULT_PC_STEP),
+            from_pc + AB::Expr::from_u32(openvm_instructions::program::DEFAULT_PC_STEP),
         );
 
         // Build the opcode expression from flags
         let expected_opcode = flags.iter().zip(CallOpcode::iter()).fold(
             AB::Expr::ZERO,
             |acc, (&flag, local_opcode)| {
-                acc + flag.into() * AB::Expr::from_canonical_usize(local_opcode as usize)
+                acc + flag.into() * AB::Expr::from_usize(local_opcode as usize)
             },
         );
-        let expected_opcode = expected_opcode + AB::Expr::from_canonical_usize(self.offset);
+        let expected_opcode = expected_opcode + AB::Expr::from_usize(self.offset);
 
         // Derive conditional flags from opcode indicator variables
         let has_pc_read: AB::Expr = cols.is_ret.into() + cols.is_call_indirect.into();

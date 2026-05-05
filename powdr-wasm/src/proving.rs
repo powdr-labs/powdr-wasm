@@ -5,25 +5,24 @@ use std::sync::OnceLock;
 
 use autoprecompiles::CrushISA;
 use crush_circuit::{CrushConfig, CrushCpuBuilder};
+#[cfg(debug_assertions)]
+use openvm_circuit::arch::debug_proving_ctx;
 use openvm_circuit::arch::{
     Executor, MeteredExecutor, PreflightExecutor, VirtualMachine, VmBuilder, VmCircuitConfig,
-    VmExecutionConfig, VmState, debug_proving_ctx,
+    VmExecutionConfig, VmState,
 };
 use openvm_instructions::exe::VmExe;
 use openvm_sdk::StdIn;
-use openvm_sdk::config::{AppConfig, DEFAULT_APP_LOG_BLOWUP};
+use openvm_sdk::config::{AggregationSystemParams, AppConfig};
 use openvm_sdk::keygen::{AggProvingKey, AppProvingKey};
 use openvm_sdk::prover::verify_app_proof;
-use openvm_stark_backend::{config::Val, p3_field::PrimeField32};
+use openvm_stark_backend::{StarkEngine, Val, p3_field::PrimeField32};
 use openvm_stark_sdk::{
     config::{
-        FriParameters,
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+        MAX_APP_LOG_STACKED_HEIGHT, app_params_with_100_bits_security,
+        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2CpuEngine},
     },
-    engine::{StarkEngine, StarkFriEngine},
-    openvm_stark_backend::{
-        keygen::types::MultiStarkProvingKey, prover::hal::DeviceDataTransporter,
-    },
+    openvm_stark_backend::{keygen::types::MultiStarkProvingKey, prover::DeviceDataTransporter},
 };
 use powdr_autoprecompiles::{
     PowdrConfig,
@@ -45,10 +44,9 @@ type SC = BabyBearPoseidon2Config;
 static VM_PROVING_KEY: OnceLock<MultiStarkProvingKey<SC>> = OnceLock::new();
 
 /// Create a CPU engine with default FRI parameters.
-pub fn cpu_engine() -> BabyBearPoseidon2Engine {
-    let fri_params =
-        FriParameters::standard_with_100_bits_conjectured_security(DEFAULT_APP_LOG_BLOWUP);
-    BabyBearPoseidon2Engine::new(fri_params)
+pub fn cpu_engine() -> BabyBearPoseidon2CpuEngine {
+    let params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
+    <BabyBearPoseidon2CpuEngine as StarkEngine>::new(params)
 }
 
 // --- Test-only backend infrastructure ---
@@ -98,16 +96,15 @@ pub const ALL_BACKENDS: &[Backend] = &[
 
 /// Alias for backwards compatibility.
 #[cfg(test)]
-pub fn default_engine() -> BabyBearPoseidon2Engine {
+pub fn default_engine() -> BabyBearPoseidon2CpuEngine {
     cpu_engine()
 }
 
 /// Create a GPU engine with default FRI parameters.
 #[cfg(feature = "cuda")]
-pub fn gpu_engine() -> openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine {
-    let fri_params =
-        FriParameters::standard_with_100_bits_conjectured_security(DEFAULT_APP_LOG_BLOWUP);
-    openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine::new(fri_params)
+pub fn gpu_engine() -> openvm_cuda_backend::engine::BabyBearPoseidon2GpuEngine {
+    let params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
+    <openvm_cuda_backend::engine::BabyBearPoseidon2GpuEngine as StarkEngine>::new(params)
 }
 
 pub fn vm_proving_key() -> &'static MultiStarkProvingKey<SC> {
@@ -117,7 +114,9 @@ pub fn vm_proving_key() -> &'static MultiStarkProvingKey<SC> {
         let circuit = config
             .create_airs()
             .expect("failed to create AIR inventory for keygen");
-        circuit.keygen(&engine)
+        let airs: Vec<_> = circuit.into_airs().collect();
+        let (pk, _vk) = engine.keygen(&airs);
+        pk
     })
 }
 
@@ -145,9 +144,8 @@ fn default_app_config_without_apcs() -> AppConfig<SpecializedConfig<CrushISA>> {
         DEFAULT_DEGREE_BOUND,
     );
 
-    let app_fri_params =
-        FriParameters::standard_with_100_bits_conjectured_security(DEFAULT_APP_LOG_BLOWUP);
-    AppConfig::new(app_fri_params, app_config)
+    let app_fri_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
+    AppConfig::new(app_config, app_fri_params)
 }
 
 /// Generate app and aggregation proving keys and write them to `cache_dir`.
@@ -155,7 +153,7 @@ pub fn keygen_to_disk(cache_dir: &Path) -> Result<(), Box<dyn std::error::Error>
     std::fs::create_dir_all(cache_dir)?;
 
     let app_config = default_app_config_without_apcs();
-    let sdk = CrushSdk::new_without_transpiler(app_config)?;
+    let sdk = CrushSdk::new_without_transpiler(app_config, AggregationSystemParams::default())?;
 
     tracing::info!("Generating app proving key...");
     let app_pk = sdk.app_pk();
@@ -165,7 +163,7 @@ pub fn keygen_to_disk(cache_dir: &Path) -> Result<(), Box<dyn std::error::Error>
 
     tracing::info!("Generating aggregation proving key...");
     let agg_pk = sdk.agg_pk();
-    let agg_pk_bytes = rmp_serde::to_vec(agg_pk)?;
+    let agg_pk_bytes = rmp_serde::to_vec(&agg_pk)?;
     std::fs::write(cache_dir.join(AGG_PK_FILE), &agg_pk_bytes)?;
     tracing::info!("Wrote agg_pk ({:.1} MB)", agg_pk_bytes.len() as f64 / 1e6);
 
@@ -174,24 +172,26 @@ pub fn keygen_to_disk(cache_dir: &Path) -> Result<(), Box<dyn std::error::Error>
 
 fn build_sdk(cache_dir: Option<&Path>) -> Result<CrushSdk, Box<dyn std::error::Error>> {
     let app_config = default_app_config_without_apcs();
-    let sdk = CrushSdk::new_without_transpiler(app_config)?;
+    let mut builder = CrushSdk::builder()
+        .app_config(app_config)
+        .agg_params(AggregationSystemParams::default());
 
     if let Some(dir) = cache_dir {
         let app_pk_path = dir.join(APP_PK_FILE);
         tracing::info!("Loading cached app_pk from {}", app_pk_path.display());
         let app_pk: AppProvingKey<SpecializedConfig<CrushISA>> =
             rmp_serde::from_slice(&std::fs::read(&app_pk_path)?)?;
-        sdk.set_app_pk(app_pk).map_err(|_| "app_pk already set")?;
+        builder = builder.app_pk(app_pk);
 
         let agg_pk_path = dir.join(AGG_PK_FILE);
         if agg_pk_path.exists() {
             tracing::info!("Loading cached agg_pk from {}", agg_pk_path.display());
             let agg_pk: AggProvingKey = rmp_serde::from_slice(&std::fs::read(&agg_pk_path)?)?;
-            sdk.set_agg_pk(agg_pk).map_err(|_| "agg_pk already set")?;
+            builder = builder.agg_pk(agg_pk);
         }
     }
 
-    Ok(sdk)
+    Ok(builder.build_without_transpiler()?)
 }
 
 /// Generate and verify a real cryptographic proof, with optional recursion.
@@ -222,30 +222,36 @@ pub fn prove(
             EmpiricalConstraints::default(),
         )
     };
-    let app_fri_params =
-        FriParameters::standard_with_100_bits_conjectured_security(DEFAULT_APP_LOG_BLOWUP);
-    let app_config = AppConfig::new(app_fri_params, compiled.vm_config.clone());
+    let app_fri_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
+    let app_config = AppConfig::new(compiled.vm_config.clone(), app_fri_params);
     let sdk = if apc_count == 0 {
         build_sdk(cache_dir)?
     } else {
-        CrushSdk::new_without_transpiler(app_config)?
+        CrushSdk::new_without_transpiler(app_config, AggregationSystemParams::default())?
     };
 
-    let mut app_prover = sdk.app_prover(compiled.exe.clone())?;
-    let app_proof = app_prover.prove(stdin)?;
-
-    let app_vk = sdk.app_pk().get_app_vk();
-    verify_app_proof(&app_vk, &app_proof)?;
-
     if recursion {
-        let mut agg_prover = sdk.prover(compiled.exe.clone())?.agg_prover;
-
-        // Note that this proof is not verified. We assume that any valid app proof
-        // (verified above) also leads to a valid aggregation proof.
-        // If this was not the case, it would be a completeness bug in OpenVM.
+        let mut stark_prover = sdk.prover(compiled.exe.clone())?;
+        tracing::info!("Generating STARK proof (app + aggregation)...");
         let start = std::time::Instant::now();
-        let _ = agg_prover.generate_root_verifier_input(app_proof)?;
-        tracing::info!("Agg proof (inner recursion) took {:?}", start.elapsed());
+        let (stark_proof, _) = stark_prover.prove(stdin, &[])?;
+        tracing::info!("STARK proof (with recursion) took {:?}", start.elapsed());
+
+        tracing::info!("Verifying recursive proof...");
+        let baseline = stark_prover.generate_baseline();
+        let agg_vk = sdk.agg_vk();
+        CrushSdk::verify_proof(agg_vk.as_ref().clone(), baseline, &stark_proof)?;
+        tracing::info!("Recursive proof verified.");
+    } else {
+        let mut app_prover = sdk.app_prover(compiled.exe.clone())?;
+        let app_proof = app_prover.prove(stdin)?;
+
+        let app_vk = sdk.app_pk().get_app_vk();
+        let _ = verify_app_proof::<BabyBearPoseidon2CpuEngine>(
+            &app_vk.vk,
+            app_vk.memory_dimensions,
+            &app_proof,
+        )?;
     }
 
     Ok(())
@@ -298,7 +304,11 @@ where
             preflight_output.system_records,
             preflight_output.record_arenas,
         )?;
-        debug_proving_ctx(&vm, pk, &ctx);
+        let _ = &ctx;
+        #[cfg(debug_assertions)]
+        debug_proving_ctx(&vm, &ctx);
+        #[cfg(not(debug_assertions))]
+        tracing::warn!("mock proving skips debug checks in release mode");
     }
 
     Ok(state)
@@ -339,34 +349,48 @@ pub fn prove_from_compiled(
     let compiled: CompiledProgram<CrushISA> =
         rmp_serde::from_slice(&std::fs::read(compiled_dir.join(COMPILED_PROGRAM_FILE))?)?;
 
-    let app_fri_params =
-        FriParameters::standard_with_100_bits_conjectured_security(DEFAULT_APP_LOG_BLOWUP);
-    let app_config = AppConfig::new(app_fri_params, compiled.vm_config.clone());
-    let sdk = CrushSdk::new_without_transpiler(app_config)?;
+    let app_fri_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
+    let app_config = AppConfig::new(compiled.vm_config.clone(), app_fri_params);
 
     tracing::info!("Loading cached app_pk...");
     let app_pk: AppProvingKey<SpecializedConfig<CrushISA>> =
         rmp_serde::from_slice(&std::fs::read(compiled_dir.join(APP_PK_FILE))?)?;
-    sdk.set_app_pk(app_pk).map_err(|_| "app_pk already set")?;
+
+    let mut builder = CrushSdk::builder()
+        .app_config(app_config)
+        .agg_params(AggregationSystemParams::default())
+        .app_pk(app_pk);
 
     if recursion {
         tracing::info!("Loading cached agg_pk...");
         let agg_pk: AggProvingKey =
             rmp_serde::from_slice(&std::fs::read(compiled_dir.join(AGG_PK_FILE))?)?;
-        sdk.set_agg_pk(agg_pk).map_err(|_| "agg_pk already set")?;
+        builder = builder.agg_pk(agg_pk);
     }
-
-    let mut app_prover = sdk.app_prover(compiled.exe.clone())?;
-    let app_proof = app_prover.prove(stdin)?;
-
-    let app_vk = sdk.app_pk().get_app_vk();
-    verify_app_proof(&app_vk, &app_proof)?;
+    let sdk = builder.build_without_transpiler()?;
 
     if recursion {
-        let mut agg_prover = sdk.prover(compiled.exe.clone())?.agg_prover;
+        let mut stark_prover = sdk.prover(compiled.exe.clone())?;
+        tracing::info!("Generating STARK proof (app + aggregation)...");
         let start = std::time::Instant::now();
-        let _ = agg_prover.generate_root_verifier_input(app_proof)?;
-        tracing::info!("Agg proof (inner recursion) took {:?}", start.elapsed());
+        let (stark_proof, _) = stark_prover.prove(stdin, &[])?;
+        tracing::info!("STARK proof (with recursion) took {:?}", start.elapsed());
+
+        tracing::info!("Verifying recursive proof...");
+        let baseline = stark_prover.generate_baseline();
+        let agg_vk = sdk.agg_vk();
+        CrushSdk::verify_proof(agg_vk.as_ref().clone(), baseline, &stark_proof)?;
+        tracing::info!("Recursive proof verified.");
+    } else {
+        let mut app_prover = sdk.app_prover(compiled.exe.clone())?;
+        let app_proof = app_prover.prove(stdin)?;
+
+        let app_vk = sdk.app_pk().get_app_vk();
+        let _ = verify_app_proof::<BabyBearPoseidon2CpuEngine>(
+            &app_vk.vk,
+            app_vk.memory_dimensions,
+            &app_proof,
+        )?;
     }
 
     Ok(())
@@ -382,32 +406,48 @@ pub fn prove_riscv_from_compiled(
     let compiled: CompiledProgram<powdr_openvm_riscv::RiscvISA> =
         rmp_serde::from_slice(&std::fs::read(compiled_dir.join(COMPILED_PROGRAM_FILE))?)?;
 
-    let app_fri_params =
-        FriParameters::standard_with_100_bits_conjectured_security(DEFAULT_APP_LOG_BLOWUP);
-    let app_config = AppConfig::new(app_fri_params, compiled.vm_config.clone());
-    let sdk = RiscvSdk::new_without_transpiler(app_config)?;
+    let app_fri_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
+    let app_config = AppConfig::new(compiled.vm_config.clone(), app_fri_params);
 
     tracing::info!("Loading cached app_pk...");
     let app_pk: AppProvingKey<SpecializedConfig<powdr_openvm_riscv::RiscvISA>> =
         rmp_serde::from_slice(&std::fs::read(compiled_dir.join(APP_PK_FILE))?)?;
-    sdk.set_app_pk(app_pk).map_err(|_| "app_pk already set")?;
 
-    let mut app_prover = sdk.app_prover(compiled.exe.clone())?;
-    let app_proof = app_prover.prove(stdin)?;
-
-    let app_vk = sdk.app_pk().get_app_vk();
-    verify_app_proof(&app_vk, &app_proof)?;
+    let mut builder = RiscvSdk::builder()
+        .app_config(app_config)
+        .agg_params(AggregationSystemParams::default())
+        .app_pk(app_pk);
 
     if recursion {
         tracing::info!("Loading cached agg_pk...");
         let agg_pk: AggProvingKey =
             rmp_serde::from_slice(&std::fs::read(compiled_dir.join(AGG_PK_FILE))?)?;
-        sdk.set_agg_pk(agg_pk).map_err(|_| "agg_pk already set")?;
+        builder = builder.agg_pk(agg_pk);
+    }
+    let sdk = builder.build_without_transpiler()?;
 
-        let mut agg_prover = sdk.prover(compiled.exe.clone())?.agg_prover;
+    if recursion {
+        let mut stark_prover = sdk.prover(compiled.exe.clone())?;
+        tracing::info!("Generating STARK proof (app + aggregation)...");
         let start = std::time::Instant::now();
-        let _ = agg_prover.generate_root_verifier_input(app_proof)?;
-        tracing::info!("Agg proof (inner recursion) took {:?}", start.elapsed());
+        let (stark_proof, _) = stark_prover.prove(stdin, &[])?;
+        tracing::info!("STARK proof (with recursion) took {:?}", start.elapsed());
+
+        tracing::info!("Verifying recursive proof...");
+        let baseline = stark_prover.generate_baseline();
+        let agg_vk = sdk.agg_vk();
+        RiscvSdk::verify_proof(agg_vk.as_ref().clone(), baseline, &stark_proof)?;
+        tracing::info!("Recursive proof verified.");
+    } else {
+        let mut app_prover = sdk.app_prover(compiled.exe.clone())?;
+        let app_proof = app_prover.prove(stdin)?;
+
+        let app_vk = sdk.app_pk().get_app_vk();
+        let _ = verify_app_proof::<BabyBearPoseidon2CpuEngine>(
+            &app_vk.vk,
+            app_vk.memory_dimensions,
+            &app_proof,
+        )?;
     }
 
     Ok(())

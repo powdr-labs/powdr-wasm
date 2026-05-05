@@ -18,6 +18,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 use openvm_circuit_primitives::range_tuple::{
     RangeTupleCheckerAir, RangeTupleCheckerBus, RangeTupleCheckerChip, SharedRangeTupleCheckerChip,
 };
+use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_crush_transpiler::{
     BaseAlu64Opcode, BaseAluOpcode, CallOpcode, ConstOpcodes, DivRem64Opcode, DivRemOpcode,
     Eq64Opcode, EqOpcode, HintStoreOpcode, JumpOpcode, LessThan64Opcode, LessThanOpcode,
@@ -30,12 +31,7 @@ use openvm_rv32im_circuit::{
     LoadSignExtendCoreAir, LoadSignExtendFiller, LoadStoreCoreAir, LoadStoreFiller,
     MultiplicationCoreAir, MultiplicationFiller, ShiftCoreAir, ShiftFiller,
 };
-use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
-    engine::StarkEngine,
-    p3_field::PrimeField32,
-    prover::cpu::{CpuBackend, CpuDevice},
-};
+use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val, p3_field::PrimeField32};
 
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
@@ -273,7 +269,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Crush {
     }
 }
 
-impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Crush {
+impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Crush {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         let SystemPort {
             execution_bus,
@@ -460,10 +456,11 @@ pub struct CrushCpuProverExt;
 // BitwiseOperationLookupChip) are specific to CpuBackend.
 impl<E, SC, RA> VmProverExtension<E, RA, Crush> for CrushCpuProverExt
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     RA: RowMajorMatrixArena<Val<SC>>,
-    Val<SC>: PrimeField32,
+    Val<SC>: openvm_circuit::arch::VmField,
+    SC::EF: Ord,
 {
     fn extend_prover(
         &self,

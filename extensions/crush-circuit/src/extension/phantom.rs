@@ -47,7 +47,7 @@ impl<F: Field> PhantomSubExecutor<F> for HintInputSubEx {
             (hint.len() as u32)
                 .to_le_bytes()
                 .iter()
-                .map(|b| F::from_canonical_u8(*b)),
+                .map(|b| F::from_u8(*b)),
         );
         // Pad to 4-byte alignment
         let capacity = hint.len().div_ceil(4) * 4;
@@ -100,21 +100,24 @@ impl<F: PrimeField32> PhantomSubExecutor<F> for HintRandomSubEx {
     ) -> eyre::Result<()> {
         let len = read_register::<F>(memory, a) as usize;
         streams.hint_stream.clear();
-        streams.hint_stream.extend(
-            std::iter::repeat_with(|| F::from_canonical_u8(rng.r#gen::<u8>())).take(len * 4),
-        );
+        streams
+            .hint_stream
+            .extend(std::iter::repeat_with(|| F::from_u8(rng.random::<u8>())).take(len * 4));
         Ok(())
     }
 }
 
 /// HintLoadByKey: Loads values from the KV store into input stream.
+///
+/// Note: `Streams::kv_store` was removed in openvm v2. This executor now
+/// always returns an error because the feature is no longer supported.
 pub struct HintLoadByKeySubEx;
 
 impl<F: PrimeField32> PhantomSubExecutor<F> for HintLoadByKeySubEx {
     fn phantom_execute(
         &self,
         memory: &GuestMemory,
-        streams: &mut Streams<F>,
+        _streams: &mut Streams<F>,
         _: &mut StdRng,
         _: PhantomDiscriminant,
         a: u32,
@@ -123,43 +126,11 @@ impl<F: PrimeField32> PhantomSubExecutor<F> for HintLoadByKeySubEx {
     ) -> eyre::Result<()> {
         let ptr = read_register::<F>(memory, a);
         let len = read_register::<F>(memory, b);
-        let key: Vec<u8> = (0..len)
+        let _key: Vec<u8> = (0..len)
             .map(|i| memory_read::<1>(memory, RV32_MEMORY_AS, ptr + i)[0])
             .collect();
-        if let Some(val) = streams.kv_store.get(&key) {
-            let to_push = hint_load_by_key_decode::<F>(val);
-            for input in to_push.into_iter().rev() {
-                streams.input_stream.push_front(input);
-            }
-        } else {
-            bail!("HintLoadByKey: key not found");
-        }
-        Ok(())
+        bail!("HintLoadByKey is no longer supported (kv_store removed in openvm v2)");
     }
-}
-
-fn hint_load_by_key_decode<F: PrimeField32>(value: &[u8]) -> Vec<Vec<F>> {
-    let mut offset = 0;
-    let len = extract_u32(value, offset) as usize;
-    offset += 4;
-    let mut ret = Vec::with_capacity(len);
-    for _ in 0..len {
-        let v_len = extract_u32(value, offset) as usize;
-        offset += 4;
-        let v = (0..v_len)
-            .map(|_| {
-                let ret = F::from_canonical_u32(extract_u32(value, offset));
-                offset += 4;
-                ret
-            })
-            .collect();
-        ret.push(v);
-    }
-    ret
-}
-
-fn extract_u32(value: &[u8], offset: usize) -> u32 {
-    u32::from_le_bytes(value[offset..offset + 4].try_into().unwrap())
 }
 
 /// ClockTimeGet: fills hint stream with 8 bytes of an incrementing nanosecond
@@ -193,7 +164,7 @@ impl<F: PrimeField32> PhantomSubExecutor<F> for ClockTimeGetSubEx {
         streams.hint_stream.clear();
         streams
             .hint_stream
-            .extend(ns.to_le_bytes().iter().map(|&b| F::from_canonical_u8(b)));
+            .extend(ns.to_le_bytes().iter().map(|&b| F::from_u8(b)));
         Ok(())
     }
 }
