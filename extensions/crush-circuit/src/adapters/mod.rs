@@ -8,7 +8,10 @@ use openvm_circuit::{
         online::{GuestMemory, TracingMemory},
     },
 };
-use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
+use openvm_instructions::{
+    DEFERRAL_AS as NATIVE_AS,
+    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+};
 use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
 
 use crate::memory_config::FP_AS;
@@ -119,6 +122,34 @@ pub fn memory_write<const N: usize>(
     // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
     //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
     unsafe { memory.write::<u8, N>(address_space, ptr, data) }
+}
+
+/// Read from address space `NATIVE_AS` (= `DEFERRAL_AS`), which has cell type `F`.
+/// Crush-specific: upstream rv32im rejects `DEFERRAL_AS` in loadstore; we need it
+/// to support stores into the deferral address space.
+#[inline(always)]
+pub fn memory_read_native<F, const N: usize>(memory: &GuestMemory, ptr: u32) -> [F; N]
+where
+    F: PrimeField32,
+{
+    // SAFETY: address space `NATIVE_AS` always has cell type `F` and minimum alignment `1`.
+    unsafe { memory.read::<F, N>(NATIVE_AS, ptr) }
+}
+
+/// Atomic write into address space `NATIVE_AS` (= `DEFERRAL_AS`), which has cell type `F`.
+/// Crush-specific: upstream rv32im rejects `DEFERRAL_AS` in loadstore; we need it
+/// to support stores into the deferral address space.
+#[inline(always)]
+pub fn timed_write_native<F, const N: usize>(
+    memory: &mut TracingMemory,
+    ptr: u32,
+    vals: [F; N],
+) -> (u32, [F; N])
+where
+    F: PrimeField32,
+{
+    // SAFETY: address space `NATIVE_AS` always has cell type `F` and minimum alignment `1`.
+    unsafe { memory.write::<F, N>(NATIVE_AS, ptr, vals) }
 }
 
 /// Atomic read operation which increments the timestamp by 1.

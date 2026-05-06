@@ -350,7 +350,6 @@ Phantom instructions modify the hint stream without producing circuit trace rows
 | `prepare_read` (HintInput) | `0x120` | Pop next input vector, prepend its 4-byte LE length, push onto hint stream |
 | `debug_print` (PrintStr) | `0x121` | Read string from memory and print to stdout (debug only) |
 | HintRandom | `0x122` | Generate random bytes and push onto hint stream |
-| HintLoadByKey | `0x123` | Load value from KV store by key and push onto input stream |
 
 ### HintStore Instructions
 

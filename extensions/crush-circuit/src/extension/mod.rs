@@ -253,10 +253,6 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Crush {
             PhantomDiscriminant(Phantom::HintRandom as u16),
         )?;
         inventory.add_phantom_sub_executor(
-            phantom::HintLoadByKeySubEx,
-            PhantomDiscriminant(Phantom::HintLoadByKey as u16),
-        )?;
-        inventory.add_phantom_sub_executor(
             phantom::TraceSyscallSubEx::new(),
             PhantomDiscriminant(Phantom::TraceSyscall as u16),
         )?;

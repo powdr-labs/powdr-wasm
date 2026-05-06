@@ -38,42 +38,14 @@ use openvm_stark_backend::{
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
-
-/// Inlined replacement for the removed `native_adapter::util::memory_read_native`.
-/// Reads from address space [NATIVE_AS] (= [DEFERRAL_AS]) which has cell type `F`.
-#[inline(always)]
-fn memory_read_native<F, const N: usize>(
-    memory: &openvm_circuit::system::memory::online::GuestMemory,
-    ptr: u32,
-) -> [F; N]
-where
-    F: PrimeField32,
-{
-    // SAFETY: address space `NATIVE_AS` always has cell type `F` and minimum alignment `1`.
-    unsafe { memory.read::<F, N>(NATIVE_AS, ptr) }
-}
-
-/// Inlined replacement for the removed `native_adapter::util::timed_write_native`.
-/// Writes to address space [NATIVE_AS] (= [DEFERRAL_AS]) which has cell type `F`.
-#[inline(always)]
-fn timed_write_native<F, const BLOCK_SIZE: usize>(
-    memory: &mut TracingMemory,
-    ptr: u32,
-    vals: [F; BLOCK_SIZE],
-) -> (u32, [F; BLOCK_SIZE])
-where
-    F: PrimeField32,
-{
-    // SAFETY: address space `NATIVE_AS` always has cell type `F` and minimum alignment `1`.
-    unsafe { memory.write::<F, BLOCK_SIZE>(NATIVE_AS, ptr, vals) }
-}
 use struct_reflection::{StructReflection, StructReflectionHelper};
 
 use openvm_circuit::arch::{ExecutionBridge, ExecutionState as OvmExecutionState};
 
 use super::RV32_REGISTER_NUM_LIMBS;
 use super::{
-    RV32_CELL_BITS, fp_addr, memory_read, reg_addr, timed_write, tracing_read, tracing_read_fp,
+    RV32_CELL_BITS, fp_addr, memory_read, memory_read_native, reg_addr, timed_write,
+    timed_write_native, tracing_read, tracing_read_fp,
 };
 use crate::execution::ExecutionState;
 

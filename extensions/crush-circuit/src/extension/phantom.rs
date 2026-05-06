@@ -107,32 +107,6 @@ impl<F: PrimeField32> PhantomSubExecutor<F> for HintRandomSubEx {
     }
 }
 
-/// HintLoadByKey: Loads values from the KV store into input stream.
-///
-/// Note: `Streams::kv_store` was removed in openvm v2. This executor now
-/// always returns an error because the feature is no longer supported.
-pub struct HintLoadByKeySubEx;
-
-impl<F: PrimeField32> PhantomSubExecutor<F> for HintLoadByKeySubEx {
-    fn phantom_execute(
-        &self,
-        memory: &GuestMemory,
-        _streams: &mut Streams<F>,
-        _: &mut StdRng,
-        _: PhantomDiscriminant,
-        a: u32,
-        b: u32,
-        _: u16,
-    ) -> eyre::Result<()> {
-        let ptr = read_register::<F>(memory, a);
-        let len = read_register::<F>(memory, b);
-        let _key: Vec<u8> = (0..len)
-            .map(|i| memory_read::<1>(memory, RV32_MEMORY_AS, ptr + i)[0])
-            .collect();
-        bail!("HintLoadByKey is no longer supported (kv_store removed in openvm v2)");
-    }
-}
-
 /// ClockTimeGet: fills hint stream with 8 bytes of an incrementing nanosecond
 /// timestamp. Starts at 1 second and increments by 1 ms per call.
 /// Go's runtime expects monotonically increasing values from clock_time_get;
