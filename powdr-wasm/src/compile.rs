@@ -4,8 +4,8 @@ use std::path::Path;
 
 use autoprecompiles::CrushISA;
 use openvm_sdk::StdIn;
-use openvm_sdk::config::{AppConfig, DEFAULT_APP_LOG_BLOWUP};
-use openvm_stark_sdk::config::FriParameters;
+use openvm_sdk::config::{AggregationSystemParams, AppConfig};
+use openvm_stark_sdk::config::{MAX_APP_LOG_STACKED_HEIGHT, app_params_with_100_bits_security};
 use powdr_autoprecompiles::{
     PowdrConfig,
     empirical_constraints::EmpiricalConstraints,
@@ -63,10 +63,9 @@ pub fn compile_crush_to_disk(
     );
 
     // Keygen
-    let app_fri_params =
-        FriParameters::standard_with_100_bits_conjectured_security(DEFAULT_APP_LOG_BLOWUP);
-    let app_config = AppConfig::new(app_fri_params, compiled.vm_config.clone());
-    let sdk = CrushSdk::new_without_transpiler(app_config)?;
+    let system_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
+    let app_config = AppConfig::new(compiled.vm_config.clone(), system_params);
+    let sdk = CrushSdk::new_without_transpiler(app_config, AggregationSystemParams::default())?;
 
     let keygen_start = std::time::Instant::now();
 
@@ -78,7 +77,7 @@ pub fn compile_crush_to_disk(
 
     tracing::info!("Generating aggregation proving key...");
     let agg_pk = sdk.agg_pk();
-    let agg_pk_bytes = rmp_serde::to_vec(agg_pk)?;
+    let agg_pk_bytes = rmp_serde::to_vec(&agg_pk)?;
     std::fs::write(output_dir.join(AGG_PK_FILE), &agg_pk_bytes)?;
     tracing::info!("Wrote agg_pk ({:.1} MB)", agg_pk_bytes.len() as f64 / 1e6);
 
@@ -134,10 +133,9 @@ pub fn compile_riscv_to_disk(
     );
 
     // Keygen
-    let app_fri_params =
-        FriParameters::standard_with_100_bits_conjectured_security(DEFAULT_APP_LOG_BLOWUP);
-    let app_config = AppConfig::new(app_fri_params, compiled.vm_config.clone());
-    let sdk = RiscvSdk::new_without_transpiler(app_config)?;
+    let system_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
+    let app_config = AppConfig::new(compiled.vm_config.clone(), system_params);
+    let sdk = RiscvSdk::new_without_transpiler(app_config, AggregationSystemParams::default())?;
 
     let keygen_start = std::time::Instant::now();
 
@@ -149,7 +147,7 @@ pub fn compile_riscv_to_disk(
 
     tracing::info!("Generating aggregation proving key...");
     let agg_pk = sdk.agg_pk();
-    let agg_pk_bytes = rmp_serde::to_vec(agg_pk)?;
+    let agg_pk_bytes = rmp_serde::to_vec(&agg_pk)?;
     std::fs::write(output_dir.join(AGG_PK_FILE), &agg_pk_bytes)?;
     tracing::info!("Wrote agg_pk ({:.1} MB)", agg_pk_bytes.len() as f64 / 1e6);
 

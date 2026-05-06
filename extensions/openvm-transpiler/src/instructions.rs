@@ -277,8 +277,6 @@ pub enum Phantom {
     PrintStr,
     /// Prepare given amount of random numbers for hinting.
     HintRandom,
-    /// Hint the VM to load values from the stream KV store into input streams.
-    HintLoadByKey,
     /// Debug: trace WASI syscall execution. c_upper = syscall ID.
     TraceSyscall,
     /// Fill hint stream with 8 bytes of incrementing clock timestamp.

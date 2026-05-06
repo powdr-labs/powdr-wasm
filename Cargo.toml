@@ -8,15 +8,15 @@ members = ["powdr-wasm", "extensions/openvm-transpiler", "extensions/crush-circu
 resolver = "2"
 
 [workspace.dependencies]
-powdr-openvm = { git = "https://github.com/powdr-labs/powdr.git", rev = "0597095", default-features = false, features = [
+powdr-openvm = { git = "https://github.com/powdr-labs/powdr.git", rev = "dc9561d", default-features = false, features = [
   "metrics",
 ] }
-powdr-openvm-riscv = { git = "https://github.com/powdr-labs/powdr.git", rev = "0597095", default-features = false, features = [
+powdr-openvm-riscv = { git = "https://github.com/powdr-labs/powdr.git", rev = "dc9561d", default-features = false, features = [
   "metrics",
 ] }
-powdr-autoprecompiles = { git = "https://github.com/powdr-labs/powdr.git", rev = "0597095", default-features = false }
-powdr-number = { git = "https://github.com/powdr-labs/powdr.git", rev = "0597095", default-features = false }
-powdr-riscv-elf = { git = "https://github.com/powdr-labs/powdr.git", rev = "0597095", default-features = false }
+powdr-autoprecompiles = { git = "https://github.com/powdr-labs/powdr.git", rev = "dc9561d", default-features = false }
+powdr-number = { git = "https://github.com/powdr-labs/powdr.git", rev = "dc9561d", default-features = false }
+powdr-riscv-elf = { git = "https://github.com/powdr-labs/powdr.git", rev = "dc9561d", default-features = false }
 
 openvm-crush-transpiler = { path = "extensions/openvm-transpiler" }
 
@@ -24,37 +24,37 @@ crush-circuit = { path = "extensions/crush-circuit" }
 autoprecompiles = { path = "extensions/autoprecompiles" }
 crush-translation = { path = "extensions/crush-translation" }
 
-openvm-stark-sdk = { git = "https://github.com/powdr-labs/stark-backend.git", rev = "v1.2.2-powdr-2026-03-20", features = [
-  "parallel",
-  "jemalloc",
-  "nightly-features",
-  "metrics",
-] }
-openvm-stark-backend = { git = "https://github.com/powdr-labs/stark-backend.git", rev = "v1.2.2-powdr-2026-03-20", features = [
+openvm-stark-sdk = { git = "https://github.com/powdr-labs/stark-backend.git", tag = "v2.0.0-beta.2-powdr", features = [
   "parallel",
   "jemalloc",
   "metrics",
 ] }
-openvm-cuda-backend = { git = "https://github.com/powdr-labs/stark-backend.git", rev = "v1.2.2-powdr-2026-03-20", default-features = false }
-openvm-cuda-builder = { git = "https://github.com/powdr-labs/stark-backend.git", rev = "v1.2.2-powdr-2026-03-20", default-features = false }
-openvm-cuda-common = { git = "https://github.com/powdr-labs/stark-backend.git", rev = "v1.2.2-powdr-2026-03-20", default-features = false }
-openvm-sdk = { git = "https://github.com/powdr-labs/openvm.git", tag = "v1.4.2-powdr-rc.4", default-features = false, features = [
+openvm-stark-backend = { git = "https://github.com/powdr-labs/stark-backend.git", tag = "v2.0.0-beta.2-powdr", features = [
   "parallel",
   "jemalloc",
-  "nightly-features",
+  "metrics",
+] }
+openvm-cuda-backend = { git = "https://github.com/powdr-labs/stark-backend.git", tag = "v2.0.0-beta.2-powdr", default-features = false }
+openvm-cuda-builder = { git = "https://github.com/powdr-labs/stark-backend.git", tag = "v2.0.0-beta.2-powdr", default-features = false }
+openvm-cuda-common = { git = "https://github.com/powdr-labs/stark-backend.git", tag = "v2.0.0-beta.2-powdr", default-features = false }
+openvm-sdk = { git = "https://github.com/powdr-labs/openvm.git", tag = "v2.0.0-beta.2-powdr", default-features = false, features = [
+  "parallel",
+  "jemalloc",
   "evm-prove",
   "metrics",
 ] }
-openvm-circuit-primitives = { git = "https://github.com/powdr-labs/openvm.git", tag = "v1.4.2-powdr-rc.4", default-features = false }
-openvm-circuit-primitives-derive = { git = "https://github.com/powdr-labs/openvm.git", tag = "v1.4.2-powdr-rc.4", default-features = false }
-openvm-circuit = { git = "https://github.com/powdr-labs/openvm.git", tag = "v1.4.2-powdr-rc.4", default-features = false }
-openvm-circuit-derive = { git = "https://github.com/powdr-labs/openvm.git", tag = "v1.4.2-powdr-rc.4", default-features = false }
-openvm-instructions = { git = "https://github.com/powdr-labs/openvm.git", tag = "v1.4.2-powdr-rc.4", default-features = false }
-openvm-instructions-derive = { git = "https://github.com/powdr-labs/openvm.git", tag = "v1.4.2-powdr-rc.4", default-features = false }
-openvm-rv32im-transpiler = { git = "https://github.com/powdr-labs/openvm.git", tag = "v1.4.2-powdr-rc.4", default-features = false }
-openvm-rv32im-circuit = { git = "https://github.com/powdr-labs/openvm.git", tag = "v1.4.2-powdr-rc.4", default-features = false }
-openvm-transpiler = { git = "https://github.com/powdr-labs/openvm.git", tag = "v1.4.2-powdr-rc.4", default-features = false }
-openvm-native-circuit = { git = "https://github.com/powdr-labs/openvm.git", tag = "v1.4.2-powdr-rc.4", default-features = false }
+openvm-circuit-primitives = { git = "https://github.com/powdr-labs/openvm.git", tag = "v2.0.0-beta.2-powdr", default-features = false }
+openvm-circuit-primitives-derive = { git = "https://github.com/powdr-labs/openvm.git", tag = "v2.0.0-beta.2-powdr", default-features = false }
+openvm-circuit = { git = "https://github.com/powdr-labs/openvm.git", tag = "v2.0.0-beta.2-powdr", default-features = false }
+openvm-circuit-derive = { git = "https://github.com/powdr-labs/openvm.git", tag = "v2.0.0-beta.2-powdr", default-features = false }
+openvm-instructions = { git = "https://github.com/powdr-labs/openvm.git", tag = "v2.0.0-beta.2-powdr", default-features = false }
+openvm-instructions-derive = { git = "https://github.com/powdr-labs/openvm.git", tag = "v2.0.0-beta.2-powdr", default-features = false }
+openvm-rv32im-transpiler = { git = "https://github.com/powdr-labs/openvm.git", tag = "v2.0.0-beta.2-powdr", default-features = false }
+openvm-rv32im-circuit = { git = "https://github.com/powdr-labs/openvm.git", tag = "v2.0.0-beta.2-powdr", default-features = false }
+openvm-transpiler = { git = "https://github.com/powdr-labs/openvm.git", tag = "v2.0.0-beta.2-powdr", default-features = false }
+openvm-recursion-circuit = { git = "https://github.com/powdr-labs/openvm.git", tag = "v2.0.0-beta.2-powdr", default-features = false }
+openvm-sdk-config = { git = "https://github.com/powdr-labs/openvm.git", tag = "v2.0.0-beta.2-powdr", default-features = false }
+openvm-cpu-backend = { git = "https://github.com/powdr-labs/stark-backend.git", tag = "v2.0.0-beta.2-powdr", default-features = false }
 
 thiserror = "1.0.65"
 strum_macros = "0.26.4"
@@ -63,7 +63,7 @@ derive-new = "0.6.0"
 derive_more = { version = "1.0.0", features = [
   "display",
 ], default-features = false }
-rand = { version = "0.8.5", default-features = false }
+rand = { version = "0.9.2", default-features = false, features = ["std", "std_rng", "os_rng"] }
 eyre = "0.6.12"
 num-bigint = { version = "0.4.6", default-features = false }
 num-integer = { version = "0.1.46", default-features = false }
@@ -79,7 +79,7 @@ itertools = "0.14"
 rrs-lib = "0.1.0"
 tracing = "0.1.40"
 
-crush = { git = "https://github.com/powdr-labs/crush.git", rev = "be459c5" }
+crush = { git = "https://github.com/powdr-labs/crush.git", rev = "330723c" }
 wasmparser = { version = "0.235", default-features = false }
 
 # Uncomment for local development with path patches:

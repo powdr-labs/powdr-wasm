@@ -9,16 +9,13 @@ use openvm_circuit::{
         AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller, VmAdapterAir,
         VmAdapterInterface, get_record_from_slice,
     },
-    system::{
-        memory::{
-            MemoryAddress, MemoryAuxColsFactory,
-            offline_checker::{
-                MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
-                MemoryWriteAuxCols,
-            },
-            online::TracingMemory,
+    system::memory::{
+        MemoryAddress, MemoryAuxColsFactory,
+        offline_checker::{
+            MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
+            MemoryWriteAuxCols,
         },
-        native_adapter::util::{memory_read_native, timed_write_native},
+        online::TracingMemory,
     },
 };
 use openvm_circuit_primitives::{
@@ -28,7 +25,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    LocalOpcode, NATIVE_AS,
+    DEFERRAL_AS as NATIVE_AS, LocalOpcode,
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_IMM_AS, RV32_MEMORY_AS, RV32_REGISTER_AS},
@@ -36,10 +33,10 @@ use openvm_instructions::{
 use openvm_rv32im_circuit::adapters::LoadStoreInstruction;
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
+    ColumnsAir,
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
-    rap::ColumnsAir,
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 use struct_reflection::{StructReflection, StructReflectionHelper};
 
@@ -47,7 +44,8 @@ use openvm_circuit::arch::{ExecutionBridge, ExecutionState as OvmExecutionState}
 
 use super::RV32_REGISTER_NUM_LIMBS;
 use super::{
-    RV32_CELL_BITS, fp_addr, memory_read, reg_addr, timed_write, tracing_read, tracing_read_fp,
+    RV32_CELL_BITS, fp_addr, fp_block, memory_read, memory_read_native, reg_addr, timed_write,
+    timed_write_native, tracing_read, tracing_read_fp,
 };
 use crate::execution::ExecutionState;
 
@@ -126,7 +124,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
         let mut timestamp_delta: usize = 0;
         let mut timestamp_pp = || {
             timestamp_delta += 1;
-            timestamp + AB::Expr::from_canonical_usize(timestamp_delta - 1)
+            timestamp + AB::Expr::from_usize(timestamp_delta - 1)
         };
 
         let is_load = ctx.instruction.is_load;
@@ -154,7 +152,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
         self.memory_bridge
             .read(
                 fp_addr::<AB::F>(),
-                [local_cols.from_state.fp],
+                fp_block::<AB::Expr>(local_cols.from_state.fp.into()),
                 timestamp_pp(),
                 &local_cols.fp_read_aux,
             )
@@ -171,12 +169,12 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
             .eval(builder, is_valid.clone());
 
         // constrain mem_ptr = rs1 + imm as a u32 addition with 2 limbs
-        let limbs_01 = local_cols.rs1_data[0]
-            + local_cols.rs1_data[1] * AB::F::from_canonical_u32(1 << RV32_CELL_BITS);
-        let limbs_23 = local_cols.rs1_data[2]
-            + local_cols.rs1_data[3] * AB::F::from_canonical_u32(1 << RV32_CELL_BITS);
+        let limbs_01 =
+            local_cols.rs1_data[0] + local_cols.rs1_data[1] * AB::F::from_u32(1 << RV32_CELL_BITS);
+        let limbs_23 =
+            local_cols.rs1_data[2] + local_cols.rs1_data[3] * AB::F::from_u32(1 << RV32_CELL_BITS);
 
-        let inv = AB::F::from_canonical_u32(1 << (RV32_CELL_BITS * 2)).inverse();
+        let inv = AB::F::from_u32(1 << (RV32_CELL_BITS * 2)).inverse();
         let carry = (limbs_01 + local_cols.imm_lo - local_cols.mem_ptr_limbs[0]) * inv;
 
         builder.when(is_valid.clone()).assert_bool(carry.clone());
@@ -188,8 +186,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
         self.range_bus
             .range_check(
                 // (limb[0] - shift_amount) / 4 < 2^14 => limb[0] - shift_amount < 2^16
-                (local_cols.mem_ptr_limbs[0] - shift_amount)
-                    * AB::F::from_canonical_u32(4).inverse(),
+                (local_cols.mem_ptr_limbs[0] - shift_amount) * AB::F::from_u32(4).inverse(),
                 RV32_CELL_BITS * 2 - 2,
             )
             .eval(builder, is_valid.clone());
@@ -201,7 +198,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
             .eval(builder, is_valid.clone());
 
         let mem_ptr = local_cols.mem_ptr_limbs[0]
-            + local_cols.mem_ptr_limbs[1] * AB::F::from_canonical_u32(1 << (RV32_CELL_BITS * 2));
+            + local_cols.mem_ptr_limbs[1] * AB::F::from_u32(1 << (RV32_CELL_BITS * 2));
 
         let is_store = is_valid.clone() - is_load.clone();
         // constrain mem_as to be in {0, 1, 2} if the instruction is a load,
@@ -215,7 +212,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
         let read_as = select::<AB::Expr>(
             is_load.clone(),
             local_cols.mem_as,
-            AB::F::from_canonical_u32(RV32_REGISTER_AS),
+            AB::F::from_u32(RV32_REGISTER_AS),
         );
 
         // read_ptr is mem_ptr for loads and rd_rs2_ptr for stores
@@ -243,7 +240,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
         // write_as is 1 for loads and [local_cols.mem_as] for stores
         let write_as = select::<AB::Expr>(
             is_load.clone(),
-            AB::F::from_canonical_u32(RV32_REGISTER_AS),
+            AB::F::from_u32(RV32_REGISTER_AS),
             local_cols.mem_as,
         );
 
@@ -265,7 +262,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
 
         let to_pc = ctx
             .to_pc
-            .unwrap_or(local_cols.from_state.pc + AB::F::from_canonical_u32(DEFAULT_PC_STEP));
+            .unwrap_or(local_cols.from_state.pc + AB::F::from_u32(DEFAULT_PC_STEP));
         self.execution_bridge
             .execute(
                 ctx.instruction.opcode,
@@ -273,7 +270,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
                     local_cols.rd_rs2_ptr.into(),
                     local_cols.rs1_ptr.into(),
                     local_cols.imm_lo.into(),
-                    AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
+                    AB::Expr::from_u32(RV32_REGISTER_AS),
                     local_cols.mem_as.into(),
                     local_cols.needs_write.into(),
                     local_cols.imm_hi.into(),
@@ -281,7 +278,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
                 local_cols.from_state.into(),
                 OvmExecutionState {
                     pc: to_pc,
-                    timestamp: timestamp + AB::F::from_canonical_usize(timestamp_delta),
+                    timestamp: timestamp + AB::F::from_usize(timestamp_delta),
                 },
             )
             .eval(builder, is_valid);
@@ -436,7 +433,7 @@ where
         // those cells
         let (read_data, prev_data) = match local_opcode {
             LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                debug_assert_eq!(e, F::from_canonical_u32(RV32_MEMORY_AS));
+                debug_assert_eq!(e, F::from_u32(RV32_MEMORY_AS));
                 record.mem_as = RV32_MEMORY_AS as u8;
                 let read_data = tracing_read(
                     memory,
@@ -509,7 +506,7 @@ where
                     let ptr = record.rs1_val.wrapping_add(imm_extended) & !3;
 
                     if record.mem_as == 4 {
-                        timed_write_native(memory, ptr, data.map(F::from_canonical_u32)).0
+                        timed_write_native(memory, ptr, data.map(F::from_u32)).0
                     } else {
                         timed_write(memory, record.mem_as as u32, ptr, data.map(|x| x as u8)).0
                     }
@@ -562,7 +559,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32LoadStoreAdapterFiller {
             mem_helper.fill_zero(&mut adapter_row.write_base_aux);
         }
 
-        adapter_row.mem_as = F::from_canonical_u8(record.mem_as);
+        adapter_row.mem_as = F::from_u8(record.mem_as);
         let ptr = record
             .rs1_val
             .wrapping_add(record.imm_lo as u32 | (record.imm_hi as u32) << 16);
@@ -572,10 +569,10 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32LoadStoreAdapterFiller {
             .add_count(ptr_limbs[0] >> 2, RV32_CELL_BITS * 2 - 2);
         self.range_checker_chip
             .add_count(ptr_limbs[1], self.pointer_max_bits - 16);
-        adapter_row.mem_ptr_limbs = ptr_limbs.map(F::from_canonical_u32);
+        adapter_row.mem_ptr_limbs = ptr_limbs.map(F::from_u32);
 
-        adapter_row.imm_hi = F::from_canonical_u16(record.imm_hi);
-        adapter_row.imm_lo = F::from_canonical_u16(record.imm_lo);
+        adapter_row.imm_hi = F::from_u16(record.imm_hi);
+        adapter_row.imm_lo = F::from_u16(record.imm_lo);
 
         mem_helper.fill(
             record.read_data_aux.prev_timestamp,
@@ -583,7 +580,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32LoadStoreAdapterFiller {
             adapter_row.read_data_aux.as_mut(),
         );
         adapter_row.rd_rs2_ptr = if record.rd_rs2_ptr != u32::MAX {
-            F::from_canonical_u32(record.rd_rs2_ptr)
+            F::from_u32(record.rd_rs2_ptr)
         } else {
             F::ZERO
         };
@@ -600,11 +597,11 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32LoadStoreAdapterFiller {
             adapter_row.fp_read_aux.as_mut(),
         );
 
-        adapter_row.rs1_data = record.rs1_val.to_le_bytes().map(F::from_canonical_u8);
-        adapter_row.rs1_ptr = F::from_canonical_u32(record.rs1_ptr);
+        adapter_row.rs1_data = record.rs1_val.to_le_bytes().map(F::from_u8);
+        adapter_row.rs1_ptr = F::from_u32(record.rs1_ptr);
 
-        adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
-        adapter_row.from_state.fp = F::from_canonical_u32(record.fp);
-        adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
+        adapter_row.from_state.timestamp = F::from_u32(record.from_timestamp);
+        adapter_row.from_state.fp = F::from_u32(record.fp);
+        adapter_row.from_state.pc = F::from_u32(record.from_pc);
     }
 }

@@ -29,10 +29,10 @@ use openvm_instructions::{
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
 };
 use openvm_stark_backend::{
+    ColumnsAir,
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
-    rap::ColumnsAir,
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 use struct_reflection::{StructReflection, StructReflectionHelper};
 
@@ -41,8 +41,8 @@ use openvm_circuit::arch::ExecutionBridge;
 use crate::execution::ExecutionState;
 
 use super::{
-    RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, W32_REG_OPS, fp_addr, reg_addr, tracing_read,
-    tracing_read_fp, tracing_read_imm, tracing_write,
+    RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, W32_REG_OPS, fp_addr, fp_block, reg_addr,
+    tracing_read, tracing_read_fp, tracing_read_imm, tracing_write,
 };
 
 #[repr(C)]
@@ -124,14 +124,14 @@ impl<
         let mut timestamp_delta: usize = 0;
         let mut timestamp_pp = || {
             timestamp_delta += 1;
-            timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
+            timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
         // Read fp
         self.memory_bridge
             .read(
                 fp_addr::<AB::F>(),
-                [local.from_state.fp],
+                fp_block::<AB::Expr>(local.from_state.fp.into()),
                 timestamp_pp(),
                 &local.fp_read_aux,
             )
@@ -143,8 +143,8 @@ impl<
         let rs2_limbs = ctx.reads[1].clone();
         let rs2_sign = rs2_limbs[2].clone();
         let rs2_imm = rs2_limbs[0].clone()
-            + rs2_limbs[1].clone() * AB::Expr::from_canonical_usize(1 << RV32_CELL_BITS)
-            + rs2_sign.clone() * AB::Expr::from_canonical_usize(1 << (2 * RV32_CELL_BITS));
+            + rs2_limbs[1].clone() * AB::Expr::from_usize(1 << RV32_CELL_BITS)
+            + rs2_sign.clone() * AB::Expr::from_usize(1 << (2 * RV32_CELL_BITS));
         builder.assert_bool(local.rs2_as);
         let mut rs2_imm_when = builder.when(not(local.rs2_as));
         rs2_imm_when.assert_eq(local.rs2, rs2_imm);
@@ -152,8 +152,7 @@ impl<
             rs2_imm_when.assert_eq(rs2_sign.clone(), limb.clone());
         }
         rs2_imm_when.assert_zero(
-            rs2_sign.clone()
-                * (AB::Expr::from_canonical_usize((1 << RV32_CELL_BITS) - 1) - rs2_sign),
+            rs2_sign.clone() * (AB::Expr::from_usize((1 << RV32_CELL_BITS) - 1) - rs2_sign),
         );
         self.bitwise_lookup_bus
             .send_range(rs2_limbs[0].clone(), rs2_limbs[1].clone())
@@ -166,9 +165,7 @@ impl<
                 std::array::from_fn(|i| ctx.reads[0][offset + i].clone());
             self.memory_bridge
                 .read(
-                    reg_addr(
-                        local.rs1_ptr + local.from_state.fp + AB::F::from_canonical_usize(offset),
-                    ),
+                    reg_addr(local.rs1_ptr + local.from_state.fp + AB::F::from_usize(offset)),
                     chunk,
                     timestamp_pp(),
                     &local.rs1_reads_aux[r],
@@ -190,7 +187,7 @@ impl<
                 .read(
                     MemoryAddress::new(
                         local.rs2_as,
-                        local.rs2 + local.from_state.fp + AB::F::from_canonical_usize(offset),
+                        local.rs2 + local.from_state.fp + AB::F::from_usize(offset),
                     ),
                     chunk,
                     timestamp_pp(),
@@ -206,9 +203,7 @@ impl<
                 std::array::from_fn(|i| ctx.writes[0][offset + i].clone());
             self.memory_bridge
                 .write(
-                    reg_addr(
-                        local.rd_ptr + local.from_state.fp + AB::F::from_canonical_usize(offset),
-                    ),
+                    reg_addr(local.rd_ptr + local.from_state.fp + AB::F::from_usize(offset)),
                     chunk,
                     timestamp_pp(),
                     &local.writes_aux[w],
@@ -223,11 +218,11 @@ impl<
                     local.rd_ptr.into(),
                     local.rs1_ptr.into(),
                     local.rs2.into(),
-                    AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
+                    AB::Expr::from_u32(RV32_REGISTER_AS),
                     local.rs2_as.into(),
                 ],
                 local.from_state.into(),
-                AB::F::from_canonical_usize(timestamp_delta),
+                AB::F::from_usize(timestamp_delta),
                 (DEFAULT_PC_STEP, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid);
@@ -466,8 +461,7 @@ impl<F: PrimeField32, const NUM_READ_OPS: usize, const NUM_WRITE_OPS: usize> Ada
 
         // Writes (reverse order)
         for w in (0..NUM_WRITE_OPS).rev() {
-            adapter_row.writes_aux[w]
-                .set_prev_data(record.writes_aux[w].prev_data.map(F::from_canonical_u8));
+            adapter_row.writes_aux[w].set_prev_data(record.writes_aux[w].prev_data.map(F::from_u8));
             mem_helper.fill(
                 record.writes_aux[w].prev_timestamp,
                 timestamp,
@@ -514,13 +508,13 @@ impl<F: PrimeField32, const NUM_READ_OPS: usize, const NUM_WRITE_OPS: usize> Ada
             adapter_row.fp_read_aux.as_mut(),
         );
 
-        adapter_row.rs2_as = F::from_canonical_u8(record.rs2_as);
-        adapter_row.rs2 = F::from_canonical_u32(record.rs2);
-        adapter_row.rs1_ptr = F::from_canonical_u32(record.rs1_ptr);
-        adapter_row.rd_ptr = F::from_canonical_u32(record.rd_ptr);
-        adapter_row.from_state.timestamp = F::from_canonical_u32(timestamp);
-        adapter_row.from_state.fp = F::from_canonical_u32(record.fp);
-        adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
+        adapter_row.rs2_as = F::from_u8(record.rs2_as);
+        adapter_row.rs2 = F::from_u32(record.rs2);
+        adapter_row.rs1_ptr = F::from_u32(record.rs1_ptr);
+        adapter_row.rd_ptr = F::from_u32(record.rd_ptr);
+        adapter_row.from_state.timestamp = F::from_u32(timestamp);
+        adapter_row.from_state.fp = F::from_u32(record.fp);
+        adapter_row.from_state.pc = F::from_u32(record.from_pc);
     }
 }
 

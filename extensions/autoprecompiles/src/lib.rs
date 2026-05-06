@@ -17,11 +17,11 @@ use openvm_crush_transpiler::{
 use openvm_instructions::{LocalOpcode, VmOpcode, instruction::Instruction};
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Engine, p3_baby_bear::BabyBear,
+    config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine, p3_baby_bear::BabyBear,
 };
 use powdr_openvm::BabyBearSC;
 #[cfg(feature = "cuda")]
-use powdr_openvm::GpuBabyBearPoseidon2Engine;
+use powdr_openvm::GpuBabyBearPoseidon2CpuEngine;
 #[cfg(feature = "cuda")]
 use powdr_openvm::isa::OriginalGpuChipComplex;
 use powdr_openvm::isa::{OpenVmISA, OriginalCpuChipComplex};
@@ -41,7 +41,7 @@ pub struct CrushISA;
 
 impl OpenVmISA for CrushISA {
     type LinkedProgram<'a> = LinkedProgram<'a, BabyBear>;
-    type Executor<F: PrimeField32> = CrushConfigExecutor<F>;
+    type Executor<F: openvm_circuit::arch::VmField> = CrushConfigExecutor<F>;
     type Config = CrushConfig;
     type CpuBuilder = CrushCpuBuilder;
     #[cfg(feature = "cuda")]
@@ -51,7 +51,7 @@ impl OpenVmISA for CrushISA {
         config: &Self::Config,
         airs: AirInventory<BabyBearSC>,
     ) -> Result<OriginalCpuChipComplex, ChipInventoryError> {
-        <CrushCpuBuilder as VmBuilder<BabyBearPoseidon2Engine>>::create_chip_complex(
+        <CrushCpuBuilder as VmBuilder<BabyBearPoseidon2CpuEngine>>::create_chip_complex(
             &CrushCpuBuilder,
             config,
             airs,
@@ -129,20 +129,20 @@ impl OpenVmISA for CrushISA {
         circuit: AirInventory<BabyBearSC>,
         shared_chips: SharedPeripheryChipsCpu<Self>,
     ) -> Result<OriginalCpuChipComplex, ChipInventoryError> {
-        let mut chip_complex = VmBuilder::<BabyBearPoseidon2Engine>::create_chip_complex(
+        let mut chip_complex = VmBuilder::<BabyBearPoseidon2CpuEngine>::create_chip_complex(
             &SystemCpuBuilder,
             &config.system,
             circuit,
         )?;
         let inventory = &mut chip_complex.inventory;
 
-        VmProverExtension::<BabyBearPoseidon2Engine, _, _>::extend_prover(
+        VmProverExtension::<BabyBearPoseidon2CpuEngine, _, _>::extend_prover(
             &SharedPeripheryChipsCpuProverExt,
             &shared_chips,
             inventory,
         )?;
 
-        VmProverExtension::<BabyBearPoseidon2Engine, _, _>::extend_prover(
+        VmProverExtension::<BabyBearPoseidon2CpuEngine, _, _>::extend_prover(
             &CrushCpuProverExt,
             &config.base,
             inventory,
@@ -159,7 +159,7 @@ impl OpenVmISA for CrushISA {
     ) -> Result<OriginalGpuChipComplex, ChipInventoryError> {
         use powdr_openvm::powdr_extension::trace_generator::cuda::SharedPeripheryChipsGpuProverExt;
 
-        let mut chip_complex = VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(
+        let mut chip_complex = VmBuilder::<GpuBabyBearPoseidon2CpuEngine>::create_chip_complex(
             &SystemGpuBuilder,
             &config.system,
             circuit,

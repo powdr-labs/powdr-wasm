@@ -44,13 +44,13 @@ pub fn instr_r<F: PrimeField32>(
 ) -> Instruction<F> {
     Instruction::new(
         VmOpcode::from_usize(opcode),
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * rd), // a: destination register
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * rs1), // b: source register 1
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * rs2), // c: source register 2
-        F::ONE,                                                       // d: write AS (register)
-        F::ONE,                                                       // e: read AS (register)
-        F::ZERO,                                                      // f: (not used)
-        F::ZERO,                                                      // g: (not used)
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * rd), // a: destination register
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * rs1), // b: source register 1
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * rs2), // c: source register 2
+        F::ONE,                                             // d: write AS (register)
+        F::ONE,                                             // e: read AS (register)
+        F::ZERO,                                            // f: (not used)
+        F::ZERO,                                            // g: (not used)
     )
 }
 
@@ -66,13 +66,13 @@ pub fn instr_i<F: PrimeField32>(
     let imm: AluImm = imm.into();
     Instruction::new(
         VmOpcode::from_usize(opcode),
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * rd), // a: destination register
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * rs1), // b: source register 1
-        F::from_canonical_u32(imm.0),                                 // c: AluImm-encoded imm
-        F::ONE,                                                       // d: write AS (register)
-        F::ZERO,                                                      // e: read AS (0=immediate)
-        F::ZERO,                                                      // f: (not used)
-        F::ZERO,                                                      // g: (not used)
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * rd), // a: destination register
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * rs1), // b: source register 1
+        F::from_u32(imm.0),                                 // c: AluImm-encoded imm
+        F::ONE,                                             // d: write AS (register)
+        F::ZERO,                                            // e: read AS (0=immediate)
+        F::ZERO,                                            // f: (not used)
+        F::ZERO,                                            // g: (not used)
     )
 }
 
@@ -470,13 +470,13 @@ pub fn const_32_imm<F: PrimeField32>(
 ) -> Instruction<F> {
     Instruction::new(
         ConstOpcodes::CONST32.global_opcode(),
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * target_reg), // a: target_reg
-        F::from_canonical_usize(imm_lo as usize),                             // b: imm low 16b
-        F::from_canonical_usize(imm_hi as usize),                             // c: imm high 16b
-        F::ZERO,                                                              // d: (not used)
-        F::ZERO,                                                              // e: (not used)
-        F::ONE,                                                               // f: (not used)
-        F::ZERO,                                                              // g: (not used)
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * target_reg), // a: target_reg
+        F::from_usize(imm_lo as usize),                             // b: imm low 16b
+        F::from_usize(imm_hi as usize),                             // c: imm high 16b
+        F::ZERO,                                                    // d: (not used)
+        F::ZERO,                                                    // e: (not used)
+        F::ONE,                                                     // f: (not used)
+        F::ZERO,                                                    // g: (not used)
     )
 }
 
@@ -595,13 +595,13 @@ pub fn and_imm_64<F: PrimeField32>(
 pub fn ret<F: PrimeField32>(to_pc_reg: usize, to_fp_reg: usize) -> Instruction<F> {
     Instruction::new(
         CallOpcode::RET.global_opcode(),
-        F::ZERO,                                                             // a: (not used)
-        F::ZERO,                                                             // b: (not used)
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * to_pc_reg), // c: to_pc_operand
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * to_fp_reg), // d: to_fp_operand
-        F::ONE,                                                              // e: PC read AS
-        F::ONE,                                                              // f: FP read AS
-        F::ZERO,                                                             // g: (unused)
+        F::ZERO,                                                   // a: (not used)
+        F::ZERO,                                                   // b: (not used)
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * to_pc_reg), // c: to_pc_operand
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * to_fp_reg), // d: to_fp_operand
+        F::ONE,                                                    // e: PC read AS
+        F::ONE,                                                    // f: FP read AS
+        F::ZERO,                                                   // g: (unused)
     )
 }
 
@@ -615,13 +615,13 @@ pub fn call<F: PrimeField32>(
 ) -> Instruction<F> {
     Instruction::new(
         CallOpcode::CALL.global_opcode(),
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * save_pc), // a: rd1 (save PC here)
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * save_fp), // b: rd2 (save FP here)
-        F::from_canonical_usize(to_pc_imm), // c: to_pc_operand (immediate PC target)
-        F::from_canonical_usize(fp_offset), // d: to_fp_operand (FP offset)
-        F::ZERO,                            // e: PC read AS (0 = no register read)
-        F::ZERO,                            // f: FP read AS (0 = no register read)
-        F::ZERO,                            // g: (unused)
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * save_pc), // a: rd1 (save PC here)
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * save_fp), // b: rd2 (save FP here)
+        F::from_usize(to_pc_imm), // c: to_pc_operand (immediate PC target)
+        F::from_usize(fp_offset), // d: to_fp_operand (FP offset)
+        F::ZERO,                  // e: PC read AS (0 = no register read)
+        F::ZERO,                  // f: FP read AS (0 = no register read)
+        F::ZERO,                  // g: (unused)
     )
 }
 
@@ -636,13 +636,13 @@ pub fn call_indirect<F: PrimeField32>(
 ) -> Instruction<F> {
     Instruction::new(
         CallOpcode::CALL_INDIRECT.global_opcode(),
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * save_pc),
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * save_fp),
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * to_pc_reg), // c: to_pc_operand
-        F::from_canonical_usize(fp_offset), // d: to_fp_operand (FP offset)
-        F::ONE,                             // e: PC read AS (1 = register read)
-        F::ZERO,                            // f: FP read AS (0 = no register read)
-        F::ZERO,                            // g: (unused)
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * save_pc),
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * save_fp),
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * to_pc_reg), // c: to_pc_operand
+        F::from_usize(fp_offset),                                  // d: to_fp_operand (FP offset)
+        F::ONE,  // e: PC read AS (1 = register read)
+        F::ZERO, // f: FP read AS (0 = no register read)
+        F::ZERO, // g: (unused)
     )
 }
 
@@ -652,13 +652,13 @@ pub fn call_indirect<F: PrimeField32>(
 pub fn jump<F: PrimeField32>(to_pc_imm: usize) -> Instruction<F> {
     Instruction::new(
         JumpOpcode::JUMP.global_opcode(),
-        F::from_canonical_usize(to_pc_imm), // a: to_pc_imm
-        F::ZERO,                            // b: (not used)
-        F::ZERO,                            // c: (not used)
-        F::ZERO,                            // d: (not used)
-        F::ZERO,                            // e: (not used)
-        F::ONE,                             // f
-        F::ZERO,                            // g: imm sign
+        F::from_usize(to_pc_imm), // a: to_pc_imm
+        F::ZERO,                  // b: (not used)
+        F::ZERO,                  // c: (not used)
+        F::ZERO,                  // d: (not used)
+        F::ZERO,                  // e: (not used)
+        F::ONE,                   // f
+        F::ZERO,                  // g: imm sign
     )
 }
 
@@ -667,13 +667,13 @@ pub fn jump<F: PrimeField32>(to_pc_imm: usize) -> Instruction<F> {
 pub fn skip<F: PrimeField32>(offset_reg: usize) -> Instruction<F> {
     Instruction::new(
         JumpOpcode::SKIP.global_opcode(),
-        F::ZERO,                                                              // a: (not used)
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * offset_reg), // b: register with the offset
-        F::ZERO,                                                              // c: (not used)
-        F::ZERO,                                                              // d: (not used)
-        F::ZERO,                                                              // e: (not used)
-        F::ONE,                                                               // f
-        F::ZERO,                                                              // g: imm sign
+        F::ZERO,                                                    // a: (not used)
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * offset_reg), // b: register with the offset
+        F::ZERO,                                                    // c: (not used)
+        F::ZERO,                                                    // d: (not used)
+        F::ZERO,                                                    // e: (not used)
+        F::ONE,                                                     // f
+        F::ZERO,                                                    // g: imm sign
     )
 }
 
@@ -681,13 +681,13 @@ pub fn skip<F: PrimeField32>(offset_reg: usize) -> Instruction<F> {
 pub fn jump_if<F: PrimeField32>(condition_reg: usize, to_pc_imm: usize) -> Instruction<F> {
     Instruction::new(
         JumpOpcode::JUMP_IF.global_opcode(),
-        F::from_canonical_usize(to_pc_imm), // a: to_pc_imm
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * condition_reg), // b: condition_reg
-        F::ZERO,                            // c: (not used)
-        F::ZERO,                            // d: (not used)
-        F::ZERO,                            // e: (not used)
-        F::ONE,                             // f
-        F::ZERO,                            // g: imm sign
+        F::from_usize(to_pc_imm), // a: to_pc_imm
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * condition_reg), // b: condition_reg
+        F::ZERO,                  // c: (not used)
+        F::ZERO,                  // d: (not used)
+        F::ZERO,                  // e: (not used)
+        F::ONE,                   // f
+        F::ZERO,                  // g: imm sign
     )
 }
 
@@ -695,13 +695,13 @@ pub fn jump_if<F: PrimeField32>(condition_reg: usize, to_pc_imm: usize) -> Instr
 pub fn jump_if_zero<F: PrimeField32>(condition_reg: usize, to_pc_imm: usize) -> Instruction<F> {
     Instruction::new(
         JumpOpcode::JUMP_IF_ZERO.global_opcode(),
-        F::from_canonical_usize(to_pc_imm), // a: to_pc_imm
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * condition_reg), // b: condition_reg
-        F::ZERO,                            // c: (not used)
-        F::ZERO,                            // d: (not used)
-        F::ZERO,                            // e: (not used)
-        F::ONE,                             // f
-        F::ZERO,                            // g: imm sign
+        F::from_usize(to_pc_imm), // a: to_pc_imm
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * condition_reg), // b: condition_reg
+        F::ZERO,                  // c: (not used)
+        F::ZERO,                  // d: (not used)
+        F::ZERO,                  // e: (not used)
+        F::ONE,                   // f
+        F::ZERO,                  // g: imm sign
     )
 }
 
@@ -713,13 +713,13 @@ pub fn jump_if_zero<F: PrimeField32>(condition_reg: usize, to_pc_imm: usize) -> 
 pub fn loadw<F: PrimeField32>(rd: usize, rs1: usize, imm: u32) -> Instruction<F> {
     Instruction::new(
         LoadStoreOpcode::LOADW.global_opcode(),
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * rd), // a: rd
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * rs1), // b: rs1
-        F::from_canonical_u32(imm & 0xFFFF),                          // c: imm (lower 16 bits)
-        F::ONE,                                                       // d: register address space
-        F::from_canonical_usize(2), // e: memory address space (2 for word)
-        F::ONE,                     // f
-        F::from_canonical_u32(imm >> 16), // g: imm (higher 16 bits)
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * rd), // a: rd
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * rs1), // b: rs1
+        F::from_u32(imm & 0xFFFF),                          // c: imm (lower 16 bits)
+        F::ONE,                                             // d: register address space
+        F::from_usize(2),                                   // e: memory address space (2 for word)
+        F::ONE,                                             // f
+        F::from_u32(imm >> 16),                             // g: imm (higher 16 bits)
     )
 }
 
@@ -727,13 +727,13 @@ pub fn loadw<F: PrimeField32>(rd: usize, rs1: usize, imm: u32) -> Instruction<F>
 pub fn storew<F: PrimeField32>(value: usize, base_address: usize, imm: u32) -> Instruction<F> {
     Instruction::new(
         LoadStoreOpcode::STOREW.global_opcode(),
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * value), // a: rs2 (data to store)
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * base_address), // b: rs1 (base address)
-        F::from_canonical_u32(imm & 0xFFFF), // c: imm (lower 16 bits)
-        F::ONE,                              // d: register address space
-        F::from_canonical_usize(2),          // e: memory address space (2 for word)
-        F::ONE,                              // f
-        F::from_canonical_u32(imm >> 16),    // g: imm (higher 16 bits)
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * value), // a: rs2 (data to store)
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * base_address), // b: rs1 (base address)
+        F::from_u32(imm & 0xFFFF),                             // c: imm (lower 16 bits)
+        F::ONE,                                                // d: register address space
+        F::from_usize(2),       // e: memory address space (2 for word)
+        F::ONE,                 // f
+        F::from_u32(imm >> 16), // g: imm (higher 16 bits)
     )
 }
 
@@ -741,13 +741,13 @@ pub fn storew<F: PrimeField32>(value: usize, base_address: usize, imm: u32) -> I
 pub fn loadb<F: PrimeField32>(rd: usize, rs1: usize, imm: u32) -> Instruction<F> {
     Instruction::new(
         LoadStoreOpcode::LOADB.global_opcode(),
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * rd), // a: rd
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * rs1), // b: rs1
-        F::from_canonical_u32(imm & 0xFFFF),                          // c: imm (lower 16 bits)
-        F::ONE,                                                       // d: register address space
-        F::from_canonical_usize(2), // e: memory address space (2 for byte)
-        F::ONE,                     // f
-        F::from_canonical_u32(imm >> 16), // g: imm (higher 16 bits)
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * rd), // a: rd
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * rs1), // b: rs1
+        F::from_u32(imm & 0xFFFF),                          // c: imm (lower 16 bits)
+        F::ONE,                                             // d: register address space
+        F::from_usize(2),                                   // e: memory address space (2 for byte)
+        F::ONE,                                             // f
+        F::from_u32(imm >> 16),                             // g: imm (higher 16 bits)
     )
 }
 
@@ -755,13 +755,13 @@ pub fn loadb<F: PrimeField32>(rd: usize, rs1: usize, imm: u32) -> Instruction<F>
 pub fn loadbu<F: PrimeField32>(rd: usize, rs1: usize, imm: u32) -> Instruction<F> {
     Instruction::new(
         LoadStoreOpcode::LOADBU.global_opcode(),
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * rd), // a: rd
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * rs1), // b: rs1
-        F::from_canonical_u32(imm & 0xFFFF),                          // c: imm (lower 16 bits)
-        F::ONE,                                                       // d: register address space
-        F::from_canonical_usize(2), // e: memory address space (2 for byte)
-        F::ONE,                     // f
-        F::from_canonical_u32(imm >> 16), // g: imm (higher 16 bits)
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * rd), // a: rd
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * rs1), // b: rs1
+        F::from_u32(imm & 0xFFFF),                          // c: imm (lower 16 bits)
+        F::ONE,                                             // d: register address space
+        F::from_usize(2),                                   // e: memory address space (2 for byte)
+        F::ONE,                                             // f
+        F::from_u32(imm >> 16),                             // g: imm (higher 16 bits)
     )
 }
 
@@ -770,13 +770,13 @@ pub fn loadbu<F: PrimeField32>(rd: usize, rs1: usize, imm: u32) -> Instruction<F
 pub fn loadh<F: PrimeField32>(rd: usize, rs1: usize, imm: u32) -> Instruction<F> {
     Instruction::new(
         LoadStoreOpcode::LOADH.global_opcode(),
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * rd), // a: rd
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * rs1), // b: rs1
-        F::from_canonical_u32(imm & 0xFFFF),                          // c: imm (lower 16 bits)
-        F::ONE,                                                       // d: register address space
-        F::from_canonical_usize(2), // e: memory address space (2 for halfword)
-        F::ONE,                     // f
-        F::from_canonical_u32(imm >> 16), // g: imm (higher 16 bits)
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * rd), // a: rd
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * rs1), // b: rs1
+        F::from_u32(imm & 0xFFFF),                          // c: imm (lower 16 bits)
+        F::ONE,                                             // d: register address space
+        F::from_usize(2),       // e: memory address space (2 for halfword)
+        F::ONE,                 // f
+        F::from_u32(imm >> 16), // g: imm (higher 16 bits)
     )
 }
 
@@ -784,13 +784,13 @@ pub fn loadh<F: PrimeField32>(rd: usize, rs1: usize, imm: u32) -> Instruction<F>
 pub fn loadhu<F: PrimeField32>(rd: usize, rs1: usize, imm: u32) -> Instruction<F> {
     Instruction::new(
         LoadStoreOpcode::LOADHU.global_opcode(),
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * rd), // a: rd
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * rs1), // b: rs1
-        F::from_canonical_u32(imm & 0xFFFF),                          // c: imm (lower 16 bits)
-        F::ONE,                                                       // d: register address space
-        F::from_canonical_usize(2), // e: memory address space (2 for halfword)
-        F::ONE,                     // f
-        F::from_canonical_u32(imm >> 16), // g: imm (higher 16 bits)
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * rd), // a: rd
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * rs1), // b: rs1
+        F::from_u32(imm & 0xFFFF),                          // c: imm (lower 16 bits)
+        F::ONE,                                             // d: register address space
+        F::from_usize(2),       // e: memory address space (2 for halfword)
+        F::ONE,                 // f
+        F::from_u32(imm >> 16), // g: imm (higher 16 bits)
     )
 }
 
@@ -798,13 +798,13 @@ pub fn loadhu<F: PrimeField32>(rd: usize, rs1: usize, imm: u32) -> Instruction<F
 pub fn storeb<F: PrimeField32>(rs2: usize, rs1: usize, imm: u32) -> Instruction<F> {
     Instruction::new(
         LoadStoreOpcode::STOREB.global_opcode(),
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * rs2), // a: rs2 (data to store)
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * rs1), // b: rs1 (base address)
-        F::from_canonical_u32(imm & 0xFFFF),                           // c: imm (lower 16 bits)
-        F::ONE,                                                        // d: register address space
-        F::from_canonical_usize(2), // e: memory address space (2 for byte)
-        F::ONE,                     // f
-        F::from_canonical_u32(imm >> 16), // g: imm (higher 16 bits)
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * rs2), // a: rs2 (data to store)
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * rs1), // b: rs1 (base address)
+        F::from_u32(imm & 0xFFFF),                           // c: imm (lower 16 bits)
+        F::ONE,                                              // d: register address space
+        F::from_usize(2),                                    // e: memory address space (2 for byte)
+        F::ONE,                                              // f
+        F::from_u32(imm >> 16),                              // g: imm (higher 16 bits)
     )
 }
 
@@ -812,13 +812,13 @@ pub fn storeb<F: PrimeField32>(rs2: usize, rs1: usize, imm: u32) -> Instruction<
 pub fn storeh<F: PrimeField32>(rs2: usize, rs1: usize, imm: u32) -> Instruction<F> {
     Instruction::new(
         LoadStoreOpcode::STOREH.global_opcode(),
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * rs2), // a: rs2 (data to store)
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * rs1), // b: rs1 (base address)
-        F::from_canonical_u32(imm & 0xFFFF),                           // c: imm (lower 16 bits)
-        F::ONE,                                                        // d: register address space
-        F::from_canonical_usize(2), // e: memory address space (2 for halfword)
-        F::ONE,                     // f
-        F::from_canonical_u32(imm >> 16), // g: imm (higher 16 bits)
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * rs2), // a: rs2 (data to store)
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * rs1), // b: rs1 (base address)
+        F::from_u32(imm & 0xFFFF),                           // c: imm (lower 16 bits)
+        F::ONE,                                              // d: register address space
+        F::from_usize(2),       // e: memory address space (2 for halfword)
+        F::ONE,                 // f
+        F::from_u32(imm >> 16), // g: imm (higher 16 bits)
     )
 }
 
@@ -830,11 +830,11 @@ pub fn storeh<F: PrimeField32>(rs2: usize, rs1: usize, imm: u32) -> Instruction<
 pub fn reveal<F: PrimeField32>(rs1_data: usize, rd_index: usize) -> Instruction<F> {
     Instruction::new(
         LoadStoreOpcode::STOREW.global_opcode(),
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * rs1_data),
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * rd_index),
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * rs1_data),
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * rd_index),
         F::ZERO,
         F::ONE,
-        F::from_canonical_usize(3),
+        F::from_usize(3),
         F::ONE,
         F::ZERO,
     )
@@ -849,11 +849,11 @@ pub fn reveal_imm<F: PrimeField32>(
 ) -> Instruction<F> {
     Instruction::new(
         LoadStoreOpcode::STOREW.global_opcode(),
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * data_reg),
-        F::from_canonical_usize(riscv::RV32_REGISTER_NUM_LIMBS * output_index_reg),
-        F::from_canonical_usize(output_index_imm),
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * data_reg),
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * output_index_reg),
+        F::from_usize(output_index_imm),
         F::ONE,
-        F::from_canonical_usize(3),
+        F::from_usize(3),
         F::ONE,
         F::ZERO,
     )
@@ -868,7 +868,7 @@ pub fn trap<F: PrimeField32>(error_code: usize) -> Instruction<F> {
         SystemOpcode::TERMINATE.global_opcode(),
         F::ZERO,
         F::ZERO,
-        F::from_canonical_usize(ERROR_CODE_OFFSET as usize + error_code),
+        F::from_usize(ERROR_CODE_OFFSET as usize + error_code),
         F::ZERO,
         F::ZERO,
         F::ZERO,
@@ -882,7 +882,7 @@ pub fn abort<F: PrimeField32>() -> Instruction<F> {
         SystemOpcode::TERMINATE.global_opcode(),
         F::ZERO,
         F::ZERO,
-        F::from_canonical_usize(ERROR_ABORT_CODE as usize),
+        F::from_usize(ERROR_ABORT_CODE as usize),
         F::ZERO,
         F::ZERO,
         F::ZERO,
@@ -913,7 +913,7 @@ pub fn prepare_read<F: PrimeField32>() -> Instruction<F> {
         SystemOpcode::PHANTOM.global_opcode(),
         F::ZERO,
         F::ZERO,
-        F::from_canonical_u32(Phantom::HintInput as u32),
+        F::from_u32(Phantom::HintInput as u32),
         F::ZERO,
         F::ZERO,
         F::ZERO,

@@ -11,7 +11,7 @@ use openvm_circuit::{
 use openvm_circuit_derive::PreflightExecutor;
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{
-    LocalOpcode, NATIVE_AS,
+    DEFERRAL_AS as NATIVE_AS, LocalOpcode,
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
@@ -401,7 +401,7 @@ impl<F: PrimeField32> LoadStoreOp<F> for StoreWOp {
         read_data: [u8; RV32_REGISTER_NUM_LIMBS],
         _shift_amount: usize,
     ) -> bool {
-        *write_data = read_data.map(F::from_canonical_u8);
+        *write_data = read_data.map(F::from_u8);
         true
     }
 }
@@ -418,8 +418,8 @@ impl<F: PrimeField32> LoadStoreOp<F> for StoreHOp {
         if shift_amount != 0 && shift_amount != 2 {
             return false;
         }
-        write_data[shift_amount] = F::from_canonical_u8(read_data[0]);
-        write_data[shift_amount + 1] = F::from_canonical_u8(read_data[1]);
+        write_data[shift_amount] = F::from_u8(read_data[0]);
+        write_data[shift_amount + 1] = F::from_u8(read_data[1]);
         true
     }
 }
@@ -432,7 +432,7 @@ impl<F: PrimeField32> LoadStoreOp<F> for StoreBOp {
         read_data: [u8; RV32_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool {
-        write_data[shift_amount] = F::from_canonical_u8(read_data[0]);
+        write_data[shift_amount] = F::from_u8(read_data[0]);
         true
     }
 }

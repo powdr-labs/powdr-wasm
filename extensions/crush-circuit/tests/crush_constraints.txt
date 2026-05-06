@@ -25,8 +25,8 @@ mult=-is_valid, args=[from_state__pc, from_state__timestamp]
 mult=is_valid, args=[from_state__pc + 4, from_state__timestamp + 2]
 
 // Bus 1 (MEMORY):
-mult=2013265920 * is_valid, args=[5, 0, from_state__fp, fp_read_aux__base__prev_timestamp]
-mult=is_valid, args=[5, 0, from_state__fp, from_state__timestamp + 0]
+mult=2013265920 * is_valid, args=[5, 0, from_state__fp, 0, 0, 0, fp_read_aux__base__prev_timestamp]
+mult=is_valid, args=[5, 0, from_state__fp, 0, 0, 0, from_state__timestamp + 0]
 mult=2013265920 * is_valid, args=[1, rd_ptr + from_state__fp, write_aux__prev_data__0, write_aux__prev_data__1, write_aux__prev_data__2, write_aux__prev_data__3, write_aux__base__prev_timestamp]
 mult=is_valid, args=[1, rd_ptr + from_state__fp, imm_limbs__0, imm_limbs__1, imm_limbs__2, imm_limbs__3, from_state__timestamp + 1]
 
@@ -97,8 +97,8 @@ mult=-(0 + opcode_add_flag + opcode_sub_flag + opcode_xor_flag + opcode_or_flag 
 mult=0 + opcode_add_flag + opcode_sub_flag + opcode_xor_flag + opcode_or_flag + opcode_and_flag, args=[from_state__pc + 4, from_state__timestamp + 4]
 
 // Bus 1 (MEMORY):
-mult=2013265920 * (0 + opcode_add_flag + opcode_sub_flag + opcode_xor_flag + opcode_or_flag + opcode_and_flag), args=[5, 0, from_state__fp, fp_read_aux__base__prev_timestamp]
-mult=0 + opcode_add_flag + opcode_sub_flag + opcode_xor_flag + opcode_or_flag + opcode_and_flag, args=[5, 0, from_state__fp, from_state__timestamp + 0]
+mult=2013265920 * (0 + opcode_add_flag + opcode_sub_flag + opcode_xor_flag + opcode_or_flag + opcode_and_flag), args=[5, 0, from_state__fp, 0, 0, 0, fp_read_aux__base__prev_timestamp]
+mult=0 + opcode_add_flag + opcode_sub_flag + opcode_xor_flag + opcode_or_flag + opcode_and_flag, args=[5, 0, from_state__fp, 0, 0, 0, from_state__timestamp + 0]
 mult=2013265920 * (0 + opcode_add_flag + opcode_sub_flag + opcode_xor_flag + opcode_or_flag + opcode_and_flag), args=[1, rs1_ptr + from_state__fp + 0, b__0, b__1, b__2, b__3, rs1_reads_aux__0__base__prev_timestamp]
 mult=0 + opcode_add_flag + opcode_sub_flag + opcode_xor_flag + opcode_or_flag + opcode_and_flag, args=[1, rs1_ptr + from_state__fp + 0, b__0, b__1, b__2, b__3, from_state__timestamp + 1]
 mult=2013265920 * rs2_as, args=[rs2_as, rs2 + from_state__fp + 0, c__0, c__1, c__2, c__3, rs2_reads_aux__0__base__prev_timestamp]
@@ -224,8 +224,8 @@ mult=-(0 + opcode_div_flag + opcode_divu_flag + opcode_rem_flag + opcode_remu_fl
 mult=0 + opcode_div_flag + opcode_divu_flag + opcode_rem_flag + opcode_remu_flag, args=[from_state__pc + 4, from_state__timestamp + 4]
 
 // Bus 1 (MEMORY):
-mult=2013265920 * (0 + opcode_div_flag + opcode_divu_flag + opcode_rem_flag + opcode_remu_flag), args=[5, 0, from_state__fp, fp_read_aux__base__prev_timestamp]
-mult=0 + opcode_div_flag + opcode_divu_flag + opcode_rem_flag + opcode_remu_flag, args=[5, 0, from_state__fp, from_state__timestamp + 0]
+mult=2013265920 * (0 + opcode_div_flag + opcode_divu_flag + opcode_rem_flag + opcode_remu_flag), args=[5, 0, from_state__fp, 0, 0, 0, fp_read_aux__base__prev_timestamp]
+mult=0 + opcode_div_flag + opcode_divu_flag + opcode_rem_flag + opcode_remu_flag, args=[5, 0, from_state__fp, 0, 0, 0, from_state__timestamp + 0]
 mult=2013265920 * (0 + opcode_div_flag + opcode_divu_flag + opcode_rem_flag + opcode_remu_flag), args=[1, rs1_ptr + from_state__fp + 0, b__0, b__1, b__2, b__3, rs1_reads_aux__0__base__prev_timestamp]
 mult=0 + opcode_div_flag + opcode_divu_flag + opcode_rem_flag + opcode_remu_flag, args=[1, rs1_ptr + from_state__fp + 0, b__0, b__1, b__2, b__3, from_state__timestamp + 1]
 mult=2013265920 * rs2_as, args=[rs2_as, rs2 + from_state__fp + 0, c__0, c__1, c__2, c__3, rs2_reads_aux__0__base__prev_timestamp]
@@ -380,8 +380,8 @@ mult=-(0 + opcode_eq_flag + opcode_neq_flag), args=[from_state__pc, from_state__
 mult=0 + opcode_eq_flag + opcode_neq_flag, args=[from_state__pc + 4, from_state__timestamp + 4]
 
 // Bus 1 (MEMORY):
-mult=2013265920 * (0 + opcode_eq_flag + opcode_neq_flag), args=[5, 0, from_state__fp, fp_read_aux__base__prev_timestamp]
-mult=0 + opcode_eq_flag + opcode_neq_flag, args=[5, 0, from_state__fp, from_state__timestamp + 0]
+mult=2013265920 * (0 + opcode_eq_flag + opcode_neq_flag), args=[5, 0, from_state__fp, 0, 0, 0, fp_read_aux__base__prev_timestamp]
+mult=0 + opcode_eq_flag + opcode_neq_flag, args=[5, 0, from_state__fp, 0, 0, 0, from_state__timestamp + 0]
 mult=2013265920 * (0 + opcode_eq_flag + opcode_neq_flag), args=[1, rs1_ptr + from_state__fp + 0, b__0, b__1, b__2, b__3, rs1_reads_aux__0__base__prev_timestamp]
 mult=0 + opcode_eq_flag + opcode_neq_flag, args=[1, rs1_ptr + from_state__fp + 0, b__0, b__1, b__2, b__3, from_state__timestamp + 1]
 mult=2013265920 * rs2_as, args=[rs2_as, rs2 + from_state__fp + 0, c__0, c__1, c__2, c__3, rs2_reads_aux__0__base__prev_timestamp]
@@ -475,8 +475,8 @@ mult=-(0 + opcode_slt_flag + opcode_sltu_flag), args=[from_state__pc, from_state
 mult=0 + opcode_slt_flag + opcode_sltu_flag, args=[from_state__pc + 4, from_state__timestamp + 4]
 
 // Bus 1 (MEMORY):
-mult=2013265920 * (0 + opcode_slt_flag + opcode_sltu_flag), args=[5, 0, from_state__fp, fp_read_aux__base__prev_timestamp]
-mult=0 + opcode_slt_flag + opcode_sltu_flag, args=[5, 0, from_state__fp, from_state__timestamp + 0]
+mult=2013265920 * (0 + opcode_slt_flag + opcode_sltu_flag), args=[5, 0, from_state__fp, 0, 0, 0, fp_read_aux__base__prev_timestamp]
+mult=0 + opcode_slt_flag + opcode_sltu_flag, args=[5, 0, from_state__fp, 0, 0, 0, from_state__timestamp + 0]
 mult=2013265920 * (0 + opcode_slt_flag + opcode_sltu_flag), args=[1, rs1_ptr + from_state__fp + 0, b__0, b__1, b__2, b__3, rs1_reads_aux__0__base__prev_timestamp]
 mult=0 + opcode_slt_flag + opcode_sltu_flag, args=[1, rs1_ptr + from_state__fp + 0, b__0, b__1, b__2, b__3, from_state__timestamp + 1]
 mult=2013265920 * rs2_as, args=[rs2_as, rs2 + from_state__fp + 0, c__0, c__1, c__2, c__3, rs2_reads_aux__0__base__prev_timestamp]
@@ -578,8 +578,8 @@ mult=-is_valid, args=[from_state__pc, from_state__timestamp]
 mult=is_valid, args=[from_state__pc + 4, from_state__timestamp + 4]
 
 // Bus 1 (MEMORY):
-mult=2013265920 * is_valid, args=[5, 0, from_state__fp, fp_read_aux__base__prev_timestamp]
-mult=is_valid, args=[5, 0, from_state__fp, from_state__timestamp + 0]
+mult=2013265920 * is_valid, args=[5, 0, from_state__fp, 0, 0, 0, fp_read_aux__base__prev_timestamp]
+mult=is_valid, args=[5, 0, from_state__fp, 0, 0, 0, from_state__timestamp + 0]
 mult=2013265920 * is_valid, args=[1, rs1_ptr + from_state__fp + 0, b__0, b__1, b__2, b__3, rs1_reads_aux__0__base__prev_timestamp]
 mult=is_valid, args=[1, rs1_ptr + from_state__fp + 0, b__0, b__1, b__2, b__3, from_state__timestamp + 1]
 mult=2013265920 * rs2_as, args=[rs2_as, rs2 + from_state__fp + 0, c__0, c__1, c__2, c__3, rs2_reads_aux__0__base__prev_timestamp]
@@ -687,8 +687,8 @@ mult=-(0 + opcode_sll_flag + opcode_srl_flag + opcode_sra_flag), args=[from_stat
 mult=0 + opcode_sll_flag + opcode_srl_flag + opcode_sra_flag, args=[from_state__pc + 4, from_state__timestamp + 4]
 
 // Bus 1 (MEMORY):
-mult=2013265920 * (0 + opcode_sll_flag + opcode_srl_flag + opcode_sra_flag), args=[5, 0, from_state__fp, fp_read_aux__base__prev_timestamp]
-mult=0 + opcode_sll_flag + opcode_srl_flag + opcode_sra_flag, args=[5, 0, from_state__fp, from_state__timestamp + 0]
+mult=2013265920 * (0 + opcode_sll_flag + opcode_srl_flag + opcode_sra_flag), args=[5, 0, from_state__fp, 0, 0, 0, fp_read_aux__base__prev_timestamp]
+mult=0 + opcode_sll_flag + opcode_srl_flag + opcode_sra_flag, args=[5, 0, from_state__fp, 0, 0, 0, from_state__timestamp + 0]
 mult=2013265920 * (0 + opcode_sll_flag + opcode_srl_flag + opcode_sra_flag), args=[1, rs1_ptr + from_state__fp + 0, b__0, b__1, b__2, b__3, rs1_reads_aux__0__base__prev_timestamp]
 mult=0 + opcode_sll_flag + opcode_srl_flag + opcode_sra_flag, args=[1, rs1_ptr + from_state__fp + 0, b__0, b__1, b__2, b__3, from_state__timestamp + 1]
 mult=2013265920 * rs2_as, args=[rs2_as, rs2 + from_state__fp + 0, c__0, c__1, c__2, c__3, rs2_reads_aux__0__base__prev_timestamp]
@@ -864,8 +864,8 @@ mult=-(0 + opcode_eq_flag + opcode_neq_flag), args=[from_state__pc, from_state__
 mult=0 + opcode_eq_flag + opcode_neq_flag, args=[from_state__pc + 4, from_state__timestamp + 6]
 
 // Bus 1 (MEMORY):
-mult=2013265920 * (0 + opcode_eq_flag + opcode_neq_flag), args=[5, 0, from_state__fp, fp_read_aux__base__prev_timestamp]
-mult=0 + opcode_eq_flag + opcode_neq_flag, args=[5, 0, from_state__fp, from_state__timestamp + 0]
+mult=2013265920 * (0 + opcode_eq_flag + opcode_neq_flag), args=[5, 0, from_state__fp, 0, 0, 0, fp_read_aux__base__prev_timestamp]
+mult=0 + opcode_eq_flag + opcode_neq_flag, args=[5, 0, from_state__fp, 0, 0, 0, from_state__timestamp + 0]
 mult=2013265920 * (0 + opcode_eq_flag + opcode_neq_flag), args=[1, rs1_ptr + from_state__fp + 0, b__0, b__1, b__2, b__3, rs1_reads_aux__0__base__prev_timestamp]
 mult=0 + opcode_eq_flag + opcode_neq_flag, args=[1, rs1_ptr + from_state__fp + 0, b__0, b__1, b__2, b__3, from_state__timestamp + 1]
 mult=2013265920 * (0 + opcode_eq_flag + opcode_neq_flag), args=[1, rs1_ptr + from_state__fp + 4, b__4, b__5, b__6, b__7, rs1_reads_aux__1__base__prev_timestamp]
@@ -995,8 +995,8 @@ mult=-(0 + opcode_slt_flag + opcode_sltu_flag), args=[from_state__pc, from_state
 mult=0 + opcode_slt_flag + opcode_sltu_flag, args=[from_state__pc + 4, from_state__timestamp + 6]
 
 // Bus 1 (MEMORY):
-mult=2013265920 * (0 + opcode_slt_flag + opcode_sltu_flag), args=[5, 0, from_state__fp, fp_read_aux__base__prev_timestamp]
-mult=0 + opcode_slt_flag + opcode_sltu_flag, args=[5, 0, from_state__fp, from_state__timestamp + 0]
+mult=2013265920 * (0 + opcode_slt_flag + opcode_sltu_flag), args=[5, 0, from_state__fp, 0, 0, 0, fp_read_aux__base__prev_timestamp]
+mult=0 + opcode_slt_flag + opcode_sltu_flag, args=[5, 0, from_state__fp, 0, 0, 0, from_state__timestamp + 0]
 mult=2013265920 * (0 + opcode_slt_flag + opcode_sltu_flag), args=[1, rs1_ptr + from_state__fp + 0, b__0, b__1, b__2, b__3, rs1_reads_aux__0__base__prev_timestamp]
 mult=0 + opcode_slt_flag + opcode_sltu_flag, args=[1, rs1_ptr + from_state__fp + 0, b__0, b__1, b__2, b__3, from_state__timestamp + 1]
 mult=2013265920 * (0 + opcode_slt_flag + opcode_sltu_flag), args=[1, rs1_ptr + from_state__fp + 4, b__4, b__5, b__6, b__7, rs1_reads_aux__1__base__prev_timestamp]
@@ -1153,8 +1153,8 @@ mult=-(0 + opcode_add_flag + opcode_sub_flag + opcode_xor_flag + opcode_or_flag 
 mult=0 + opcode_add_flag + opcode_sub_flag + opcode_xor_flag + opcode_or_flag + opcode_and_flag, args=[from_state__pc + 4, from_state__timestamp + 7]
 
 // Bus 1 (MEMORY):
-mult=2013265920 * (0 + opcode_add_flag + opcode_sub_flag + opcode_xor_flag + opcode_or_flag + opcode_and_flag), args=[5, 0, from_state__fp, fp_read_aux__base__prev_timestamp]
-mult=0 + opcode_add_flag + opcode_sub_flag + opcode_xor_flag + opcode_or_flag + opcode_and_flag, args=[5, 0, from_state__fp, from_state__timestamp + 0]
+mult=2013265920 * (0 + opcode_add_flag + opcode_sub_flag + opcode_xor_flag + opcode_or_flag + opcode_and_flag), args=[5, 0, from_state__fp, 0, 0, 0, fp_read_aux__base__prev_timestamp]
+mult=0 + opcode_add_flag + opcode_sub_flag + opcode_xor_flag + opcode_or_flag + opcode_and_flag, args=[5, 0, from_state__fp, 0, 0, 0, from_state__timestamp + 0]
 mult=2013265920 * (0 + opcode_add_flag + opcode_sub_flag + opcode_xor_flag + opcode_or_flag + opcode_and_flag), args=[1, rs1_ptr + from_state__fp + 0, b__0, b__1, b__2, b__3, rs1_reads_aux__0__base__prev_timestamp]
 mult=0 + opcode_add_flag + opcode_sub_flag + opcode_xor_flag + opcode_or_flag + opcode_and_flag, args=[1, rs1_ptr + from_state__fp + 0, b__0, b__1, b__2, b__3, from_state__timestamp + 1]
 mult=2013265920 * (0 + opcode_add_flag + opcode_sub_flag + opcode_xor_flag + opcode_or_flag + opcode_and_flag), args=[1, rs1_ptr + from_state__fp + 4, b__4, b__5, b__6, b__7, rs1_reads_aux__1__base__prev_timestamp]
@@ -1352,8 +1352,8 @@ mult=-(0 + opcode_div_flag + opcode_divu_flag + opcode_rem_flag + opcode_remu_fl
 mult=0 + opcode_div_flag + opcode_divu_flag + opcode_rem_flag + opcode_remu_flag, args=[from_state__pc + 4, from_state__timestamp + 7]
 
 // Bus 1 (MEMORY):
-mult=2013265920 * (0 + opcode_div_flag + opcode_divu_flag + opcode_rem_flag + opcode_remu_flag), args=[5, 0, from_state__fp, fp_read_aux__base__prev_timestamp]
-mult=0 + opcode_div_flag + opcode_divu_flag + opcode_rem_flag + opcode_remu_flag, args=[5, 0, from_state__fp, from_state__timestamp + 0]
+mult=2013265920 * (0 + opcode_div_flag + opcode_divu_flag + opcode_rem_flag + opcode_remu_flag), args=[5, 0, from_state__fp, 0, 0, 0, fp_read_aux__base__prev_timestamp]
+mult=0 + opcode_div_flag + opcode_divu_flag + opcode_rem_flag + opcode_remu_flag, args=[5, 0, from_state__fp, 0, 0, 0, from_state__timestamp + 0]
 mult=2013265920 * (0 + opcode_div_flag + opcode_divu_flag + opcode_rem_flag + opcode_remu_flag), args=[1, rs1_ptr + from_state__fp + 0, b__0, b__1, b__2, b__3, rs1_reads_aux__0__base__prev_timestamp]
 mult=0 + opcode_div_flag + opcode_divu_flag + opcode_rem_flag + opcode_remu_flag, args=[1, rs1_ptr + from_state__fp + 0, b__0, b__1, b__2, b__3, from_state__timestamp + 1]
 mult=2013265920 * (0 + opcode_div_flag + opcode_divu_flag + opcode_rem_flag + opcode_remu_flag), args=[1, rs1_ptr + from_state__fp + 4, b__4, b__5, b__6, b__7, rs1_reads_aux__1__base__prev_timestamp]
@@ -1598,8 +1598,8 @@ mult=-is_valid, args=[from_state__pc, from_state__timestamp]
 mult=is_valid, args=[from_state__pc + 4, from_state__timestamp + 7]
 
 // Bus 1 (MEMORY):
-mult=2013265920 * is_valid, args=[5, 0, from_state__fp, fp_read_aux__base__prev_timestamp]
-mult=is_valid, args=[5, 0, from_state__fp, from_state__timestamp + 0]
+mult=2013265920 * is_valid, args=[5, 0, from_state__fp, 0, 0, 0, fp_read_aux__base__prev_timestamp]
+mult=is_valid, args=[5, 0, from_state__fp, 0, 0, 0, from_state__timestamp + 0]
 mult=2013265920 * is_valid, args=[1, rs1_ptr + from_state__fp + 0, b__0, b__1, b__2, b__3, rs1_reads_aux__0__base__prev_timestamp]
 mult=is_valid, args=[1, rs1_ptr + from_state__fp + 0, b__0, b__1, b__2, b__3, from_state__timestamp + 1]
 mult=2013265920 * is_valid, args=[1, rs1_ptr + from_state__fp + 4, b__4, b__5, b__6, b__7, rs1_reads_aux__1__base__prev_timestamp]
@@ -1763,8 +1763,8 @@ mult=-(0 + opcode_sll_flag + opcode_srl_flag + opcode_sra_flag), args=[from_stat
 mult=0 + opcode_sll_flag + opcode_srl_flag + opcode_sra_flag, args=[from_state__pc + 4, from_state__timestamp + 7]
 
 // Bus 1 (MEMORY):
-mult=2013265920 * (0 + opcode_sll_flag + opcode_srl_flag + opcode_sra_flag), args=[5, 0, from_state__fp, fp_read_aux__base__prev_timestamp]
-mult=0 + opcode_sll_flag + opcode_srl_flag + opcode_sra_flag, args=[5, 0, from_state__fp, from_state__timestamp + 0]
+mult=2013265920 * (0 + opcode_sll_flag + opcode_srl_flag + opcode_sra_flag), args=[5, 0, from_state__fp, 0, 0, 0, fp_read_aux__base__prev_timestamp]
+mult=0 + opcode_sll_flag + opcode_srl_flag + opcode_sra_flag, args=[5, 0, from_state__fp, 0, 0, 0, from_state__timestamp + 0]
 mult=2013265920 * (0 + opcode_sll_flag + opcode_srl_flag + opcode_sra_flag), args=[1, rs1_ptr + from_state__fp + 0, b__0, b__1, b__2, b__3, rs1_reads_aux__0__base__prev_timestamp]
 mult=0 + opcode_sll_flag + opcode_srl_flag + opcode_sra_flag, args=[1, rs1_ptr + from_state__fp + 0, b__0, b__1, b__2, b__3, from_state__timestamp + 1]
 mult=2013265920 * (0 + opcode_sll_flag + opcode_srl_flag + opcode_sra_flag), args=[1, rs1_ptr + from_state__fp + 4, b__4, b__5, b__6, b__7, rs1_reads_aux__1__base__prev_timestamp]
@@ -2002,7 +2002,7 @@ rs2_as * (from_state__timestamp + 4 - rs2_reads_aux__1__base__prev_timestamp - 1
 
 
 # VmAirWrapper<CallAdapterAir, CallCoreAir>
-Symbolic machine using 57 unique main columns:
+Symbolic machine using 60 unique main columns:
   from_state__pc
   from_state__fp
   from_state__timestamp
@@ -2037,6 +2037,9 @@ Symbolic machine using 57 unique main columns:
   fp_write_aux__base__timestamp_lt_aux__lower_decomp__0
   fp_write_aux__base__timestamp_lt_aux__lower_decomp__1
   fp_write_aux__prev_data__0
+  fp_write_aux__prev_data__1
+  fp_write_aux__prev_data__2
+  fp_write_aux__prev_data__3
   offset_limbs__0
   offset_limbs__1
   new_fp_limbs__0
@@ -2066,8 +2069,8 @@ mult=-(0 + is_ret + is_call + is_call_indirect), args=[from_state__pc, from_stat
 mult=0 + is_ret + is_call + is_call_indirect, args=[to_pc_operand * (1 - (is_ret + is_call_indirect)) + (0 + to_pc_data__0 * 1 + to_pc_data__1 * 256 + to_pc_data__2 * 65536 + to_pc_data__3 * 16777216) * (is_ret + is_call_indirect), from_state__timestamp + 6]
 
 // Bus 1 (MEMORY):
-mult=2013265920 * (0 + is_ret + is_call + is_call_indirect), args=[5, 0, from_state__fp, fp_read_aux__base__prev_timestamp]
-mult=0 + is_ret + is_call + is_call_indirect, args=[5, 0, from_state__fp, from_state__timestamp + 0]
+mult=2013265920 * (0 + is_ret + is_call + is_call_indirect), args=[5, 0, from_state__fp, 0, 0, 0, fp_read_aux__base__prev_timestamp]
+mult=0 + is_ret + is_call + is_call_indirect, args=[5, 0, from_state__fp, 0, 0, 0, from_state__timestamp + 0]
 mult=2013265920 * (0 + is_ret + is_call + is_call_indirect - (is_call + is_call_indirect)), args=[1, to_fp_operand + from_state__fp, new_fp_data__0, new_fp_data__1, new_fp_data__2, new_fp_data__3, to_fp_read_aux__base__prev_timestamp]
 mult=0 + is_ret + is_call + is_call_indirect - (is_call + is_call_indirect), args=[1, to_fp_operand + from_state__fp, new_fp_data__0, new_fp_data__1, new_fp_data__2, new_fp_data__3, from_state__timestamp + 1]
 mult=2013265920 * (is_ret + is_call_indirect), args=[1, to_pc_operand + from_state__fp, to_pc_data__0, to_pc_data__1, to_pc_data__2, to_pc_data__3, to_pc_read_aux__base__prev_timestamp]
@@ -2076,8 +2079,8 @@ mult=2013265920 * (is_call + is_call_indirect), args=[1, save_fp_ptr + ((0 + is_
 mult=is_call + is_call_indirect, args=[1, save_fp_ptr + ((0 + is_ret + is_call + is_call_indirect - (is_call + is_call_indirect)) * (0 + new_fp_data__0 * 1 + new_fp_data__1 * 256 + new_fp_data__2 * 65536 + new_fp_data__3 * 16777216) + (is_call + is_call_indirect) * (new_fp_limbs__0 + new_fp_limbs__1 * 65536)), old_fp_data__0, old_fp_data__1, old_fp_data__2, old_fp_data__3, from_state__timestamp + 3]
 mult=2013265920 * (is_call + is_call_indirect), args=[1, save_pc_ptr + ((0 + is_ret + is_call + is_call_indirect - (is_call + is_call_indirect)) * (0 + new_fp_data__0 * 1 + new_fp_data__1 * 256 + new_fp_data__2 * 65536 + new_fp_data__3 * 16777216) + (is_call + is_call_indirect) * (new_fp_limbs__0 + new_fp_limbs__1 * 65536)), save_pc_write_aux__prev_data__0, save_pc_write_aux__prev_data__1, save_pc_write_aux__prev_data__2, save_pc_write_aux__prev_data__3, save_pc_write_aux__base__prev_timestamp]
 mult=is_call + is_call_indirect, args=[1, save_pc_ptr + ((0 + is_ret + is_call + is_call_indirect - (is_call + is_call_indirect)) * (0 + new_fp_data__0 * 1 + new_fp_data__1 * 256 + new_fp_data__2 * 65536 + new_fp_data__3 * 16777216) + (is_call + is_call_indirect) * (new_fp_limbs__0 + new_fp_limbs__1 * 65536)), return_pc_data__0, return_pc_data__1, return_pc_data__2, return_pc_data__3, from_state__timestamp + 4]
-mult=2013265920 * (0 + is_ret + is_call + is_call_indirect), args=[5, 0, fp_write_aux__prev_data__0, fp_write_aux__base__prev_timestamp]
-mult=0 + is_ret + is_call + is_call_indirect, args=[5, 0, (0 + is_ret + is_call + is_call_indirect - (is_call + is_call_indirect)) * (0 + new_fp_data__0 * 1 + new_fp_data__1 * 256 + new_fp_data__2 * 65536 + new_fp_data__3 * 16777216) + (is_call + is_call_indirect) * (new_fp_limbs__0 + new_fp_limbs__1 * 65536), from_state__timestamp + 5]
+mult=2013265920 * (0 + is_ret + is_call + is_call_indirect), args=[5, 0, fp_write_aux__prev_data__0, fp_write_aux__prev_data__1, fp_write_aux__prev_data__2, fp_write_aux__prev_data__3, fp_write_aux__base__prev_timestamp]
+mult=0 + is_ret + is_call + is_call_indirect, args=[5, 0, (0 + is_ret + is_call + is_call_indirect - (is_call + is_call_indirect)) * (0 + new_fp_data__0 * 1 + new_fp_data__1 * 256 + new_fp_data__2 * 65536 + new_fp_data__3 * 16777216) + (is_call + is_call_indirect) * (new_fp_limbs__0 + new_fp_limbs__1 * 65536), 0, 0, 0, from_state__timestamp + 5]
 
 // Bus 2 (PC_LOOKUP):
 mult=0 + is_ret + is_call + is_call_indirect, args=[from_state__pc, 0 + is_ret * 0 + is_call * 1 + is_call_indirect * 2 + 4662, save_pc_ptr, save_fp_ptr, to_pc_operand, to_fp_operand, is_ret + is_call_indirect, 0 + is_ret + is_call + is_call_indirect - (is_call + is_call_indirect), 0]
@@ -2152,8 +2155,8 @@ mult=-(0 + opcode_jump_flag + opcode_skip_flag + opcode_jump_if_flag + opcode_ju
 mult=0 + opcode_jump_flag + opcode_skip_flag + opcode_jump_if_flag + opcode_jump_if_zero_flag, args=[do_absolute_jump * imm + (1 - do_absolute_jump) * (from_state__pc + 4) + opcode_skip_flag * (0 + rs_val__0 * 1 + rs_val__1 * 256 + rs_val__2 * 65536 + rs_val__3 * 16777216) * 4, from_state__timestamp + 2]
 
 // Bus 1 (MEMORY):
-mult=2013265920 * (0 + opcode_jump_flag + opcode_skip_flag + opcode_jump_if_flag + opcode_jump_if_zero_flag), args=[5, 0, from_state__fp, fp_read_aux__base__prev_timestamp]
-mult=0 + opcode_jump_flag + opcode_skip_flag + opcode_jump_if_flag + opcode_jump_if_zero_flag, args=[5, 0, from_state__fp, from_state__timestamp + 0]
+mult=2013265920 * (0 + opcode_jump_flag + opcode_skip_flag + opcode_jump_if_flag + opcode_jump_if_zero_flag), args=[5, 0, from_state__fp, 0, 0, 0, fp_read_aux__base__prev_timestamp]
+mult=0 + opcode_jump_flag + opcode_skip_flag + opcode_jump_if_flag + opcode_jump_if_zero_flag, args=[5, 0, from_state__fp, 0, 0, 0, from_state__timestamp + 0]
 mult=2013265920 * (0 + opcode_jump_flag + opcode_skip_flag + opcode_jump_if_flag + opcode_jump_if_zero_flag), args=[1, rs_ptr + from_state__fp, rs_val__0, rs_val__1, rs_val__2, rs_val__3, rs_read_aux__base__prev_timestamp]
 mult=0 + opcode_jump_flag + opcode_skip_flag + opcode_jump_if_flag + opcode_jump_if_zero_flag, args=[1, rs_ptr + from_state__fp, rs_val__0, rs_val__1, rs_val__2, rs_val__3, from_state__timestamp + 1]
 
@@ -2235,8 +2238,8 @@ mult=-(0 + opcode_loadb_flag0 + opcode_loadb_flag1 + opcode_loadh_flag), args=[f
 mult=0 + opcode_loadb_flag0 + opcode_loadb_flag1 + opcode_loadh_flag, args=[from_state__pc + 4, from_state__timestamp + 4]
 
 // Bus 1 (MEMORY):
-mult=2013265920 * (0 + opcode_loadb_flag0 + opcode_loadb_flag1 + opcode_loadh_flag), args=[5, 0, from_state__fp, fp_read_aux__base__prev_timestamp]
-mult=0 + opcode_loadb_flag0 + opcode_loadb_flag1 + opcode_loadh_flag, args=[5, 0, from_state__fp, from_state__timestamp + 0]
+mult=2013265920 * (0 + opcode_loadb_flag0 + opcode_loadb_flag1 + opcode_loadh_flag), args=[5, 0, from_state__fp, 0, 0, 0, fp_read_aux__base__prev_timestamp]
+mult=0 + opcode_loadb_flag0 + opcode_loadb_flag1 + opcode_loadh_flag, args=[5, 0, from_state__fp, 0, 0, 0, from_state__timestamp + 0]
 mult=2013265920 * (0 + opcode_loadb_flag0 + opcode_loadb_flag1 + opcode_loadh_flag), args=[1, rs1_ptr + from_state__fp, rs1_data__0, rs1_data__1, rs1_data__2, rs1_data__3, rs1_aux_cols__base__prev_timestamp]
 mult=0 + opcode_loadb_flag0 + opcode_loadb_flag1 + opcode_loadh_flag, args=[1, rs1_ptr + from_state__fp, rs1_data__0, rs1_data__1, rs1_data__2, rs1_data__3, from_state__timestamp + 1]
 mult=2013265920 * (0 + opcode_loadb_flag0 + opcode_loadb_flag1 + opcode_loadh_flag), args=[(0 + opcode_loadb_flag0 + opcode_loadb_flag1 + opcode_loadh_flag) * mem_as + (1 - (0 + opcode_loadb_flag0 + opcode_loadb_flag1 + opcode_loadh_flag)) * 1, (0 + opcode_loadb_flag0 + opcode_loadb_flag1 + opcode_loadh_flag) * (mem_ptr_limbs__0 + mem_ptr_limbs__1 * 65536) + (1 - (0 + opcode_loadb_flag0 + opcode_loadb_flag1 + opcode_loadh_flag)) * (rd_rs2_ptr + from_state__fp) - (shift_most_sig_bit * 2 + opcode_loadb_flag1), shift_most_sig_bit * shifted_read_data__2 + (1 - shift_most_sig_bit) * shifted_read_data__0, shift_most_sig_bit * shifted_read_data__3 + (1 - shift_most_sig_bit) * shifted_read_data__1, shift_most_sig_bit * shifted_read_data__0 + (1 - shift_most_sig_bit) * shifted_read_data__2, shift_most_sig_bit * shifted_read_data__1 + (1 - shift_most_sig_bit) * shifted_read_data__3, read_data_aux__base__prev_timestamp]
@@ -2334,8 +2337,8 @@ mult=-is_valid, args=[from_state__pc, from_state__timestamp]
 mult=is_valid, args=[from_state__pc + 4, from_state__timestamp + 4]
 
 // Bus 1 (MEMORY):
-mult=2013265920 * is_valid, args=[5, 0, from_state__fp, fp_read_aux__base__prev_timestamp]
-mult=is_valid, args=[5, 0, from_state__fp, from_state__timestamp + 0]
+mult=2013265920 * is_valid, args=[5, 0, from_state__fp, 0, 0, 0, fp_read_aux__base__prev_timestamp]
+mult=is_valid, args=[5, 0, from_state__fp, 0, 0, 0, from_state__timestamp + 0]
 mult=2013265920 * is_valid, args=[1, rs1_ptr + from_state__fp, rs1_data__0, rs1_data__1, rs1_data__2, rs1_data__3, rs1_aux_cols__base__prev_timestamp]
 mult=is_valid, args=[1, rs1_ptr + from_state__fp, rs1_data__0, rs1_data__1, rs1_data__2, rs1_data__3, from_state__timestamp + 1]
 mult=2013265920 * is_valid, args=[is_load * mem_as + (1 - is_load) * 1, is_load * (mem_ptr_limbs__0 + mem_ptr_limbs__1 * 65536) + (1 - is_load) * (rd_rs2_ptr + from_state__fp) - ((0 + flags__0 * (0 + flags__0 + flags__1 + flags__2 + flags__3 - 2) * 2013265920) * 1 + (0 + flags__2 * (flags__2 - 1) * 1006632961 + flags__1 * (0 + flags__0 + flags__1 + flags__2 + flags__3 - 2) * 2013265920) * 2 + (0 + flags__2 * (0 + flags__0 + flags__1 + flags__2 + flags__3 - 2) * 2013265920) * 3), read_data__0, read_data__1, read_data__2, read_data__3, read_data_aux__base__prev_timestamp]

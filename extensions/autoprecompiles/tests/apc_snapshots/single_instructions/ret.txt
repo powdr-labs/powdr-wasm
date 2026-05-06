@@ -2,7 +2,7 @@ Instructions:
   0: RET to_pc=r10, to_fp=r11
 
 APC advantage:
-  - Main columns: 57 -> 17 (3.35x reduction)
+  - Main columns: 60 -> 17 (3.53x reduction)
   - Bus interactions: 31 -> 14 (2.21x reduction)
   - Constraints: 16 -> 1 (16.00x reduction)
 
@@ -30,12 +30,12 @@ mult=is_valid * -1, args=[0, from_state__timestamp_0]
 mult=is_valid * 1, args=[to_pc_data__0_0 + 256 * to_pc_data__1_0 + 65536 * to_pc_data__2_0 + 16777216 * to_pc_data__3_0, from_state__timestamp_0 + 6]
 
 // Bus 1 (MEMORY):
-mult=is_valid * -1, args=[5, 0, from_state__fp_0, fp_read_aux__base__prev_timestamp_0]
+mult=is_valid * -1, args=[5, 0, from_state__fp_0, 0, 0, 0, fp_read_aux__base__prev_timestamp_0]
 mult=is_valid * -1, args=[1, from_state__fp_0 + 44, new_fp_data__0_0, new_fp_data__1_0, new_fp_data__2_0, new_fp_data__3_0, to_fp_read_aux__base__prev_timestamp_0]
 mult=is_valid * 1, args=[1, from_state__fp_0 + 44, new_fp_data__0_0, new_fp_data__1_0, new_fp_data__2_0, new_fp_data__3_0, from_state__timestamp_0 + 1]
 mult=is_valid * -1, args=[1, from_state__fp_0 + 40, to_pc_data__0_0, to_pc_data__1_0, to_pc_data__2_0, to_pc_data__3_0, to_pc_read_aux__base__prev_timestamp_0]
 mult=is_valid * 1, args=[1, from_state__fp_0 + 40, to_pc_data__0_0, to_pc_data__1_0, to_pc_data__2_0, to_pc_data__3_0, from_state__timestamp_0 + 2]
-mult=is_valid * 1, args=[5, 0, new_fp_data__0_0 + 256 * new_fp_data__1_0 + 65536 * new_fp_data__2_0 + 16777216 * new_fp_data__3_0, from_state__timestamp_0 + 5]
+mult=is_valid * 1, args=[5, 0, new_fp_data__0_0 + 256 * new_fp_data__1_0 + 65536 * new_fp_data__2_0 + 16777216 * new_fp_data__3_0, 0, 0, 0, from_state__timestamp_0 + 5]
 
 // Bus 3 (VARIABLE_RANGE_CHECKER):
 mult=is_valid * 1, args=[fp_read_aux__base__timestamp_lt_aux__lower_decomp__0_0, 17]

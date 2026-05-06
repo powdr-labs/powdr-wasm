@@ -235,7 +235,7 @@ impl<F: PrimeField32, const NUM_LIMBS: usize> TraceFiller<F> for Const32Filler<N
         // write_aux: set prev_data and fill timestamp proof
         // Write happens at from_timestamp + 1 (after FP read at from_timestamp + 0)
         cols.write_aux.set_prev_data(std::array::from_fn(|i| {
-            F::from_canonical_u8(record.writes_aux.prev_data[i])
+            F::from_u8(record.writes_aux.prev_data[i])
         }));
         mem_helper.fill(
             record.writes_aux.prev_timestamp,
@@ -247,18 +247,18 @@ impl<F: PrimeField32, const NUM_LIMBS: usize> TraceFiller<F> for Const32Filler<N
         let imm = record.imm;
         let mask = (1u32 << RV32_CELL_BITS) - 1;
         let imm_limbs_u32 = std::array::from_fn(|i| (imm >> (RV32_CELL_BITS * i)) & mask);
-        cols.imm_limbs = imm_limbs_u32.map(F::from_canonical_u32);
+        cols.imm_limbs = imm_limbs_u32.map(F::from_u32);
         for (lo, hi) in imm_limbs_u32.iter().copied().tuples() {
             self.bitwise_lookup_chip.request_range(lo, hi);
         }
 
         // rd_ptr
-        cols.rd_ptr = F::from_canonical_u32(record.rd_ptr);
+        cols.rd_ptr = F::from_u32(record.rd_ptr);
 
         // from_state
-        cols.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
-        cols.from_state.fp = F::from_canonical_u32(record.fp);
-        cols.from_state.pc = F::from_canonical_u32(record.from_pc);
+        cols.from_state.timestamp = F::from_u32(record.from_timestamp);
+        cols.from_state.fp = F::from_u32(record.fp);
+        cols.from_state.pc = F::from_u32(record.from_pc);
 
         // is_valid
         cols.is_valid = F::ONE;

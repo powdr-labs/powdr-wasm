@@ -6,18 +6,14 @@ use crate::memory_config::memory_config_with_fp;
 use openvm_circuit::{
     arch::{
         AirInventory, ChipInventoryError, InitFileGenerator, MatrixRecordArena, SystemConfig,
-        VmBuilder, VmChipComplex, VmProverExtension,
+        VmBuilder, VmChipComplex, VmField, VmProverExtension,
     },
     system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
 use openvm_circuit_derive::{Executor, MeteredExecutor, VmConfig};
-use openvm_sdk::config::TranspilerConfig;
-use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
-    engine::StarkEngine,
-    p3_field::PrimeField32,
-    prover::cpu::{CpuBackend, CpuDevice},
-};
+use openvm_cpu_backend::{CpuBackend, CpuDevice};
+use openvm_sdk_config::TranspilerConfig;
+use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val, p3_field::PrimeField32};
 use openvm_transpiler::transpiler::Transpiler;
 use powdr_openvm::{SpecializedExecutor, isa::OpenVmISA};
 use serde::{Deserialize, Serialize};
@@ -62,7 +58,7 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         use openvm_circuit::arch::DenseRecordArena;
         use openvm_circuit::system::cuda::{extensions::SystemGpuBuilder, SystemChipInventoryGPU};
-        use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
+        use openvm_cuda_backend::{engine::BabyBearPoseidon2GpuEngine, prover_backend::GpuBackend};
         use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
         pub(crate) mod cuda_abi;
     }
@@ -89,8 +85,10 @@ pub struct CrushConfig {
 }
 
 // This seems trivial but it's tricky to put into powdr-openvm because of some From implementation issues.
-impl<F: PrimeField32, ISA: OpenVmISA<Executor<F> = CrushConfigExecutor<F>>>
-    From<CrushConfigExecutor<F>> for SpecializedExecutor<F, ISA>
+impl<
+    F: PrimeField32 + openvm_stark_backend::p3_field::InjectiveMonomial<7>,
+    ISA: OpenVmISA<Executor<F> = CrushConfigExecutor<F>>,
+> From<CrushConfigExecutor<F>> for SpecializedExecutor<F, ISA>
 {
     fn from(value: CrushConfigExecutor<F>) -> Self {
         Self::OriginalExecutor(value)
@@ -142,9 +140,10 @@ pub struct CrushCpuBuilder;
 
 impl<E, SC> VmBuilder<E> for CrushCpuBuilder
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    Val<SC>: PrimeField32,
+    Val<SC>: VmField,
+    SC::EF: Ord,
 {
     type VmConfig = CrushConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
@@ -175,7 +174,7 @@ pub fn system_config() -> SystemConfig {
 pub struct CrushGpuBuilder;
 
 #[cfg(feature = "cuda")]
-impl VmBuilder<GpuBabyBearPoseidon2Engine> for CrushGpuBuilder {
+impl VmBuilder<BabyBearPoseidon2GpuEngine> for CrushGpuBuilder {
     type VmConfig = CrushConfig;
     type SystemChipInventory = SystemChipInventoryGPU;
     type RecordArena = DenseRecordArena;
@@ -193,13 +192,13 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for CrushGpuBuilder {
         >,
         ChipInventoryError,
     > {
-        let mut chip_complex = VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(
+        let mut chip_complex = VmBuilder::<BabyBearPoseidon2GpuEngine>::create_chip_complex(
             &SystemGpuBuilder,
             &config.system,
             circuit,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
+        VmProverExtension::<BabyBearPoseidon2GpuEngine, _, _>::extend_prover(
             &CrushGpuProverExt,
             &config.base,
             inventory,

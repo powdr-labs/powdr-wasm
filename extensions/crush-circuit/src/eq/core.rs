@@ -12,10 +12,10 @@ use openvm_circuit_primitives_derive::{AlignedBorrow, AlignedBytesBorrow};
 use openvm_crush_transpiler::EqOpcode;
 use openvm_instructions::{LocalOpcode, instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_stark_backend::{
+    BaseAirWithPublicValues, ColumnsAir,
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
-    rap::{BaseAirWithPublicValues, ColumnsAir},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 use struct_reflection::{StructReflection, StructReflectionHelper};
 use strum::IntoEnumIterator;
@@ -113,9 +113,9 @@ where
             .iter()
             .zip(EqOpcode::iter())
             .fold(AB::Expr::ZERO, |acc, (flag, opcode)| {
-                acc + (*flag).into() * AB::Expr::from_canonical_u8(opcode as u8)
+                acc + (*flag).into() * AB::Expr::from_u8(opcode as u8)
             })
-            + AB::Expr::from_canonical_usize(self.offset);
+            + AB::Expr::from_usize(self.offset);
 
         // Output: cmp_result in the first limb, zeros elsewhere.
         let mut a: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
@@ -248,8 +248,8 @@ where
         core_row.cmp_result = F::from_bool(cmp_result);
         // Write c before b: the record overlaps core_row memory, and writing
         // core_row.b (bytes 0..15) would overwrite record.c (bytes 4..7).
-        core_row.c = record.c.map(F::from_canonical_u8);
-        core_row.b = record.b.map(F::from_canonical_u8);
+        core_row.c = record.c.map(F::from_u8);
+        core_row.b = record.b.map(F::from_u8);
     }
 }
 
@@ -270,11 +270,7 @@ where
 {
     for i in 0..NUM_LIMBS {
         if x[i] != y[i] {
-            return (
-                !is_eq,
-                i,
-                (F::from_canonical_u8(x[i]) - F::from_canonical_u8(y[i])).inverse(),
-            );
+            return (!is_eq, i, (F::from_u8(x[i]) - F::from_u8(y[i])).inverse());
         }
     }
     (is_eq, 0, F::ZERO)

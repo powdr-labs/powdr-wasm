@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use crate::adapters::{fp_addr, reg_addr};
+use crate::adapters::{fp_addr, fp_block, reg_addr};
 use crate::execution::ExecutionState;
 use openvm_circuit::arch::{ExecutionBridge, ExecutionState as OvmExecutionState};
 use openvm_circuit::system::memory::offline_checker::{
@@ -10,11 +10,11 @@ use openvm_circuit_primitives::{AlignedBorrow, bitwise_op_lookup::BitwiseOperati
 use openvm_instructions::program::DEFAULT_PC_STEP;
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_stark_backend::interaction::InteractionBuilder;
-use openvm_stark_backend::p3_field::FieldAlgebra;
+use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_backend::{
+    BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir,
     p3_air::{Air, BaseAir},
     p3_matrix::Matrix,
-    rap::{BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir},
 };
 use struct_reflection::{StructReflection, StructReflectionHelper};
 
@@ -63,21 +63,21 @@ where
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("row_slice(0) should exist");
         let cols: &Const32AdapterAirCol<AB::Var, NUM_LIMBS> = (*local).borrow();
 
         let timestamp = cols.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
         let mut timestamp_pp = || {
             timestamp_delta += 1;
-            timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
+            timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
         // Read fp
         self.memory_bridge
             .read(
                 fp_addr::<AB::F>(),
-                [cols.from_state.fp],
+                fp_block::<AB::Expr>(cols.from_state.fp.into()),
                 timestamp_pp(),
                 &cols.fp_read_aux,
             )
@@ -102,14 +102,14 @@ where
             .eval(builder, cols.is_valid);
 
         // Reconstruct instruction operands b (imm_lo) and c (imm_hi) from limbs
-        let cell_factor = AB::F::from_canonical_u32(1 << RV32_CELL_BITS);
+        let cell_factor = AB::F::from_u32(1 << RV32_CELL_BITS);
         let imm_lo: AB::Expr = cols.imm_limbs[0] + cols.imm_limbs[1] * cell_factor;
         let imm_hi: AB::Expr = cols.imm_limbs[2] + cols.imm_limbs[3] * cell_factor;
 
         // Execution bridge: verify instruction and advance PC
         self.execution_bridge
             .execute(
-                AB::F::from_canonical_usize(self.offset),
+                AB::F::from_usize(self.offset),
                 [
                     cols.rd_ptr.into(),
                     imm_lo,
@@ -121,8 +121,8 @@ where
                 ],
                 cols.from_state.into(),
                 OvmExecutionState {
-                    pc: cols.from_state.pc + AB::F::from_canonical_u32(DEFAULT_PC_STEP),
-                    timestamp: timestamp + AB::F::from_canonical_usize(timestamp_delta),
+                    pc: cols.from_state.pc + AB::F::from_u32(DEFAULT_PC_STEP),
+                    timestamp: timestamp + AB::F::from_usize(timestamp_delta),
                 },
             )
             .eval(builder, cols.is_valid);

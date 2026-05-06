@@ -8,10 +8,10 @@ use openvm_circuit_primitives_derive::{AlignedBorrow, AlignedBytesBorrow};
 use openvm_crush_transpiler::JumpOpcode;
 use openvm_instructions::{LocalOpcode, program::DEFAULT_PC_STEP};
 use openvm_stark_backend::{
+    BaseAirWithPublicValues, ColumnsAir,
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
-    rap::{BaseAirWithPublicValues, ColumnsAir},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 use struct_reflection::{StructReflection, StructReflectionHelper};
 use strum::IntoEnumIterator;
@@ -132,9 +132,9 @@ where
             .iter()
             .zip(JumpOpcode::iter())
             .fold(AB::Expr::ZERO, |acc, (flag, opcode)| {
-                acc + (*flag).into() * AB::Expr::from_canonical_u8(opcode as u8)
+                acc + (*flag).into() * AB::Expr::from_u8(opcode as u8)
             })
-            + AB::Expr::from_canonical_usize(self.offset);
+            + AB::Expr::from_usize(self.offset);
 
         builder.assert_bool(cols.do_absolute_jump);
 
@@ -166,7 +166,7 @@ where
             .enumerate()
             .fold(AB::Expr::ZERO, |acc, (i, limb)| {
                 acc + (*limb).into()
-                    * AB::Expr::from_canonical_u32(1 << (i * crate::adapters::RV32_CELL_BITS))
+                    * AB::Expr::from_u32(1 << (i * crate::adapters::RV32_CELL_BITS))
             });
 
         // Compute to_pc (all terms are degree 2):
@@ -178,7 +178,7 @@ where
         //   correction adds rs_composed * pc_step → from_pc + (rs_composed + 1) * pc_step.
         // The +1 accounts for the natural PC increment that crush's interpreter
         // applies after JumpOffset. Without it, offset=0 would loop forever.
-        let default_pc_step = AB::Expr::from_canonical_u32(DEFAULT_PC_STEP);
+        let default_pc_step = AB::Expr::from_u32(DEFAULT_PC_STEP);
 
         let to_pc = cols.do_absolute_jump * cols.imm
             + not::<AB::Expr>(cols.do_absolute_jump.into()) * (from_pc + default_pc_step.clone())
@@ -232,7 +232,7 @@ impl JumpCoreFiller {
         for (i, &limb) in record.rs_val.iter().enumerate() {
             if limb != 0 {
                 cond_is_zero = false;
-                nonzero_inv_marker[i] = F::from_canonical_u8(limb).inverse();
+                nonzero_inv_marker[i] = F::from_u8(limb).inverse();
                 break;
             }
         }
@@ -255,7 +255,7 @@ impl JumpCoreFiller {
         core_row.opcode_skip_flag = F::from_bool(local_opcode == JumpOpcode::SKIP);
         core_row.opcode_jump_flag = F::from_bool(local_opcode == JumpOpcode::JUMP);
 
-        core_row.imm = F::from_canonical_u32(record.imm);
-        core_row.rs_val = record.rs_val.map(F::from_canonical_u8);
+        core_row.imm = F::from_u32(record.imm);
+        core_row.rs_val = record.rs_val.map(F::from_u8);
     }
 }
