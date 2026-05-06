@@ -2,7 +2,7 @@ Instructions:
   0: CALL_INDIRECT save_pc=r10, save_fp=r11, target_pc=r12, fp_offset=120
 
 APC advantage:
-  - Main columns: 57 -> 30 (1.90x reduction)
+  - Main columns: 60 -> 30 (2.00x reduction)
   - Bus interactions: 31 -> 20 (1.55x reduction)
   - Constraints: 16 -> 2 (8.00x reduction)
 
@@ -43,14 +43,14 @@ mult=is_valid * -1, args=[0, from_state__timestamp_0]
 mult=is_valid * 1, args=[to_pc_data__0_0 + 256 * to_pc_data__1_0 + 65536 * to_pc_data__2_0 + 16777216 * to_pc_data__3_0, from_state__timestamp_0 + 6]
 
 // Bus 1 (MEMORY):
-mult=is_valid * -1, args=[5, 0, from_state__fp_0, fp_read_aux__base__prev_timestamp_0]
+mult=is_valid * -1, args=[5, 0, from_state__fp_0, 0, 0, 0, fp_read_aux__base__prev_timestamp_0]
 mult=is_valid * -1, args=[1, from_state__fp_0 + 48, to_pc_data__0_0, to_pc_data__1_0, to_pc_data__2_0, to_pc_data__3_0, to_pc_read_aux__base__prev_timestamp_0]
 mult=is_valid * 1, args=[1, from_state__fp_0 + 48, to_pc_data__0_0, to_pc_data__1_0, to_pc_data__2_0, to_pc_data__3_0, from_state__timestamp_0 + 2]
 mult=is_valid * -1, args=[1, from_state__fp_0 + 164, save_fp_write_aux__prev_data__0_0, save_fp_write_aux__prev_data__1_0, save_fp_write_aux__prev_data__2_0, save_fp_write_aux__prev_data__3_0, save_fp_write_aux__base__prev_timestamp_0]
 mult=is_valid * 1, args=[1, from_state__fp_0 + 164, old_fp_data__0_0, old_fp_data__1_0, old_fp_data__2_0, 120 * old_fp_data__0_0 + 30720 * old_fp_data__1_0 + 7864320 * old_fp_data__2_0 - 120 * from_state__fp_0, from_state__timestamp_0 + 3]
 mult=is_valid * -1, args=[1, from_state__fp_0 + 160, save_pc_write_aux__prev_data__0_0, save_pc_write_aux__prev_data__1_0, save_pc_write_aux__prev_data__2_0, save_pc_write_aux__prev_data__3_0, save_pc_write_aux__base__prev_timestamp_0]
 mult=is_valid * 1, args=[1, from_state__fp_0 + 160, return_pc_data__0_0, return_pc_data__1_0, return_pc_data__2_0, 120 * return_pc_data__0_0 + 30720 * return_pc_data__1_0 + 7864320 * return_pc_data__2_0 - 480, from_state__timestamp_0 + 4]
-mult=is_valid * 1, args=[5, 0, from_state__fp_0 + 120, from_state__timestamp_0 + 5]
+mult=is_valid * 1, args=[5, 0, from_state__fp_0 + 120, 0, 0, 0, from_state__timestamp_0 + 5]
 
 // Bus 3 (VARIABLE_RANGE_CHECKER):
 mult=is_valid * 1, args=[fp_read_aux__base__timestamp_lt_aux__lower_decomp__0_0, 17]

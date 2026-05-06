@@ -28,7 +28,7 @@ use openvm_circuit::arch::ExecutionBridge;
 
 use crate::execution::ExecutionState;
 
-use super::{RV32_REGISTER_NUM_LIMBS, fp_addr, reg_addr, tracing_read, tracing_read_fp};
+use super::{RV32_REGISTER_NUM_LIMBS, fp_addr, fp_block, reg_addr, tracing_read, tracing_read_fp};
 
 /// Trace columns for the JUMP adapter.
 ///
@@ -90,7 +90,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for JumpAdapterAir {
         self.memory_bridge
             .read(
                 fp_addr::<AB::F>(),
-                [local.from_state.fp],
+                fp_block::<AB::Expr>(local.from_state.fp.into()),
                 timestamp_pp(),
                 &local.fp_read_aux,
             )

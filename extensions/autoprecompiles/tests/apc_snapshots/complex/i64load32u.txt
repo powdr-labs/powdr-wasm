@@ -39,13 +39,13 @@ mult=is_valid * -1, args=[0, from_state__timestamp_0]
 mult=is_valid * 1, args=[8, from_state__timestamp_0 + 6]
 
 // Bus 1 (MEMORY):
-mult=is_valid * -1, args=[5, 0, from_state__fp_0, fp_read_aux__base__prev_timestamp_0]
+mult=is_valid * -1, args=[5, 0, from_state__fp_0, 0, 0, 0, fp_read_aux__base__prev_timestamp_0]
 mult=is_valid * -1, args=[1, from_state__fp_0 + 4, rs1_data__0_0, rs1_data__1_0, rs1_data__2_0, rs1_data__3_0, rs1_aux_cols__base__prev_timestamp_0]
 mult=is_valid * -1, args=[2, mem_ptr_limbs__0_0 + 65536 * mem_ptr_limbs__1_0, read_data__0_0, read_data__1_0, read_data__2_0, read_data__3_0, read_data_aux__base__prev_timestamp_0]
 mult=is_valid * 1, args=[2, mem_ptr_limbs__0_0 + 65536 * mem_ptr_limbs__1_0, read_data__0_0, read_data__1_0, read_data__2_0, read_data__3_0, from_state__timestamp_0 + 2]
 mult=is_valid * -1, args=[1, from_state__fp_0, prev_data__0_0, prev_data__1_0, prev_data__2_0, prev_data__3_0, write_base_aux__prev_timestamp_0]
 mult=is_valid * 1, args=[1, from_state__fp_0, read_data__0_0, read_data__1_0, read_data__2_0, read_data__3_0, from_state__timestamp_0 + 3]
-mult=is_valid * 1, args=[5, 0, from_state__fp_0, from_state__timestamp_0 + 4]
+mult=is_valid * 1, args=[5, 0, from_state__fp_0, 0, 0, 0, from_state__timestamp_0 + 4]
 mult=is_valid * 1, args=[1, from_state__fp_0 + 4, 0, 0, 0, 0, from_state__timestamp_0 + 5]
 
 // Bus 3 (VARIABLE_RANGE_CHECKER):

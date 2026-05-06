@@ -33,7 +33,7 @@ use openvm_circuit::arch::ExecutionBridge;
 
 use crate::memory_config::FP_AS;
 use crate::{
-    adapters::{fp_addr, reg_addr},
+    adapters::{fp_addr, fp_block, reg_addr},
     execution::ExecutionState,
 };
 
@@ -68,8 +68,9 @@ pub struct CallAdapterCols<T> {
     pub to_pc_read_aux: MemoryReadAuxCols<T>,
     pub save_fp_write_aux: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
     pub save_pc_write_aux: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
-    /// FP_AS write: prev_data is 1 field element (native32 cell type)
-    pub fp_write_aux: MemoryWriteAuxCols<T, 1>,
+    /// FP_AS write: prev_data is 4 field elements (DEFAULT_BLOCK_SIZE for v2);
+    /// only cell 0 carries the FP, cells 1..4 are zero.
+    pub fp_write_aux: MemoryWriteAuxCols<T, 4>,
 
     /// Decomposition of to_fp_operand (used for CALL/CALL_INDIRECT), for range-checking
     pub offset_limbs: [T; 2],
@@ -178,7 +179,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for CallAdapterAir {
         self.memory_bridge
             .read(
                 fp_addr::<AB::F>(),
-                [local.from_state.fp],
+                fp_block::<AB::Expr>(local.from_state.fp.into()),
                 timestamp_pp(),
                 &local.fp_read_aux,
             )
@@ -295,7 +296,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for CallAdapterAir {
         self.memory_bridge
             .write(
                 fp_addr::<AB::F>(),
-                [new_fp_composed],
+                fp_block::<AB::Expr>(new_fp_composed),
                 timestamp_pp(),
                 &local.fp_write_aux,
             )
@@ -362,8 +363,9 @@ pub struct CallAdapterRecord {
     pub to_pc_read_aux: MemoryReadAuxRecord,
     pub save_fp_write_aux: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
     pub save_pc_write_aux: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
-    /// FP_AS write: prev_data is a single u32 (field element in native32 cell type)
-    pub fp_write_aux: MemoryWriteAuxRecord<u32, 1>,
+    /// FP_AS write: prev_data is 4 u32 cells (DEFAULT_BLOCK_SIZE for v2 — each
+    /// cell stores a `field32` value; only cell 0 carries the FP).
+    pub fp_write_aux: MemoryWriteAuxRecord<u32, 4>,
 }
 
 impl<F: PrimeField32> AdapterTraceExecutor<F> for CallAdapterExecutor {
@@ -483,11 +485,13 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for CallAdapterExecutor {
         }
 
         // 5. Write new FP to FP_AS
-        let new_fp_field = F::from_u32(new_fp);
-        // SAFETY: FP_AS uses native32 cell type (F), block size 1, align 1.
-        let (t_prev, prev_data) = unsafe { memory.write::<F, 1>(FP_AS, 0, [new_fp_field]) };
+        // SAFETY: FP_AS uses native32 cell type (F). Block size 4 matches v2's
+        // DEFAULT_BLOCK_SIZE; cells 1..4 are zero so the bus interaction stays
+        // canonical.
+        let new_block: [F; 4] = [F::from_u32(new_fp), F::ZERO, F::ZERO, F::ZERO];
+        let (t_prev, prev_data) = unsafe { memory.write::<F, 4>(FP_AS, 0, new_block) };
         record.fp_write_aux.prev_timestamp = t_prev;
-        record.fp_write_aux.prev_data[0] = prev_data[0].as_canonical_u32();
+        record.fp_write_aux.prev_data = prev_data.map(|x| x.as_canonical_u32());
     }
 }
 
@@ -528,8 +532,9 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for CallAdapterFiller {
         // Total: 6 timestamp increments (indices 0..5)
         let mut timestamp = record.from_timestamp + 5;
 
-        // 5. FP write (native32 cell type: prev_data is a field element)
-        adapter_row.fp_write_aux.prev_data = [F::from_u32(record.fp_write_aux.prev_data[0])];
+        // 5. FP write (native32 cell type: prev_data is 4 field elements;
+        // cell 0 carries the FP, cells 1..4 are zero)
+        adapter_row.fp_write_aux.prev_data = record.fp_write_aux.prev_data.map(F::from_u32);
         mem_helper.fill(
             record.fp_write_aux.prev_timestamp,
             timestamp,

@@ -40,11 +40,13 @@ pub trait FpMemory {
 impl FpMemory for GuestMemory {
     fn fp<F: PrimeField32>(&self) -> u32 {
         // SAFETY: FP_AS uses native32 cell type (F), so T=F is the correct type.
-        unsafe { self.read::<F, 1>(FP_AS, 0)[0].as_canonical_u32() }
+        // Block size 4 matches v2's DEFAULT_BLOCK_SIZE; only cell 0 carries the FP.
+        unsafe { self.read::<F, 4>(FP_AS, 0)[0].as_canonical_u32() }
     }
 
     fn set_fp<F: PrimeField32>(&mut self, value: u32) {
         // SAFETY: FP_AS uses native32 cell type (F), so T=F is the correct type.
-        unsafe { self.write::<F, 1>(FP_AS, 0, [F::from_u32(value)]) }
+        // Pads cells 1..4 with zero so the 4-cell block stays canonical.
+        unsafe { self.write::<F, 4>(FP_AS, 0, [F::from_u32(value), F::ZERO, F::ZERO, F::ZERO]) }
     }
 }

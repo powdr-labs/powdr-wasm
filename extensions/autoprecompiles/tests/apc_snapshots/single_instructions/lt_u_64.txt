@@ -58,8 +58,8 @@ mult=is_valid * -1, args=[0, from_state__timestamp_0]
 mult=is_valid * 1, args=[4, from_state__timestamp_0 + 6]
 
 // Bus 1 (MEMORY):
-mult=is_valid * -1, args=[5, 0, from_state__fp_0, fp_read_aux__base__prev_timestamp_0]
-mult=is_valid * 1, args=[5, 0, from_state__fp_0, from_state__timestamp_0]
+mult=is_valid * -1, args=[5, 0, from_state__fp_0, 0, 0, 0, fp_read_aux__base__prev_timestamp_0]
+mult=is_valid * 1, args=[5, 0, from_state__fp_0, 0, 0, 0, from_state__timestamp_0]
 mult=is_valid * -1, args=[1, from_state__fp_0, b__0_0, b__1_0, b__2_0, b__3_0, rs1_reads_aux__0__base__prev_timestamp_0]
 mult=is_valid * 1, args=[1, from_state__fp_0, b__0_0, b__1_0, b__2_0, b__3_0, from_state__timestamp_0 + 1]
 mult=is_valid * -1, args=[1, from_state__fp_0 + 4, b__4_0, b__5_0, b__6_0, b__7_0, rs1_reads_aux__1__base__prev_timestamp_0]

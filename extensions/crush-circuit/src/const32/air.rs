@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use crate::adapters::{fp_addr, reg_addr};
+use crate::adapters::{fp_addr, fp_block, reg_addr};
 use crate::execution::ExecutionState;
 use openvm_circuit::arch::{ExecutionBridge, ExecutionState as OvmExecutionState};
 use openvm_circuit::system::memory::offline_checker::{
@@ -77,7 +77,7 @@ where
         self.memory_bridge
             .read(
                 fp_addr::<AB::F>(),
-                [cols.from_state.fp],
+                fp_block::<AB::Expr>(cols.from_state.fp.into()),
                 timestamp_pp(),
                 &cols.fp_read_aux,
             )
