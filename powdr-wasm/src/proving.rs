@@ -172,8 +172,18 @@ pub fn keygen_to_disk(cache_dir: &Path) -> Result<(), Box<dyn std::error::Error>
     Ok(())
 }
 
-fn build_sdk(cache_dir: Option<&Path>) -> Result<CrushSdk, Box<dyn std::error::Error>> {
-    let app_config = default_app_config_without_apcs();
+fn build_sdk(
+    cache_dir: Option<&Path>,
+    max_segment_len: Option<u32>,
+) -> Result<CrushSdk, Box<dyn std::error::Error>> {
+    let mut app_config = default_app_config_without_apcs();
+    if let Some(len) = max_segment_len {
+        app_config
+            .app_vm_config
+            .as_mut()
+            .segmentation_limits
+            .set_max_trace_height(len);
+    }
     let sdk = CrushSdk::new_without_transpiler(app_config)?;
 
     if let Some(dir) = cache_dir {
@@ -201,6 +211,7 @@ pub fn prove(
     recursion: bool,
     powdr_config: PowdrConfig,
     cache_dir: Option<&Path>,
+    max_segment_len: Option<u32>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let apc_count = powdr_config.autoprecompiles;
     let compiled = if apc_count > 0 {
@@ -224,9 +235,16 @@ pub fn prove(
     };
     let app_fri_params =
         FriParameters::standard_with_100_bits_conjectured_security(DEFAULT_APP_LOG_BLOWUP);
-    let app_config = AppConfig::new(app_fri_params, compiled.vm_config.clone());
+    let mut app_config = AppConfig::new(app_fri_params, compiled.vm_config.clone());
+    if let Some(len) = max_segment_len {
+        app_config
+            .app_vm_config
+            .as_mut()
+            .segmentation_limits
+            .set_max_trace_height(len);
+    }
     let sdk = if apc_count == 0 {
-        build_sdk(cache_dir)?
+        build_sdk(cache_dir, max_segment_len)?
     } else {
         CrushSdk::new_without_transpiler(app_config)?
     };
@@ -334,6 +352,7 @@ pub fn prove_from_compiled(
     compiled_dir: &Path,
     stdin: StdIn,
     recursion: bool,
+    max_segment_len: Option<u32>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("Loading compiled program...");
     let compiled: CompiledProgram<CrushISA> =
@@ -341,7 +360,14 @@ pub fn prove_from_compiled(
 
     let app_fri_params =
         FriParameters::standard_with_100_bits_conjectured_security(DEFAULT_APP_LOG_BLOWUP);
-    let app_config = AppConfig::new(app_fri_params, compiled.vm_config.clone());
+    let mut app_config = AppConfig::new(app_fri_params, compiled.vm_config.clone());
+    if let Some(len) = max_segment_len {
+        app_config
+            .app_vm_config
+            .as_mut()
+            .segmentation_limits
+            .set_max_trace_height(len);
+    }
     let sdk = CrushSdk::new_without_transpiler(app_config)?;
 
     tracing::info!("Loading cached app_pk...");
@@ -377,6 +403,7 @@ pub fn prove_riscv_from_compiled(
     compiled_dir: &Path,
     stdin: StdIn,
     recursion: bool,
+    max_segment_len: Option<u32>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("Loading compiled RISC-V program...");
     let compiled: CompiledProgram<powdr_openvm_riscv::RiscvISA> =
@@ -384,7 +411,14 @@ pub fn prove_riscv_from_compiled(
 
     let app_fri_params =
         FriParameters::standard_with_100_bits_conjectured_security(DEFAULT_APP_LOG_BLOWUP);
-    let app_config = AppConfig::new(app_fri_params, compiled.vm_config.clone());
+    let mut app_config = AppConfig::new(app_fri_params, compiled.vm_config.clone());
+    if let Some(len) = max_segment_len {
+        app_config
+            .app_vm_config
+            .as_mut()
+            .segmentation_limits
+            .set_max_trace_height(len);
+    }
     let sdk = RiscvSdk::new_without_transpiler(app_config)?;
 
     tracing::info!("Loading cached app_pk...");

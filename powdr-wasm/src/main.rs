@@ -170,6 +170,12 @@ enum Commands {
         /// Support unaligned memory accesses (needed for e.g. Go-compiled WASM)
         #[arg(long, default_value_t = false)]
         unaligned_memory: bool,
+        /// Max trace height per chip in a segment (must be a power of two,
+        /// since traces are padded to the next power of two anyway).
+        /// Lower values cause earlier segmentation, reducing peak GPU memory usage.
+        /// Default: 2^22 (4194304).
+        #[arg(long)]
+        max_segment_len: Option<u32>,
     },
     /// Generate and cache proving keys to a directory (for use with `prove --cache-dir`)
     Keygen {
@@ -211,6 +217,12 @@ enum Commands {
         /// Directory with pre-compiled artifact (from `compile-riscv` command)
         #[arg(long)]
         compiled_dir: Option<PathBuf>,
+        /// Max trace height per chip in a segment (must be a power of two,
+        /// since traces are padded to the next power of two anyway).
+        /// Lower values cause earlier segmentation, reducing peak GPU memory usage.
+        /// Default: 2^22 (4194304).
+        #[arg(long)]
+        max_segment_len: Option<u32>,
     },
 }
 
@@ -302,12 +314,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             cache_dir,
             compiled_dir,
             unaligned_memory,
+            max_segment_len,
         } => {
             let stdin = make_stdin(&input);
 
             let prove = || -> Result<()> {
                 if let Some(compiled_dir) = compiled_dir {
-                    proving::prove_from_compiled(&compiled_dir, stdin, recursion)
+                    proving::prove_from_compiled(&compiled_dir, stdin, recursion, max_segment_len)
                         .map_err(|e| eyre::eyre!("{e}"))?;
                 } else {
                     let program =
@@ -324,6 +337,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         recursion,
                         powdr_config,
                         cache_dir.as_deref(),
+                        max_segment_len,
                     )
                     .map_err(|e| eyre::eyre!("{e}"))?;
                 }
@@ -378,12 +392,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             powdr,
             metrics,
             compiled_dir,
+            max_segment_len,
         } => {
             let prove = || -> Result<()> {
                 if let Some(compiled_dir) = compiled_dir {
                     let stdin = make_stdin(&input);
-                    proving::prove_riscv_from_compiled(&compiled_dir, stdin, true)
-                        .map_err(|e| eyre::eyre!("{e}"))?;
+                    proving::prove_riscv_from_compiled(
+                        &compiled_dir,
+                        stdin,
+                        true,
+                        max_segment_len,
+                    )
+                    .map_err(|e| eyre::eyre!("{e}"))?;
                 } else {
                     let program =
                         program.expect("program is required when --compiled-dir is not provided");
@@ -417,8 +437,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .map_err(|e| eyre::eyre!("{e}"))?;
 
                     let stdin = make_stdin(&input);
-                    powdr_openvm_riscv::prove(&compiled, false, true, stdin, None)
-                        .map_err(|e| eyre::eyre!("{e}"))?;
+                    powdr_openvm_riscv::prove(
+                        &compiled,
+                        false,
+                        true,
+                        stdin,
+                        max_segment_len.map(|v| v as usize),
+                    )
+                    .map_err(|e| eyre::eyre!("{e}"))?;
                 }
                 println!("RISC-V proof verified successfully.");
                 Ok(())
