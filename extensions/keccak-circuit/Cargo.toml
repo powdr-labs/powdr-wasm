@@ -1,0 +1,33 @@
+[package]
+name = "keccak-circuit"
+description = "keccak256 circuit extension"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+openvm-crush-transpiler = { workspace = true }
+openvm-keccak256-circuit = { workspace = true }
+openvm-stark-backend = { workspace = true }
+openvm-circuit-primitives = { workspace = true }
+openvm-circuit-primitives-derive = { workspace = true }
+openvm-circuit = { workspace = true }
+openvm-circuit-derive = { workspace = true }
+openvm-instructions = { workspace = true }
+openvm-rv32im-circuit = { workspace = true }
+p3-keccak-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "539bbc84085efb609f4f62cb03cf49588388abdb" }
+tiny-keccak = { version = "2.0.2", features = ["keccak"] }
+strum.workspace = true
+derive-new.workspace = true
+derive_more = { workspace = true, features = ["from"] }
+itertools.workspace = true
+serde = { workspace = true, features = ["derive", "std"] }
+struct-reflection.workspace = true
+
+[features]
+default = ["parallel", "jemalloc"]
+parallel = ["openvm-circuit/parallel"]
+tco = ["openvm-circuit/tco"]
+mimalloc = ["openvm-circuit/mimalloc"]
+jemalloc = ["openvm-circuit/jemalloc"]
+jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
+nightly-features = ["openvm-circuit/nightly-features"]

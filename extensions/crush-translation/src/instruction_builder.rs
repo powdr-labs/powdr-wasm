@@ -1,7 +1,7 @@
 use openvm_crush_transpiler::{
     BaseAlu64Opcode, BaseAluOpcode, CallOpcode, ConstOpcodes, Eq64Opcode, EqOpcode,
-    HintStoreOpcode, JumpOpcode, LessThan64Opcode, LessThanOpcode, MulOpcode, Phantom,
-    Shift64Opcode, ShiftOpcode,
+    HintStoreOpcode, JumpOpcode, Keccak256Opcode, LessThan64Opcode, LessThanOpcode, MulOpcode,
+    Phantom, Shift64Opcode, ShiftOpcode,
 };
 use openvm_instructions::{LocalOpcode, SystemOpcode, VmOpcode, instruction::Instruction, riscv};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -958,6 +958,25 @@ pub fn hint_buffer<F: PrimeField32>(num_words_reg: usize, mem_ptr_reg: usize) ->
         (riscv::RV32_REGISTER_NUM_LIMBS * num_words_reg) as isize,
         (riscv::RV32_REGISTER_NUM_LIMBS * mem_ptr_reg) as isize,
         0,
+        riscv::RV32_REGISTER_AS as isize,
+        riscv::RV32_MEMORY_AS as isize,
+    )
+}
+
+/// KECCAK256: Compute keccak256 hash of variable-length input.
+/// dst_reg: register containing pointer to 32-byte output buffer
+/// src_reg: register containing pointer to input data
+/// len_reg: register containing input length in bytes
+pub fn keccak256<F: PrimeField32>(
+    dst_reg: usize,
+    src_reg: usize,
+    len_reg: usize,
+) -> Instruction<F> {
+    Instruction::from_isize(
+        Keccak256Opcode::KECCAK256.global_opcode(),
+        (riscv::RV32_REGISTER_NUM_LIMBS * dst_reg) as isize,
+        (riscv::RV32_REGISTER_NUM_LIMBS * src_reg) as isize,
+        (riscv::RV32_REGISTER_NUM_LIMBS * len_reg) as isize,
         riscv::RV32_REGISTER_AS as isize,
         riscv::RV32_MEMORY_AS as isize,
     )

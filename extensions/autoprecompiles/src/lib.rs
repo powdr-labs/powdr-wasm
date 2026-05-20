@@ -2,6 +2,7 @@ use std::collections::{BTreeSet, HashSet};
 
 use crush_circuit::{CrushConfig, CrushConfigExecutor, CrushCpuBuilder, CrushCpuProverExt};
 use crush_translation::LinkedProgram;
+use keccak_circuit::Keccak256CpuProverExt;
 use openvm_circuit::arch::{
     AirInventory, AirInventoryError, ChipInventoryError, VmBuilder, VmCircuitConfig,
     VmCircuitExtension, VmProverExtension,
@@ -121,6 +122,9 @@ impl OpenVmISA for CrushISA {
         inventory.start_new_extension();
         VmCircuitExtension::extend_circuit(&shared_chips, &mut inventory)?;
         VmCircuitExtension::extend_circuit(&config.base, &mut inventory)?;
+        if let Some(ref keccak) = config.keccak {
+            VmCircuitExtension::extend_circuit(keccak, &mut inventory)?;
+        }
         Ok(inventory)
     }
 
@@ -147,6 +151,14 @@ impl OpenVmISA for CrushISA {
             &config.base,
             inventory,
         )?;
+
+        if let Some(ref keccak) = config.keccak {
+            VmProverExtension::<BabyBearPoseidon2Engine, _, _>::extend_prover(
+                &Keccak256CpuProverExt,
+                keccak,
+                inventory,
+            )?;
+        }
 
         Ok(chip_complex)
     }

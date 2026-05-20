@@ -68,13 +68,14 @@ impl Backend {
     /// Run mock proof on this backend, returning the final state.
     pub fn mock_prove(
         self,
+        vm_config: CrushConfig,
         exe: &VmExe<F>,
         init_state: VmState<F>,
     ) -> Result<VmState<F>, Box<dyn std::error::Error>> {
         match self {
-            Backend::Cpu => mock_prove(exe, init_state),
+            Backend::Cpu => mock_prove(vm_config, exe, init_state),
             #[cfg(feature = "cuda")]
-            Backend::Gpu => mock_prove_gpu(exe, init_state),
+            Backend::Gpu => mock_prove_gpu(vm_config, exe, init_state),
         }
     }
 
@@ -256,6 +257,7 @@ pub fn prove(
 pub fn mock_prove_with<E, VB>(
     engine: E,
     builder: VB,
+    vm_config: CrushConfig,
     exe: &VmExe<F>,
     init_state: VmState<F>,
 ) -> Result<VmState<F>, Box<dyn std::error::Error>>
@@ -267,9 +269,18 @@ where
         + MeteredExecutor<Val<E::SC>>
         + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
 {
-    let pk = vm_proving_key();
-    let d_pk = engine.device().transport_pk_to_device(pk);
-    let vm_config = CrushConfig::default();
+    // Use cached key for default config, fresh key when extensions differ.
+    // pk_storage keeps the owned key alive when keccak is enabled.
+    let pk_storage = if vm_config.keccak.is_some() {
+        let circuit = vm_config
+            .create_airs()
+            .expect("failed to create AIR inventory for keygen");
+        Some(circuit.keygen(&engine))
+    } else {
+        None
+    };
+    let pk_ref = pk_storage.as_ref().unwrap_or_else(|| vm_proving_key());
+    let d_pk = engine.device().transport_pk_to_device(pk_ref);
     let mut vm = VirtualMachine::<_, VB>::new(engine, builder, vm_config, d_pk)?;
 
     // Run metered execution to discover segments.
@@ -298,7 +309,7 @@ where
             preflight_output.system_records,
             preflight_output.record_arenas,
         )?;
-        debug_proving_ctx(&vm, pk, &ctx);
+        debug_proving_ctx(&vm, pk_ref, &ctx);
     }
 
     Ok(state)
@@ -307,10 +318,11 @@ where
 /// Mock proof with constraint verification (all segments) using CPU engine.
 /// Returns the final state after all segments have been processed.
 pub fn mock_prove(
+    vm_config: CrushConfig,
     exe: &VmExe<F>,
     init_state: VmState<F>,
 ) -> Result<VmState<F>, Box<dyn std::error::Error>> {
-    mock_prove_with(cpu_engine(), CrushCpuBuilder, exe, init_state)
+    mock_prove_with(cpu_engine(), CrushCpuBuilder, vm_config, exe, init_state)
 }
 
 /// Mock proof with constraint verification (all segments) using GPU engine.
@@ -318,12 +330,14 @@ pub fn mock_prove(
 /// Returns the final state after all segments have been processed.
 #[cfg(feature = "cuda")]
 pub fn mock_prove_gpu(
+    vm_config: CrushConfig,
     exe: &VmExe<F>,
     init_state: VmState<F>,
 ) -> Result<VmState<F>, Box<dyn std::error::Error>> {
     mock_prove_with(
         gpu_engine(),
         crush_circuit::CrushGpuBuilder,
+        vm_config,
         exe,
         init_state,
     )

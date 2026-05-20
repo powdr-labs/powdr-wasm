@@ -26,6 +26,7 @@ openvm-crush-transpiler.workspace = true
 serde.workspace = true
 strum.workspace = true
 crush-circuit.workspace = true
+keccak-circuit.workspace = true
 crush-translation.workspace = true
 
 [dev-dependencies]

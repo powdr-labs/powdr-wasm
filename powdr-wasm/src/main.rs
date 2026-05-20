@@ -104,6 +104,9 @@ enum Commands {
         /// Support unaligned memory accesses (needed for e.g. Go-compiled WASM)
         #[arg(long, default_value_t = false)]
         unaligned_memory: bool,
+        /// Enable keccak256 precompile extension
+        #[arg(long, default_value_t = false)]
+        keccak: bool,
     },
     /// Compile a WASM program: WASM loading, PGO, APC generation, and keygen.
     /// Outputs a compiled artifact directory that can be used by `prove` or `prove-riscv`.
@@ -124,6 +127,9 @@ enum Commands {
         /// Support unaligned memory accesses (needed for e.g. Go-compiled WASM)
         #[arg(long, default_value_t = false)]
         unaligned_memory: bool,
+        /// Enable keccak256 precompile extension
+        #[arg(long, default_value_t = false)]
+        keccak: bool,
     },
     /// Compile a RISC-V program: Rust compilation, PGO, APC generation, and keygen.
     /// Outputs a compiled artifact directory that can be used by `prove-riscv`.
@@ -170,6 +176,9 @@ enum Commands {
         /// Support unaligned memory accesses (needed for e.g. Go-compiled WASM)
         #[arg(long, default_value_t = false)]
         unaligned_memory: bool,
+        /// Enable keccak256 precompile extension
+        #[arg(long, default_value_t = false)]
+        keccak: bool,
     },
     /// Generate and cache proving keys to a directory (for use with `prove --cache-dir`)
     Keygen {
@@ -190,6 +199,9 @@ enum Commands {
         /// Support unaligned memory accesses (needed for e.g. Go-compiled WASM)
         #[arg(long, default_value_t = false)]
         unaligned_memory: bool,
+        /// Enable keccak256 precompile extension
+        #[arg(long, default_value_t = false)]
+        keccak: bool,
     },
     /// Proves execution of a function from the RISC-V program with the given arguments.
     /// Even though not the main goal of this crate, this is useful for benchmarking against
@@ -240,6 +252,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             input,
             metrics,
             unaligned_memory,
+            keccak,
         } => {
             let wasm_bytes = std::fs::read(&program).expect("Failed to read WASM file");
             let (module, functions) = load_wasm(&wasm_bytes, unaligned_memory);
@@ -249,7 +262,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let stdin = make_stdin(&input);
 
             let run = || -> Result<()> {
-                let output = linked_program.execute(CrushConfig::default(), &function, stdin)?;
+                let config = if keccak {
+                    CrushConfig::default().with_keccak()
+                } else {
+                    CrushConfig::default()
+                };
+                let output = linked_program.execute(config, &function, stdin)?;
                 println!("output: {output:?}");
                 Ok(())
             };
@@ -270,12 +288,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             powdr,
             output_dir,
             unaligned_memory,
+            keccak,
         } => {
             let wasm_bytes = std::fs::read(&program).expect("Failed to read WASM file");
-            let original_program =
-                load_wasm_original_program(&wasm_bytes, &function, unaligned_memory);
             let stdin = make_stdin(&input);
             let powdr_config = powdr.build_powdr_config();
+            let config = if keccak {
+                CrushConfig::default().with_keccak()
+            } else {
+                CrushConfig::default()
+            };
+            let original_program =
+                load_wasm_original_program(&wasm_bytes, &function, unaligned_memory, config);
             compile::compile_crush_to_disk(original_program, stdin, powdr_config, &output_dir)
                 .map_err(|e| eyre::eyre!("{e}"))?;
             println!("Compiled to {}", output_dir.display());
@@ -302,6 +326,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             cache_dir,
             compiled_dir,
             unaligned_memory,
+            keccak,
         } => {
             let stdin = make_stdin(&input);
 
@@ -315,9 +340,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let function =
                         function.expect("function is required when --compiled-dir is not provided");
                     let wasm_bytes = std::fs::read(&program).expect("Failed to read WASM file");
-                    let original_program =
-                        load_wasm_original_program(&wasm_bytes, &function, unaligned_memory);
                     let powdr_config = powdr.build_powdr_config();
+                    let config = if keccak {
+                        CrushConfig::default().with_keccak()
+                    } else {
+                        CrushConfig::default()
+                    };
+                    let original_program = load_wasm_original_program(
+                        &wasm_bytes,
+                        &function,
+                        unaligned_memory,
+                        config,
+                    );
                     proving::prove(
                         original_program,
                         stdin,
@@ -349,10 +383,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             function,
             input,
             unaligned_memory,
+            keccak,
         } => {
             let exe = load_wasm_exe(&program, &function, unaligned_memory);
             let stdin = make_stdin(&input);
-            let vm_config = CrushConfig::default();
+            let vm_config = if keccak {
+                CrushConfig::default().with_keccak()
+            } else {
+                CrushConfig::default()
+            };
 
             let initial_state = VmState::initial(
                 &vm_config.system,
@@ -363,12 +402,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             #[cfg(feature = "cuda")]
             {
-                proving::mock_prove_gpu(&exe, initial_state).map_err(|e| eyre::eyre!("{e}"))?;
+                proving::mock_prove_gpu(vm_config, &exe, initial_state)
+                    .map_err(|e| eyre::eyre!("{e}"))?;
                 println!("GPU mock proof verified successfully.");
             }
             #[cfg(not(feature = "cuda"))]
             {
-                proving::mock_prove(&exe, initial_state).map_err(|e| eyre::eyre!("{e}"))?;
+                proving::mock_prove(vm_config, &exe, initial_state)
+                    .map_err(|e| eyre::eyre!("{e}"))?;
                 println!("Mock proof verified successfully.");
             }
         }
@@ -449,11 +490,12 @@ fn load_wasm_original_program<'a>(
     wasm_bytes: &'a [u8],
     function: &str,
     unaligned_memory: bool,
+    config: CrushConfig,
 ) -> OriginalCompiledProgram<'a, autoprecompiles::CrushISA> {
     let (module, functions) = load_wasm(wasm_bytes, unaligned_memory);
     let linked_program = LinkedProgram::new(module, functions);
     let exe = Arc::new(linked_program.program_with_entry_point(function));
-    let vm_config = OriginalVmConfig::new(CrushConfig::default());
+    let vm_config = OriginalVmConfig::new(config);
 
     OriginalCompiledProgram {
         exe,

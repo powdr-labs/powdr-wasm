@@ -191,8 +191,11 @@ pub fn test_execution(spec: &TestSpec) -> Result<(), Box<dyn std::error::Error>>
 pub fn test_metered_execution(spec: &TestSpec) -> Result<(), Box<dyn std::error::Error>> {
     let exe = build_exe(spec);
     let vm_config = CrushConfig::default();
-    let (segments, final_state) =
-        helpers::test_metered_execution(&exe, build_initial_state(spec, &exe, &vm_config))?;
+    let (segments, final_state) = helpers::test_metered_execution(
+        vm_config.clone(),
+        &exe,
+        build_initial_state(spec, &exe, &vm_config),
+    )?;
 
     assert_eq!(segments.len(), 1, "expected a single segment");
     verify_state(spec, &final_state)
@@ -202,7 +205,11 @@ pub fn test_metered_execution(spec: &TestSpec) -> Result<(), Box<dyn std::error:
 pub fn test_preflight(spec: &TestSpec) -> Result<(), Box<dyn std::error::Error>> {
     let exe = build_exe(spec);
     let vm_config = CrushConfig::default();
-    let final_state = helpers::test_preflight(&exe, build_initial_state(spec, &exe, &vm_config))?;
+    let final_state = helpers::test_preflight(
+        vm_config.clone(),
+        &exe,
+        build_initial_state(spec, &exe, &vm_config),
+    )?;
 
     verify_state(spec, &final_state)
 }
@@ -218,7 +225,7 @@ pub fn test_prove(spec: &TestSpec, backends: &[Backend]) -> Result<(), Box<dyn s
 
     for &backend in backends {
         let final_state = backend
-            .mock_prove(&exe, init_state.clone())
+            .mock_prove(CrushConfig::default(), &exe, init_state.clone())
             .map_err(|e| format!("{} mock_prove: {e}", backend.name()))?;
         verify_state(spec, &final_state)
             .map_err(|e| format!("{} verify_state: {e}", backend.name()))?;

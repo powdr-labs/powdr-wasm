@@ -9,12 +9,28 @@
 
 set -e
 
-# Parse --cuda flag
+# Parse flags
 CUDA_FLAGS=""
-if [[ "$1" == "--cuda" ]]; then
-  CUDA_FLAGS="--features cuda"
-  shift
+BENCHMARKS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --cuda) CUDA_FLAGS="--features cuda"; shift ;;
+    --*) echo "Unknown flag: $1"; exit 1 ;;
+    *) BENCHMARKS+=("$1"); shift ;;
+  esac
+done
+# Default: run all benchmarks
+if [[ ${#BENCHMARKS[@]} -eq 0 ]]; then
+  BENCHMARKS=(keccak keccak_precompile u256)
 fi
+
+should_run() {
+  local name="$1"
+  for b in "${BENCHMARKS[@]}"; do
+    [[ "$b" == "$name" ]] && return 0
+  done
+  return 1
+}
 
 SCRIPT_PATH=$(realpath "${BASH_SOURCE[0]}")
 SCRIPTS_DIR=$(dirname "$SCRIPT_PATH")
@@ -67,6 +83,7 @@ run_bench_wasm() {
   local input="$2"
   local run_name="$3"
   local apc_count="$4"
+  local extra_flags="${5:-}"  # e.g. "--keccak"
 
   echo ""
   echo "==== ${run_name} ===="
@@ -82,7 +99,7 @@ run_bench_wasm() {
 
   # Compile step (not included in metrics)
   timed "$wall_times" "compile" \
-    cargo run -r $CUDA_FLAGS -- compile --apc-count "$apc_count" --apc-candidates-dir "${run_name}" --output-dir "$compiled_dir" "$guest" "main" "${input_flags[@]}" &>"${run_name}/compile_log.txt"
+    cargo run -r $CUDA_FLAGS -- compile $extra_flags --apc-count "$apc_count" --apc-candidates-dir "${run_name}" --output-dir "$compiled_dir" "$guest" "main" "${input_flags[@]}" &>"${run_name}/compile_log.txt"
 
   # Prove step (metrics captured here)
   timed "$wall_times" "prove" \
@@ -129,7 +146,8 @@ run_bench_riscv() {
 
 ROOT_DIR=$(pwd)
 
-### Keccak 1000 iterations
+### Keccak 1000 iterations (software)
+if should_run keccak; then
 dir="results/keccak_1000"
 # The RISC-V guest takes as input the number of iterations.
 # It returns the first byte of the result as a public.
@@ -153,8 +171,29 @@ python3 "$SCRIPTS_DIR"/crush_vs_riscv.py "crush/metrics.json" "riscv/metrics.jso
 python3 "$SCRIPTS_DIR"/crush_vs_riscv.py "crush_apc_1/metrics.json" "riscv_apc_1/metrics.json" >crush_apc_1_vs_riscv_apc_1.txt
 python3 "$SCRIPTS_DIR"/crush_vs_riscv.py "crush_apc_10/metrics.json" "riscv_apc_10/metrics.json" >crush_apc_10_vs_riscv_apc_10.txt
 popd
+fi # keccak
+
+### Keccak 1000 iterations with manual precompile
+if should_run keccak_precompile; then
+dir="results/keccak_precompile_1000"
+input_riscv="1000"
+input_wasm="0 0 1000 39"
+
+# Build the WASM guest binary first.
+cargo build --release --target wasm32-unknown-unknown --manifest-path "${ROOT_DIR}/sample-programs/keccak_precompile/Cargo.toml"
+
+mkdir -p "$dir"
+pushd "$dir"
+
+run_bench_riscv "$ROOT_DIR/sample-programs/keccak_precompile" "$input_riscv" "riscv" "0"
+run_bench_wasm "$ROOT_DIR/sample-programs/keccak_precompile/target/wasm32-unknown-unknown/release/keccak_precompile.wasm" "$input_wasm" "crush" "0" "--keccak"
+
+python3 "$SCRIPTS_DIR"/basic_metrics.py summary-table --csv */metrics.json >basic_metrics.csv
+popd
+fi # keccak_precompile
 
 ### U256 matrix multiply (10x10 identity * constant, 1 repetition)
+if should_run u256; then
 dir="results/u256"
 # The RISC-V guest takes as input the number of repetitions.
 input_riscv="1"
@@ -179,3 +218,4 @@ python3 "$SCRIPTS_DIR"/crush_vs_riscv.py "crush/metrics.json" "riscv/metrics.jso
 python3 "$SCRIPTS_DIR"/crush_vs_riscv.py "crush_apc_2/metrics.json" "riscv_apc_2/metrics.json" >crush_apc_2_vs_riscv_apc_2.txt
 python3 "$SCRIPTS_DIR"/crush_vs_riscv.py "crush_apc_10/metrics.json" "riscv_apc_10/metrics.json" >crush_apc_10_vs_riscv_apc_10.txt
 popd
+fi # u256

@@ -498,6 +498,7 @@ dependencies = [
  "crush-circuit",
  "crush-translation",
  "derive_more 1.0.0",
+ "keccak-circuit",
  "openvm-circuit",
  "openvm-circuit-derive",
  "openvm-circuit-primitives",
@@ -1073,6 +1074,7 @@ dependencies = [
  "derive_more 1.0.0",
  "eyre",
  "itertools 0.14.0",
+ "keccak-circuit",
  "openvm-circuit",
  "openvm-circuit-derive",
  "openvm-circuit-primitives",
@@ -1106,6 +1108,10 @@ dependencies = [
  "postcard",
  "serde",
 ]
+
+[[package]]
+name = "crush-guest-keccak"
+version = "0.0.1"
 
 [[package]]
 name = "crush-translation"
@@ -2376,6 +2382,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb26cec98cce3a3d96cbb7bced3c4b16e3d13f27ec56dbd62cbc8f39cfb9d653"
 dependencies = [
  "cpufeatures",
+]
+
+[[package]]
+name = "keccak-circuit"
+version = "0.0.1"
+dependencies = [
+ "derive-new 0.6.0",
+ "derive_more 1.0.0",
+ "itertools 0.14.0",
+ "openvm-circuit",
+ "openvm-circuit-derive",
+ "openvm-circuit-primitives",
+ "openvm-circuit-primitives-derive",
+ "openvm-crush-transpiler",
+ "openvm-instructions",
+ "openvm-keccak256-circuit",
+ "openvm-rv32im-circuit",
+ "openvm-stark-backend",
+ "p3-keccak-air",
+ "serde",
+ "struct-reflection",
+ "strum 0.26.3",
+ "tiny-keccak",
 ]
 
 [[package]]

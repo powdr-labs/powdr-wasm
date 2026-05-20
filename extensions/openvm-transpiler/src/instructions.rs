@@ -284,3 +284,33 @@ pub enum Phantom {
     /// Fill hint stream with 8 bytes of incrementing clock timestamp.
     ClockTimeGet,
 }
+
+// =================================================================================================
+// Keccak opcodes
+// =================================================================================================
+
+/// Keccak256 precompile opcode: computes keccak256 hash of variable-length input.
+/// Instruction format: KECCAK256 dst, src, len
+///   dst: register pointer to destination (32 bytes output)
+///   src: register pointer to source data
+///   len: register pointer to length in bytes
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    LocalOpcode,
+    Serialize,
+    Deserialize,
+)]
+#[opcode_offset = 0x1312]
+#[repr(usize)]
+pub enum Keccak256Opcode {
+    KECCAK256,
+}

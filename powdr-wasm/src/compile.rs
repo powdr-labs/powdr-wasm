@@ -2,7 +2,6 @@
 
 use std::path::Path;
 
-use autoprecompiles::CrushISA;
 use openvm_sdk::StdIn;
 use openvm_sdk::config::{AppConfig, DEFAULT_APP_LOG_BLOWUP};
 use openvm_stark_sdk::config::FriParameters;
@@ -14,15 +13,16 @@ use powdr_autoprecompiles::{
 use powdr_openvm::{
     customize_exe::{OpenVmApcCandidate, customize},
     execution_profile_from_guest,
+    isa::OpenVmISA,
     program::OriginalCompiledProgram,
 };
 
-use crate::proving::{AGG_PK_FILE, APP_PK_FILE, COMPILED_PROGRAM_FILE, CrushSdk, RiscvSdk};
+use crate::proving::{AGG_PK_FILE, APP_PK_FILE, COMPILED_PROGRAM_FILE, RiscvSdk};
 
 /// Compile a crush program: load WASM, PGO, APC generation, keygen.
 /// Saves the compiled program and proving keys to `output_dir`.
-pub fn compile_crush_to_disk(
-    original_program: OriginalCompiledProgram<CrushISA>,
+pub fn compile_crush_to_disk<ISA: OpenVmISA>(
+    original_program: OriginalCompiledProgram<ISA>,
     stdin: StdIn,
     config: PowdrConfig,
     output_dir: &Path,
@@ -37,7 +37,7 @@ pub fn compile_crush_to_disk(
         customize(
             original_program,
             config,
-            CellPgo::<_, OpenVmApcCandidate<CrushISA>>::with_pgo_data_and_max_columns(
+            CellPgo::<_, OpenVmApcCandidate<ISA>>::with_pgo_data_and_max_columns(
                 execution_profile,
                 None,
             ),
@@ -66,7 +66,7 @@ pub fn compile_crush_to_disk(
     let app_fri_params =
         FriParameters::standard_with_100_bits_conjectured_security(DEFAULT_APP_LOG_BLOWUP);
     let app_config = AppConfig::new(app_fri_params, compiled.vm_config.clone());
-    let sdk = CrushSdk::new_without_transpiler(app_config)?;
+    let sdk = powdr_openvm::PowdrSdkCpu::<ISA>::new_without_transpiler(app_config)?;
 
     let keygen_start = std::time::Instant::now();
 

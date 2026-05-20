@@ -3,6 +3,7 @@
 #![cfg_attr(feature = "tco", allow(internal_features))]
 #![cfg_attr(feature = "tco", feature(core_intrinsics))]
 use crate::memory_config::memory_config_with_fp;
+use keccak_circuit::{Keccak256, Keccak256CpuProverExt, Keccak256Executor};
 use openvm_circuit::{
     arch::{
         AirInventory, ChipInventoryError, InitFileGenerator, MatrixRecordArena, SystemConfig,
@@ -86,6 +87,8 @@ pub struct CrushConfig {
     pub system: SystemConfig,
     #[extension]
     pub base: Crush,
+    #[extension(executor = "Keccak256Executor")]
+    pub keccak: Option<Keccak256>,
 }
 
 // This seems trivial but it's tricky to put into powdr-openvm because of some From implementation issues.
@@ -106,6 +109,7 @@ impl Default for CrushConfig {
         Self {
             system,
             base: Default::default(),
+            keccak: None,
         }
     }
 }
@@ -116,6 +120,7 @@ impl CrushConfig {
         Self {
             system,
             base: Default::default(),
+            keccak: None,
         }
     }
 
@@ -126,7 +131,13 @@ impl CrushConfig {
         Self {
             system,
             base: Default::default(),
+            keccak: None,
         }
+    }
+
+    pub fn with_keccak(mut self) -> Self {
+        self.keccak = Some(Keccak256);
+        self
     }
 }
 
@@ -162,6 +173,9 @@ where
             VmBuilder::<E>::create_chip_complex(&SystemCpuBuilder, &config.system, circuit)?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&CrushCpuProverExt, &config.base, inventory)?;
+        if let Some(ref keccak) = config.keccak {
+            VmProverExtension::<E, _, _>::extend_prover(&Keccak256CpuProverExt, keccak, inventory)?;
+        }
         Ok(chip_complex)
     }
 }

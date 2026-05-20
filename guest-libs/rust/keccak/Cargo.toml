@@ -1,0 +1,7 @@
+[package]
+name = "crush-guest-keccak"
+version = "0.0.1"
+edition = "2024"
+
+[dependencies]
+# No dependencies needed - just provides extern "C" wasm imports
