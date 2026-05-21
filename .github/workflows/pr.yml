@@ -49,10 +49,13 @@ jobs:
       - name: Install WebAssembly target
         run: rustup target add wasm32-unknown-unknown
 
-      - name: Install nightly toolchain for RISC-V guest builds
+      - name: Install nightly toolchain for OpenVM RISC-V guest builds
+        # powdr-openvm-riscv invokes `cargo openvm build`, which pins to
+        # nightly-2026-01-18 in openvm v2 (see powdr's
+        # .github/actions/init-testing-instance/action.yml).
         run: |
-          rustup toolchain install nightly-2025-08-02
-          rustup +nightly-2025-08-02 component add rust-src
+          rustup toolchain install nightly-2026-01-18
+          rustup component add rust-src --toolchain nightly-2026-01-18
 
       - name: Run tests
         run: cargo test --release
