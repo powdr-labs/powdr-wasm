@@ -102,9 +102,9 @@ pub fn default_engine() -> BabyBearPoseidon2CpuEngine {
 
 /// Create a GPU engine with default FRI parameters.
 #[cfg(feature = "cuda")]
-pub fn gpu_engine() -> openvm_cuda_backend::engine::BabyBearPoseidon2GpuEngine {
+pub fn gpu_engine() -> openvm_cuda_backend::BabyBearPoseidon2GpuEngine {
     let params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
-    <openvm_cuda_backend::engine::BabyBearPoseidon2GpuEngine as StarkEngine>::new(params)
+    <openvm_cuda_backend::BabyBearPoseidon2GpuEngine as StarkEngine>::new(params)
 }
 
 pub fn vm_proving_key() -> &'static MultiStarkProvingKey<SC> {

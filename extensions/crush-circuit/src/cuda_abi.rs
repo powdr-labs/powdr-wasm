@@ -1,11 +1,27 @@
 #![allow(clippy::missing_safety_doc)]
 #![allow(clippy::too_many_arguments)]
 
-use openvm_cuda_backend::{chip::UInt2, prelude::F};
+use openvm_cuda_backend::prelude::F;
 use openvm_cuda_common::{
     d_buffer::{DeviceBuffer, DeviceBufferView},
     error::CudaError,
 };
+
+/// A struct with the same memory layout as CUDA's `uint2` for FFI.
+/// Vendored locally because `openvm_rv32im_circuit::cuda_abi` is `pub(crate)`
+/// in openvm v2.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct UInt2 {
+    pub x: u32,
+    pub y: u32,
+}
+
+impl UInt2 {
+    pub fn new(x: u32, y: u32) -> Self {
+        Self { x, y }
+    }
+}
 
 pub mod alu_cuda {
     use super::*;

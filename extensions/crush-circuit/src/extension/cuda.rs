@@ -5,7 +5,7 @@ use openvm_circuit::{
     system::cuda::extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
 };
 use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerAir, RangeTupleCheckerChipGPU};
-use openvm_cuda_backend::{engine::BabyBearPoseidon2GpuEngine, prover_backend::GpuBackend};
+use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 use crate::{
