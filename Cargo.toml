@@ -82,10 +82,66 @@ tracing = "0.1.40"
 crush = { git = "https://github.com/powdr-labs/crush.git", rev = "330723c" }
 wasmparser = { version = "0.235", default-features = false }
 
+# TEMPORARY: redirect powdr-labs/openvm to the powdr-wasm-patch branch so CI
+# can pick up the FP_AS-related GPU kernel fixes. Revert to the tag once a
+# new tagged release of the powdr-labs/openvm fork is cut.
+#
+# The patched URL uses extra slashes (`https:///github.com//`) so cargo treats
+# it as a different source from the original (cargo refuses to patch a source
+# with the same canonical URL even if branch differs — known limitation, see
+# rust-lang/cargo#5478, #5615, #10756). Git fetches the same repo either way.
+[patch."https://github.com/powdr-labs/openvm.git"]
+openvm-algebra-circuit = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-algebra-complex-macros = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-algebra-guest = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-algebra-moduli-macros = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-algebra-transpiler = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-bigint-circuit = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-bigint-guest = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-bigint-transpiler = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-build = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-circuit = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-circuit-derive = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-circuit-primitives = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-circuit-primitives-derive = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-continuations = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-custom-insn = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-deferral-circuit = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-deferral-guest = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-deferral-transpiler = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-ecc-circuit = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-ecc-guest = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-ecc-sw-macros = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-ecc-transpiler = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-instructions = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-instructions-derive = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-keccak256-circuit = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-keccak256-guest = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-keccak256-transpiler = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-macros-common = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-mod-circuit-builder = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-pairing-circuit = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-pairing-guest = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-pairing-transpiler = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-platform = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-poseidon2-air = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-recursion-circuit = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-recursion-circuit-derive = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-rv32-adapters = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-rv32im-circuit = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-rv32im-guest = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-rv32im-transpiler = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-sdk = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-sdk-config = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-sha2-air = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-sha2-circuit = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-sha2-guest = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-sha2-transpiler = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-static-verifier = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-transpiler = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+openvm-verify-stark-host = { git = "https:///github.com//powdr-labs/openvm", branch = "powdr-wasm-patch" }
+
 # Uncomment for local development with path patches:
-# [patch."https://github.com/powdr-labs/openvm.git"]
-# openvm-circuit = { path = "../openvm/crates/vm" }
-# ... add other crates as needed
 #
 # [patch."https://github.com/powdr-labs/stark-backend.git"]
 # openvm-stark-sdk = { path = "../stark-backend/crates/stark-sdk/", default-features = false }
