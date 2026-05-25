@@ -5,11 +5,9 @@ use std::sync::OnceLock;
 
 use autoprecompiles::CrushISA;
 use crush_circuit::{CrushConfig, CrushCpuBuilder};
-#[cfg(debug_assertions)]
-use openvm_circuit::arch::debug_proving_ctx;
 use openvm_circuit::arch::{
     Executor, MeteredExecutor, PreflightExecutor, VirtualMachine, VmBuilder, VmCircuitConfig,
-    VmExecutionConfig, VmState,
+    VmExecutionConfig, VmState, debug_proving_ctx,
 };
 use openvm_instructions::exe::VmExe;
 use openvm_sdk::StdIn;
@@ -304,11 +302,7 @@ where
             preflight_output.system_records,
             preflight_output.record_arenas,
         )?;
-        let _ = &ctx;
-        #[cfg(debug_assertions)]
         debug_proving_ctx(&vm, &ctx);
-        #[cfg(not(debug_assertions))]
-        tracing::warn!("mock proving skips debug checks in release mode");
     }
 
     Ok(state)

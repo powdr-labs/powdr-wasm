@@ -45,7 +45,7 @@ openvm-sdk = { git = "https://github.com/powdr-labs/openvm.git", tag = "v2.0.0-b
 ] }
 openvm-circuit-primitives = { git = "https://github.com/powdr-labs/openvm.git", tag = "v2.0.0-beta.2-powdr", default-features = false }
 openvm-circuit-primitives-derive = { git = "https://github.com/powdr-labs/openvm.git", tag = "v2.0.0-beta.2-powdr", default-features = false }
-openvm-circuit = { git = "https://github.com/powdr-labs/openvm.git", tag = "v2.0.0-beta.2-powdr", default-features = false }
+openvm-circuit = { git = "https://github.com/powdr-labs/openvm.git", tag = "v2.0.0-beta.2-powdr", default-features = false, features = ["test-utils"] }
 openvm-circuit-derive = { git = "https://github.com/powdr-labs/openvm.git", tag = "v2.0.0-beta.2-powdr", default-features = false }
 openvm-instructions = { git = "https://github.com/powdr-labs/openvm.git", tag = "v2.0.0-beta.2-powdr", default-features = false }
 openvm-instructions-derive = { git = "https://github.com/powdr-labs/openvm.git", tag = "v2.0.0-beta.2-powdr", default-features = false }
