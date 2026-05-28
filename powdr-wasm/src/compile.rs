@@ -7,12 +7,10 @@ use openvm_sdk::StdIn;
 use openvm_sdk::config::{AggregationSystemParams, AppConfig};
 use openvm_stark_sdk::config::{MAX_APP_LOG_STACKED_HEIGHT, app_params_with_100_bits_security};
 use powdr_autoprecompiles::{
-    PowdrConfig,
-    empirical_constraints::EmpiricalConstraints,
-    pgo::{CellPgo, NonePgo},
+    PowdrConfig, empirical_constraints::EmpiricalConstraints, pgo::PgoConfig,
 };
 use powdr_openvm::{
-    customize_exe::{OpenVmApcCandidate, customize},
+    customize_exe::{compile_apcs, setup},
     execution_profile_from_guest,
     program::OriginalCompiledProgram,
 };
@@ -32,25 +30,20 @@ pub fn compile_crush_to_disk(
     let apc_start = std::time::Instant::now();
     let apc_count = config.autoprecompiles;
 
-    let compiled = if apc_count > 0 {
+    let pgo_config = if apc_count > 0 {
         let execution_profile = execution_profile_from_guest(&original_program, stdin);
-        customize(
-            original_program,
-            config,
-            CellPgo::<_, OpenVmApcCandidate<CrushISA>>::with_pgo_data_and_max_columns(
-                execution_profile,
-                None,
-            ),
-            EmpiricalConstraints::default(),
-        )
+        PgoConfig::Cell(execution_profile, None)
     } else {
-        customize(
-            original_program,
-            config,
-            NonePgo::default(),
-            EmpiricalConstraints::default(),
-        )
+        PgoConfig::None
     };
+    let degree_bound = config.degree_bound;
+    let apcs = compile_apcs(
+        &original_program,
+        &config,
+        pgo_config,
+        EmpiricalConstraints::default(),
+    );
+    let compiled = setup(original_program, apcs, degree_bound);
     tracing::info!("APC generation took {:?}", apc_start.elapsed());
 
     // Serialize compiled program

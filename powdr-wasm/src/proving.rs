@@ -23,15 +23,13 @@ use openvm_stark_sdk::{
     openvm_stark_backend::{keygen::types::MultiStarkProvingKey, prover::DeviceDataTransporter},
 };
 use powdr_autoprecompiles::{
-    PowdrConfig,
-    empirical_constraints::EmpiricalConstraints,
-    pgo::{CellPgo, NonePgo},
+    PowdrConfig, empirical_constraints::EmpiricalConstraints, pgo::PgoConfig,
 };
 use powdr_openvm::extraction_utils::OriginalVmConfig;
 use powdr_openvm::program::CompiledProgram;
 use powdr_openvm::{DEFAULT_DEGREE_BOUND, SpecializedConfig};
 use powdr_openvm::{
-    customize_exe::{OpenVmApcCandidate, customize},
+    customize_exe::{compile_apcs, setup},
     execution_profile_from_guest,
     program::OriginalCompiledProgram,
 };
@@ -201,25 +199,20 @@ pub fn prove(
     cache_dir: Option<&Path>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let apc_count = powdr_config.autoprecompiles;
-    let compiled = if apc_count > 0 {
+    let pgo_config = if apc_count > 0 {
         let execution_profile = execution_profile_from_guest(&original_program, stdin.clone());
-        customize(
-            original_program,
-            powdr_config,
-            CellPgo::<_, OpenVmApcCandidate<CrushISA>>::with_pgo_data_and_max_columns(
-                execution_profile,
-                None,
-            ),
-            EmpiricalConstraints::default(),
-        )
+        PgoConfig::Cell(execution_profile, None)
     } else {
-        customize(
-            original_program,
-            powdr_config,
-            NonePgo::default(),
-            EmpiricalConstraints::default(),
-        )
+        PgoConfig::None
     };
+    let degree_bound = powdr_config.degree_bound;
+    let apcs = compile_apcs(
+        &original_program,
+        &powdr_config,
+        pgo_config,
+        EmpiricalConstraints::default(),
+    );
+    let compiled = setup(original_program, apcs, degree_bound);
     let app_fri_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
     let app_config = AppConfig::new(compiled.vm_config.clone(), app_fri_params);
     let sdk = if apc_count == 0 {
