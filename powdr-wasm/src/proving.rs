@@ -167,11 +167,12 @@ pub fn keygen_to_disk(cache_dir: &Path) -> Result<(), Box<dyn std::error::Error>
 }
 
 fn build_sdk(cache_dir: Option<&Path>) -> Result<CrushSdk, Box<dyn std::error::Error>> {
-    let app_config = default_app_config_without_apcs();
-    let mut builder = CrushSdk::builder()
-        .app_config(app_config)
-        .agg_params(AggregationSystemParams::default());
+    let mut builder = CrushSdk::builder();
 
+    // Each proving layer has a single source of truth: either a cached proving
+    // key or freshly-generated config/params, never both (the SDK builder
+    // panics if a source is set twice).
+    let mut have_agg_pk = false;
     if let Some(dir) = cache_dir {
         let app_pk_path = dir.join(APP_PK_FILE);
         tracing::info!("Loading cached app_pk from {}", app_pk_path.display());
@@ -184,7 +185,14 @@ fn build_sdk(cache_dir: Option<&Path>) -> Result<CrushSdk, Box<dyn std::error::E
             tracing::info!("Loading cached agg_pk from {}", agg_pk_path.display());
             let agg_pk: AggProvingKey = rmp_serde::from_slice(&std::fs::read(&agg_pk_path)?)?;
             builder = builder.agg_pk(agg_pk);
+            have_agg_pk = true;
         }
+    } else {
+        builder = builder.app_config(default_app_config_without_apcs());
+    }
+
+    if !have_agg_pk {
+        builder = builder.agg_params(AggregationSystemParams::default());
     }
 
     Ok(builder.build_without_transpiler()?)
@@ -336,23 +344,23 @@ pub fn prove_from_compiled(
     let compiled: CompiledProgram<CrushISA> =
         rmp_serde::from_slice(&std::fs::read(compiled_dir.join(COMPILED_PROGRAM_FILE))?)?;
 
-    let app_fri_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
-    let app_config = AppConfig::new(compiled.vm_config.clone(), app_fri_params);
-
     tracing::info!("Loading cached app_pk...");
     let app_pk: AppProvingKey<SpecializedConfig<CrushISA>> =
         rmp_serde::from_slice(&std::fs::read(compiled_dir.join(APP_PK_FILE))?)?;
 
-    let mut builder = CrushSdk::builder()
-        .app_config(app_config)
-        .agg_params(AggregationSystemParams::default())
-        .app_pk(app_pk);
+    // The cached app_pk is the single source of truth for the app layer (it
+    // embeds the same vm_config + FRI params it was generated with). The agg
+    // layer uses the cached agg_pk when proving recursively, default params
+    // otherwise. Setting both a config and a pk for the same layer would panic.
+    let mut builder = CrushSdk::builder().app_pk(app_pk);
 
     if recursion {
         tracing::info!("Loading cached agg_pk...");
         let agg_pk: AggProvingKey =
             rmp_serde::from_slice(&std::fs::read(compiled_dir.join(AGG_PK_FILE))?)?;
         builder = builder.agg_pk(agg_pk);
+    } else {
+        builder = builder.agg_params(AggregationSystemParams::default());
     }
     let sdk = builder.build_without_transpiler()?;
 
@@ -393,23 +401,23 @@ pub fn prove_riscv_from_compiled(
     let compiled: CompiledProgram<powdr_openvm_riscv::RiscvISA> =
         rmp_serde::from_slice(&std::fs::read(compiled_dir.join(COMPILED_PROGRAM_FILE))?)?;
 
-    let app_fri_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
-    let app_config = AppConfig::new(compiled.vm_config.clone(), app_fri_params);
-
     tracing::info!("Loading cached app_pk...");
     let app_pk: AppProvingKey<SpecializedConfig<powdr_openvm_riscv::RiscvISA>> =
         rmp_serde::from_slice(&std::fs::read(compiled_dir.join(APP_PK_FILE))?)?;
 
-    let mut builder = RiscvSdk::builder()
-        .app_config(app_config)
-        .agg_params(AggregationSystemParams::default())
-        .app_pk(app_pk);
+    // The cached app_pk is the single source of truth for the app layer (it
+    // embeds the same vm_config + FRI params it was generated with). The agg
+    // layer uses the cached agg_pk when proving recursively, default params
+    // otherwise. Setting both a config and a pk for the same layer would panic.
+    let mut builder = RiscvSdk::builder().app_pk(app_pk);
 
     if recursion {
         tracing::info!("Loading cached agg_pk...");
         let agg_pk: AggProvingKey =
             rmp_serde::from_slice(&std::fs::read(compiled_dir.join(AGG_PK_FILE))?)?;
         builder = builder.agg_pk(agg_pk);
+    } else {
+        builder = builder.agg_params(AggregationSystemParams::default());
     }
     let sdk = builder.build_without_transpiler()?;
 
