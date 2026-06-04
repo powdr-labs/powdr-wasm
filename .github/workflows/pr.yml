@@ -39,20 +39,23 @@ jobs:
       - name: Build project
         run: cargo build --release
 
-      - name: Install Rust toolchain 1.91.0 (stable)
+      - name: Install Rust toolchain 1.91.1 (stable)
         run: |
-          rustup install 1.91.0
-          rustup +1.91.0 component add clippy
-          rustup +1.91.0 component add rustfmt
-          rustup +1.91.0 component add rust-src
+          rustup install 1.91.1
+          rustup +1.91.1 component add clippy
+          rustup +1.91.1 component add rustfmt
+          rustup +1.91.1 component add rust-src
 
       - name: Install WebAssembly target
         run: rustup target add wasm32-unknown-unknown
 
-      - name: Install nightly toolchain for RISC-V guest builds
+      - name: Install nightly toolchain for OpenVM RISC-V guest builds
+        # powdr-openvm-riscv invokes `cargo openvm build`, which pins to
+        # nightly-2026-01-18 in openvm v2 (see powdr's
+        # .github/actions/init-testing-instance/action.yml).
         run: |
-          rustup toolchain install nightly-2025-08-02
-          rustup +nightly-2025-08-02 component add rust-src
+          rustup toolchain install nightly-2026-01-18
+          rustup component add rust-src --toolchain nightly-2026-01-18
 
       - name: Run tests
         run: cargo test --release
@@ -69,12 +72,12 @@ jobs:
       - name: Install test dependencies
         run: sudo apt-get update && sudo apt-get install -y wabt
 
-      - name: Install Rust toolchain 1.91.0 (stable)
+      - name: Install Rust toolchain 1.91.1 (stable)
         run: |
-          rustup install 1.91.0
-          rustup +1.91.0 component add clippy
-          rustup +1.91.0 component add rustfmt
-          rustup +1.91.0 component add rust-src
+          rustup install 1.91.1
+          rustup +1.91.1 component add clippy
+          rustup +1.91.1 component add rustfmt
+          rustup +1.91.1 component add rust-src
 
       - name: Run Clippy
         run: cargo clippy --all-targets -- -D warnings
@@ -109,6 +112,16 @@ jobs:
             nvidia-smi
             exit 1
           fi
+
+      - name: Install Rust toolchain 1.91.1 (stable)
+        run: |
+          rustup install 1.91.1
+          rustup +1.91.1 component add clippy
+          rustup +1.91.1 component add rustfmt
+          rustup +1.91.1 component add rust-src
+
+      - name: Install WebAssembly target
+        run: rustup target add wasm32-unknown-unknown
 
       - name: Build project
         run: cargo build --release --features cuda

@@ -24,8 +24,9 @@ template <typename T> struct CrushCallAdapterCols {
     MemoryReadAuxCols<T> to_pc_read_aux;
     MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS> save_fp_write_aux;
     MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS> save_pc_write_aux;
-    // FP_AS write: prev_data is 1 field element (native32 cell type)
-    MemoryWriteAuxCols<T, 1> fp_write_aux;
+    // FP_AS write: prev_data is 4 field elements (DEFAULT_BLOCK_SIZE for v2 —
+    // each cell stores a `field32` value; only cell 0 carries the FP).
+    MemoryWriteAuxCols<T, 4> fp_write_aux;
 
     T offset_limbs[2];
     T new_fp_limbs[2];
@@ -50,8 +51,9 @@ struct CrushCallAdapterRecord {
     MemoryReadAuxRecord to_pc_read_aux;
     MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS> save_fp_write_aux;
     MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS> save_pc_write_aux;
-    // FP_AS write: prev_data stored as canonical u32 (not Montgomery-encoded Fp)
-    MemoryWriteAuxRecord<uint32_t, 1> fp_write_aux;
+    // FP_AS write: prev_data stored as canonical u32 (not Montgomery-encoded Fp).
+    // 4 cells (DEFAULT_BLOCK_SIZE) — only cell 0 carries the FP, cells 1..4 are zero.
+    MemoryWriteAuxRecord<uint32_t, 4> fp_write_aux;
 };
 
 struct CrushCallAdapter {
@@ -88,13 +90,19 @@ struct CrushCallAdapter {
 
         // Fill in reverse timestamp order to match Rust filler
 
-        // 5. FP write (native32 cell type: prev_data is a single field element)
-        // Record stores canonical u32; must convert to Montgomery Fp for the trace.
+        // 5. FP write (native32 cell type: prev_data is 4 field elements;
+        // cell 0 carries the FP, cells 1..4 are zero).
+        // Record stores each cell as canonical u32; must convert to Montgomery Fp.
         {
             uint32_t timestamp = record.from_timestamp + 5;
             size_t base = COL_INDEX(Cols, fp_write_aux);
-            using FpWriteAux = MemoryWriteAuxCols<uint8_t, 1>;
-            row.write(base + offsetof(FpWriteAux, prev_data), Fp(record.fp_write_aux.prev_data[0]));
+            using FpWriteAux = MemoryWriteAuxCols<uint8_t, 4>;
+            for (size_t i = 0; i < 4; i++) {
+                row.write(
+                    base + offsetof(FpWriteAux, prev_data) + i,
+                    Fp(record.fp_write_aux.prev_data[i])
+                );
+            }
             mem_helper.fill(
                 row.slice_from(base),
                 record.fp_write_aux.prev_timestamp,

@@ -2,12 +2,10 @@ use std::{mem::size_of, sync::Arc};
 
 use derive_new::new;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
-use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
-use openvm_cuda_backend::{
-    base::DeviceMatrix, chip::get_empty_air_proving_ctx, prover_backend::GpuBackend, types::F,
-};
+use openvm_circuit_primitives::{Chip, var_range::VariableRangeCheckerChipGPU};
+use openvm_cuda_backend::{GpuBackend, base::DeviceMatrix, prelude::F};
 use openvm_cuda_common::copy::MemCopyH2D;
-use openvm_stark_backend::{Chip, prover::types::AirProvingContext};
+use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
     CallCoreCols, CallCoreRecord,
@@ -27,7 +25,7 @@ impl Chip<DenseRecordArena, GpuBackend> for CallChipGpu {
         const RECORD_SIZE: usize = size_of::<(CallAdapterRecord, CallCoreRecord)>();
         let records = arena.allocated();
         if records.is_empty() {
-            return get_empty_air_proving_ctx::<GpuBackend>();
+            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 

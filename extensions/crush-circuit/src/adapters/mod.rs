@@ -8,8 +8,11 @@ use openvm_circuit::{
         online::{GuestMemory, TracingMemory},
     },
 };
-use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
-use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
+use openvm_instructions::{
+    DEFERRAL_AS as NATIVE_AS,
+    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+};
+use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
 
 use crate::memory_config::FP_AS;
 
@@ -45,18 +48,27 @@ pub const RV_B_TYPE_IMM_BITS: usize = 13;
 pub const RV_J_TYPE_IMM_BITS: usize = 21;
 
 #[inline(always)]
-pub fn fp_addr<F: FieldAlgebra>() -> MemoryAddress<F, F> {
-    MemoryAddress::new(F::from_canonical_u32(FP_AS), F::ZERO)
+pub fn fp_addr<F: PrimeCharacteristicRing>() -> MemoryAddress<F, F> {
+    MemoryAddress::new(F::from_u32(FP_AS), F::ZERO)
+}
+
+/// Build the 4-cell data block sent on the memory bus for an FP_AS access.
+/// Cell 0 carries the FP value; cells 1..4 are zero — matches what
+/// `FpMemory::set_fp` and the call adapter write into FP_AS, and the
+/// 4-cell `DEFAULT_BLOCK_SIZE` the v2 access adapter expects.
+#[inline]
+pub fn fp_block<E: PrimeCharacteristicRing>(fp: E) -> [E; 4] {
+    [fp, E::ZERO, E::ZERO, E::ZERO]
 }
 
 #[inline(always)]
-pub fn reg_addr<F: FieldAlgebra>(ptr: F) -> MemoryAddress<F, F> {
-    MemoryAddress::new(F::from_canonical_u32(RV32_REGISTER_AS), ptr)
+pub fn reg_addr<F: PrimeCharacteristicRing>(ptr: F) -> MemoryAddress<F, F> {
+    MemoryAddress::new(F::from_u32(RV32_REGISTER_AS), ptr)
 }
 
 #[inline(always)]
-pub fn mem_addr<F: FieldAlgebra>(ptr: F) -> MemoryAddress<F, F> {
-    MemoryAddress::new(F::from_canonical_u32(RV32_MEMORY_AS), ptr)
+pub fn mem_addr<F: PrimeCharacteristicRing>(ptr: F) -> MemoryAddress<F, F> {
+    MemoryAddress::new(F::from_u32(RV32_MEMORY_AS), ptr)
 }
 
 /// Convert the RISC-V register data (32 bits represented as 4 bytes, where each byte is represented
@@ -72,7 +84,7 @@ pub fn compose<F: PrimeField32>(ptr_data: [F; RV32_REGISTER_NUM_LIMBS]) -> u32 {
 /// inverse of `compose`
 pub fn decompose<F: PrimeField32>(value: u32) -> [F; RV32_REGISTER_NUM_LIMBS] {
     std::array::from_fn(|i| {
-        F::from_canonical_u32((value >> (RV32_CELL_BITS * i)) & ((1 << RV32_CELL_BITS) - 1))
+        F::from_u32((value >> (RV32_CELL_BITS * i)) & ((1 << RV32_CELL_BITS) - 1))
     })
 }
 
@@ -121,6 +133,34 @@ pub fn memory_write<const N: usize>(
     unsafe { memory.write::<u8, N>(address_space, ptr, data) }
 }
 
+/// Read from address space `NATIVE_AS` (= `DEFERRAL_AS`), which has cell type `F`.
+/// Crush-specific: upstream rv32im rejects `DEFERRAL_AS` in loadstore; we need it
+/// to support stores into the deferral address space.
+#[inline(always)]
+pub fn memory_read_native<F, const N: usize>(memory: &GuestMemory, ptr: u32) -> [F; N]
+where
+    F: PrimeField32,
+{
+    // SAFETY: address space `NATIVE_AS` always has cell type `F` and minimum alignment `1`.
+    unsafe { memory.read::<F, N>(NATIVE_AS, ptr) }
+}
+
+/// Atomic write into address space `NATIVE_AS` (= `DEFERRAL_AS`), which has cell type `F`.
+/// Crush-specific: upstream rv32im rejects `DEFERRAL_AS` in loadstore; we need it
+/// to support stores into the deferral address space.
+#[inline(always)]
+pub fn timed_write_native<F, const N: usize>(
+    memory: &mut TracingMemory,
+    ptr: u32,
+    vals: [F; N],
+) -> (u32, [F; N])
+where
+    F: PrimeField32,
+{
+    // SAFETY: address space `NATIVE_AS` always has cell type `F` and minimum alignment `1`.
+    unsafe { memory.write::<F, N>(NATIVE_AS, ptr, vals) }
+}
+
 /// Atomic read operation which increments the timestamp by 1.
 /// Returns `(t_prev, [ptr:4]_{address_space})` where `t_prev` is the timestamp of the last memory
 /// access.
@@ -139,16 +179,7 @@ pub fn timed_read<const N: usize>(
     // SAFETY:
     // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
     //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
-    #[cfg(feature = "legacy-v1-3-mem-align")]
-    if address_space == RV32_MEMORY_AS {
-        unsafe { memory.read::<u8, N, 1>(address_space, ptr) }
-    } else {
-        unsafe { memory.read::<u8, N, RV32_REGISTER_NUM_LIMBS>(address_space, ptr) }
-    }
-    #[cfg(not(feature = "legacy-v1-3-mem-align"))]
-    unsafe {
-        memory.read::<u8, N, RV32_REGISTER_NUM_LIMBS>(address_space, ptr)
-    }
+    unsafe { memory.read::<u8, N>(address_space, ptr) }
 }
 
 #[inline(always)]
@@ -167,16 +198,7 @@ pub fn timed_write<const N: usize>(
     // SAFETY:
     // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
     //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
-    #[cfg(feature = "legacy-v1-3-mem-align")]
-    if address_space == RV32_MEMORY_AS {
-        unsafe { memory.write::<u8, N, 1>(address_space, ptr, data) }
-    } else {
-        unsafe { memory.write::<u8, N, RV32_REGISTER_NUM_LIMBS>(address_space, ptr, data) }
-    }
-    #[cfg(not(feature = "legacy-v1-3-mem-align"))]
-    unsafe {
-        memory.write::<u8, N, RV32_REGISTER_NUM_LIMBS>(address_space, ptr, data)
-    }
+    unsafe { memory.write::<u8, N>(address_space, ptr, data) }
 }
 
 /// Reads register value at `reg_ptr` from memory and records the memory access in mutable buffer.
@@ -269,13 +291,13 @@ pub fn read_rv32_register(memory: &GuestMemory, ptr: u32) -> u32 {
     u32::from_le_bytes(memory_read(memory, RV32_REGISTER_AS, ptr))
 }
 
-pub fn abstract_compose<T: FieldAlgebra, V: Mul<T, Output = T>>(
+pub fn abstract_compose<T: PrimeCharacteristicRing, V: Mul<T, Output = T>>(
     data: [V; RV32_REGISTER_NUM_LIMBS],
 ) -> T {
     data.into_iter()
         .enumerate()
         .fold(T::ZERO, |acc, (i, limb)| {
-            acc + limb * T::from_canonical_u32(1 << (i * RV32_CELL_BITS))
+            acc + limb * T::from_u32(1 << (i * RV32_CELL_BITS))
         })
 }
 
@@ -286,8 +308,9 @@ pub fn tracing_read_fp<F: PrimeField32>(
     memory: &mut TracingMemory,
     prev_timestamp: &mut u32,
 ) -> u32 {
-    // SAFETY: FP_AS uses native32 cell type (F), block size 1, align 1.
-    let (t_prev, data) = unsafe { memory.read::<F, 1, 1>(FP_AS, 0) };
+    // SAFETY: FP_AS uses native32 cell type (F). Block size 4 matches v2's
+    // DEFAULT_BLOCK_SIZE; only cell 0 carries the FP value.
+    let (t_prev, data) = unsafe { memory.read::<F, 4>(FP_AS, 0) };
     *prev_timestamp = t_prev;
     data[0].as_canonical_u32()
 }

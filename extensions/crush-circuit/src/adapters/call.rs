@@ -22,10 +22,10 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_crush_transpiler::CallOpcode;
 use openvm_instructions::{LocalOpcode, instruction::Instruction, riscv::RV32_REGISTER_AS};
 use openvm_stark_backend::{
+    ColumnsAir,
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
-    rap::ColumnsAir,
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 use struct_reflection::{StructReflection, StructReflectionHelper};
 
@@ -33,7 +33,7 @@ use openvm_circuit::arch::ExecutionBridge;
 
 use crate::memory_config::FP_AS;
 use crate::{
-    adapters::{fp_addr, reg_addr},
+    adapters::{fp_addr, fp_block, reg_addr},
     execution::ExecutionState,
 };
 
@@ -68,8 +68,9 @@ pub struct CallAdapterCols<T> {
     pub to_pc_read_aux: MemoryReadAuxCols<T>,
     pub save_fp_write_aux: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
     pub save_pc_write_aux: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
-    /// FP_AS write: prev_data is 1 field element (native32 cell type)
-    pub fp_write_aux: MemoryWriteAuxCols<T, 1>,
+    /// FP_AS write: prev_data is 4 field elements (DEFAULT_BLOCK_SIZE for v2);
+    /// only cell 0 carries the FP, cells 1..4 are zero.
+    pub fp_write_aux: MemoryWriteAuxCols<T, 4>,
 
     /// Decomposition of to_fp_operand (used for CALL/CALL_INDIRECT), for range-checking
     pub offset_limbs: [T; 2],
@@ -162,7 +163,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for CallAdapterAir {
         let mut timestamp_delta: usize = 0;
         let mut timestamp_pp = || {
             timestamp_delta += 1;
-            timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
+            timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
         let is_valid = ctx.instruction.is_valid.clone();
@@ -178,7 +179,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for CallAdapterAir {
         self.memory_bridge
             .read(
                 fp_addr::<AB::F>(),
-                [local.from_state.fp],
+                fp_block::<AB::Expr>(local.from_state.fp.into()),
                 timestamp_pp(),
                 &local.fp_read_aux,
             )
@@ -214,10 +215,10 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for CallAdapterAir {
                 .enumerate()
                 .fold(AB::Expr::ZERO, |acc, (i, limb)| {
                     // TODO: This can overflow
-                    acc + limb.clone() * AB::Expr::from_canonical_u32(1u32 << (i * 8))
+                    acc + limb.clone() * AB::Expr::from_u32(1u32 << (i * 8))
                 });
         let new_fp_from_limbs =
-            local.new_fp_limbs[0] + local.new_fp_limbs[1] * AB::F::from_canonical_u32(1 << 16);
+            local.new_fp_limbs[0] + local.new_fp_limbs[1] * AB::F::from_u32(1 << 16);
         let new_fp_composed =
             has_fp_read.clone() * to_fp_from_reg + has_save.clone() * new_fp_from_limbs;
 
@@ -228,7 +229,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for CallAdapterAir {
             .iter()
             .enumerate()
             .fold(AB::Expr::ZERO, |acc, (i, limb)| {
-                acc + limb.clone() * AB::Expr::from_canonical_u32(1u32 << (i * 8))
+                acc + limb.clone() * AB::Expr::from_u32(1u32 << (i * 8))
             });
         builder
             .when(is_valid.clone())
@@ -238,20 +239,20 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for CallAdapterAir {
         // Carry-chain constraints for fp + offset addition (conditioned on has_save)
         // Offset decomposition: offset_limbs[0] + offset_limbs[1] * 2^16 == to_fp_operand
         builder.when(has_save.clone()).assert_eq(
-            local.offset_limbs[0] + local.offset_limbs[1] * AB::F::from_canonical_u32(1 << 16),
+            local.offset_limbs[0] + local.offset_limbs[1] * AB::F::from_u32(1 << 16),
             local.to_fp_operand,
         );
 
         // Low carry chain: fp_lo + offset_limbs[0] = new_fp_limbs[0] + carry * 2^16
-        let fp_lo = ctx.writes.fp_data[0].clone()
-            + ctx.writes.fp_data[1].clone() * AB::F::from_canonical_u32(1 << 8);
-        let inv_2_16 = AB::F::from_canonical_u32(1 << 16).inverse();
+        let fp_lo =
+            ctx.writes.fp_data[0].clone() + ctx.writes.fp_data[1].clone() * AB::F::from_u32(1 << 8);
+        let inv_2_16 = AB::F::from_u32(1 << 16).inverse();
         let carry = (fp_lo + local.offset_limbs[0] - local.new_fp_limbs[0]) * inv_2_16;
         builder.when(has_save.clone()).assert_bool(carry.clone());
 
         // High carry chain: fp_hi + offset_limbs[1] + carry == new_fp_limbs[1]
-        let fp_hi = ctx.writes.fp_data[2].clone()
-            + ctx.writes.fp_data[3].clone() * AB::F::from_canonical_u32(1 << 8);
+        let fp_hi =
+            ctx.writes.fp_data[2].clone() + ctx.writes.fp_data[3].clone() * AB::F::from_u32(1 << 8);
         builder
             .when(has_save.clone())
             .assert_eq(fp_hi + local.offset_limbs[1] + carry, local.new_fp_limbs[1]);
@@ -295,7 +296,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for CallAdapterAir {
         self.memory_bridge
             .write(
                 fp_addr::<AB::F>(),
-                [new_fp_composed],
+                fp_block::<AB::Expr>(new_fp_composed),
                 timestamp_pp(),
                 &local.fp_write_aux,
             )
@@ -308,7 +309,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for CallAdapterAir {
             .iter()
             .enumerate()
             .fold(AB::Expr::ZERO, |acc, (i, limb)| {
-                acc + limb.clone() * AB::Expr::from_canonical_u32(1u32 << (i * 8))
+                acc + limb.clone() * AB::Expr::from_u32(1u32 << (i * 8))
             });
         let to_pc = local.to_pc_operand * (AB::Expr::ONE - has_pc_read.clone())
             + to_pc_from_reg * has_pc_read.clone();
@@ -325,7 +326,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for CallAdapterAir {
                     has_fp_read,
                 ],
                 local.from_state.into(),
-                AB::F::from_canonical_usize(timestamp_delta),
+                AB::F::from_usize(timestamp_delta),
                 (0u32, Some(to_pc)),
             )
             .eval(builder, is_valid);
@@ -362,8 +363,9 @@ pub struct CallAdapterRecord {
     pub to_pc_read_aux: MemoryReadAuxRecord,
     pub save_fp_write_aux: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
     pub save_pc_write_aux: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
-    /// FP_AS write: prev_data is a single u32 (field element in native32 cell type)
-    pub fp_write_aux: MemoryWriteAuxRecord<u32, 1>,
+    /// FP_AS write: prev_data is 4 u32 cells (DEFAULT_BLOCK_SIZE for v2 — each
+    /// cell stores a `field32` value; only cell 0 carries the FP).
+    pub fp_write_aux: MemoryWriteAuxRecord<u32, 4>,
 }
 
 impl<F: PrimeField32> AdapterTraceExecutor<F> for CallAdapterExecutor {
@@ -483,11 +485,13 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for CallAdapterExecutor {
         }
 
         // 5. Write new FP to FP_AS
-        let new_fp_field = F::from_canonical_u32(new_fp);
-        // SAFETY: FP_AS uses native32 cell type (F), block size 1, align 1.
-        let (t_prev, prev_data) = unsafe { memory.write::<F, 1, 1>(FP_AS, 0, [new_fp_field]) };
+        // SAFETY: FP_AS uses native32 cell type (F). Block size 4 matches v2's
+        // DEFAULT_BLOCK_SIZE; cells 1..4 are zero so the bus interaction stays
+        // canonical.
+        let new_block: [F; 4] = [F::from_u32(new_fp), F::ZERO, F::ZERO, F::ZERO];
+        let (t_prev, prev_data) = unsafe { memory.write::<F, 4>(FP_AS, 0, new_block) };
         record.fp_write_aux.prev_timestamp = t_prev;
-        record.fp_write_aux.prev_data[0] = prev_data[0].as_canonical_u32();
+        record.fp_write_aux.prev_data = prev_data.map(|x| x.as_canonical_u32());
     }
 }
 
@@ -528,9 +532,9 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for CallAdapterFiller {
         // Total: 6 timestamp increments (indices 0..5)
         let mut timestamp = record.from_timestamp + 5;
 
-        // 5. FP write (native32 cell type: prev_data is a field element)
-        adapter_row.fp_write_aux.prev_data =
-            [F::from_canonical_u32(record.fp_write_aux.prev_data[0])];
+        // 5. FP write (native32 cell type: prev_data is 4 field elements;
+        // cell 0 carries the FP, cells 1..4 are zero)
+        adapter_row.fp_write_aux.prev_data = record.fp_write_aux.prev_data.map(F::from_u32);
         mem_helper.fill(
             record.fp_write_aux.prev_timestamp,
             timestamp,
@@ -542,7 +546,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for CallAdapterFiller {
         if has_save {
             adapter_row
                 .save_pc_write_aux
-                .set_prev_data(record.save_pc_write_aux.prev_data.map(F::from_canonical_u8));
+                .set_prev_data(record.save_pc_write_aux.prev_data.map(F::from_u8));
             mem_helper.fill(
                 record.save_pc_write_aux.prev_timestamp,
                 timestamp,
@@ -557,7 +561,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for CallAdapterFiller {
         if has_save {
             adapter_row
                 .save_fp_write_aux
-                .set_prev_data(record.save_fp_write_aux.prev_data.map(F::from_canonical_u8));
+                .set_prev_data(record.save_fp_write_aux.prev_data.map(F::from_u8));
             mem_helper.fill(
                 record.save_fp_write_aux.prev_timestamp,
                 timestamp,
@@ -601,26 +605,23 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for CallAdapterFiller {
         );
 
         // Scalar fields
-        adapter_row.to_pc_operand = F::from_canonical_u32(record.to_pc_operand);
-        adapter_row.save_pc_ptr = F::from_canonical_u32(record.save_pc_ptr);
-        adapter_row.save_fp_ptr = F::from_canonical_u32(record.save_fp_ptr);
-        adapter_row.to_fp_operand = F::from_canonical_u32(to_fp_operand);
-        adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
-        adapter_row.from_state.fp = F::from_canonical_u32(fp);
-        adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
+        adapter_row.to_pc_operand = F::from_u32(record.to_pc_operand);
+        adapter_row.save_pc_ptr = F::from_u32(record.save_pc_ptr);
+        adapter_row.save_fp_ptr = F::from_u32(record.save_fp_ptr);
+        adapter_row.to_fp_operand = F::from_u32(to_fp_operand);
+        adapter_row.from_state.timestamp = F::from_u32(record.from_timestamp);
+        adapter_row.from_state.fp = F::from_u32(fp);
+        adapter_row.from_state.pc = F::from_u32(record.from_pc);
 
         // Carry-chain limbs for CALL/CALL_INDIRECT (has_save)
         if has_save {
             let new_fp = fp + to_fp_operand;
 
             adapter_row.offset_limbs = [
-                F::from_canonical_u32(to_fp_operand & 0xffff),
-                F::from_canonical_u32(to_fp_operand >> 16),
+                F::from_u32(to_fp_operand & 0xffff),
+                F::from_u32(to_fp_operand >> 16),
             ];
-            adapter_row.new_fp_limbs = [
-                F::from_canonical_u32(new_fp & 0xffff),
-                F::from_canonical_u32(new_fp >> 16),
-            ];
+            adapter_row.new_fp_limbs = [F::from_u32(new_fp & 0xffff), F::from_u32(new_fp >> 16)];
 
             self.range_checker_chip
                 .add_count(to_fp_operand & 0xffff, 16);

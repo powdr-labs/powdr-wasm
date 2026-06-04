@@ -17,10 +17,10 @@ use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS,
 };
 use openvm_stark_backend::{
+    ColumnsAir,
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{Field, FieldAlgebra, PrimeField32},
-    rap::ColumnsAir,
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 use struct_reflection::{StructReflection, StructReflectionHelper};
 
@@ -28,7 +28,7 @@ use openvm_circuit::arch::ExecutionBridge;
 
 use crate::execution::ExecutionState;
 
-use super::{RV32_REGISTER_NUM_LIMBS, fp_addr, reg_addr, tracing_read, tracing_read_fp};
+use super::{RV32_REGISTER_NUM_LIMBS, fp_addr, fp_block, reg_addr, tracing_read, tracing_read_fp};
 
 /// Trace columns for the JUMP adapter.
 ///
@@ -83,14 +83,14 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for JumpAdapterAir {
         let mut timestamp_delta: usize = 0;
         let mut timestamp_pp = || {
             timestamp_delta += 1;
-            timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
+            timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
         // Read FP
         self.memory_bridge
             .read(
                 fp_addr::<AB::F>(),
-                [local.from_state.fp],
+                fp_block::<AB::Expr>(local.from_state.fp.into()),
                 timestamp_pp(),
                 &local.fp_read_aux,
             )
@@ -120,7 +120,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for JumpAdapterAir {
                     AB::Expr::ZERO, // g: imm sign
                 ],
                 local.from_state.into(),
-                AB::F::from_canonical_usize(timestamp_delta),
+                AB::F::from_usize(timestamp_delta),
                 (DEFAULT_PC_STEP, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid);
@@ -227,9 +227,9 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for JumpAdapterFiller {
             adapter_row.fp_read_aux.as_mut(),
         );
 
-        adapter_row.rs_ptr = F::from_canonical_u32(record.rs_ptr);
-        adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
-        adapter_row.from_state.fp = F::from_canonical_u32(record.fp);
-        adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
+        adapter_row.rs_ptr = F::from_u32(record.rs_ptr);
+        adapter_row.from_state.timestamp = F::from_u32(record.from_timestamp);
+        adapter_row.from_state.fp = F::from_u32(record.fp);
+        adapter_row.from_state.pc = F::from_u32(record.from_pc);
     }
 }

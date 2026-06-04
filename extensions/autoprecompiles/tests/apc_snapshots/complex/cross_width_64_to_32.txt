@@ -41,34 +41,34 @@ Symbolic machine using 31 unique main columns:
   is_valid
 
 // Bus 0 (EXECUTION_BRIDGE):
-mult=is_valid * -1, args=[0, from_state__timestamp_0]
-mult=is_valid * 1, args=[8, from_state__timestamp_0 + 11]
+mult=-is_valid, args=[0, from_state__timestamp_0]
+mult=is_valid, args=[8, from_state__timestamp_0 + 11]
 
 // Bus 1 (MEMORY):
-mult=is_valid * -1, args=[5, 0, from_state__fp_0, fp_read_aux__base__prev_timestamp_0]
-mult=is_valid * -1, args=[1, from_state__fp_0, writes_aux__0__prev_data__0_0, writes_aux__0__prev_data__1_0, writes_aux__0__prev_data__2_0, writes_aux__0__prev_data__3_0, rs1_reads_aux__0__base__prev_timestamp_0]
-mult=is_valid * -1, args=[1, from_state__fp_0 + 4, writes_aux__1__prev_data__0_0, writes_aux__1__prev_data__1_0, writes_aux__1__prev_data__2_0, writes_aux__1__prev_data__3_0, rs1_reads_aux__1__base__prev_timestamp_0]
-mult=is_valid * 1, args=[1, from_state__fp_0 + 4, a__4_0, a__5_0, a__6_0, a__7_0, from_state__timestamp_0 + 6]
-mult=is_valid * 1, args=[5, 0, from_state__fp_0, from_state__timestamp_0 + 7]
-mult=is_valid * 1, args=[1, from_state__fp_0, a__0_0, a__1_0, a__2_0, a__3_0, from_state__timestamp_0 + 8]
-mult=is_valid * -1, args=[1, from_state__fp_0 + 8, writes_aux__0__prev_data__0_1, writes_aux__0__prev_data__1_1, writes_aux__0__prev_data__2_1, writes_aux__0__prev_data__3_1, writes_aux__0__base__prev_timestamp_1]
-mult=is_valid * 1, args=[1, from_state__fp_0 + 8, a__0_0, a__1_0, a__2_0, a__3_0, from_state__timestamp_0 + 10]
+mult=-is_valid, args=[5, 0, from_state__fp_0, 0, 0, 0, fp_read_aux__base__prev_timestamp_0]
+mult=-is_valid, args=[1, from_state__fp_0, writes_aux__0__prev_data__0_0, writes_aux__0__prev_data__1_0, writes_aux__0__prev_data__2_0, writes_aux__0__prev_data__3_0, rs1_reads_aux__0__base__prev_timestamp_0]
+mult=-is_valid, args=[1, from_state__fp_0 + 4, writes_aux__1__prev_data__0_0, writes_aux__1__prev_data__1_0, writes_aux__1__prev_data__2_0, writes_aux__1__prev_data__3_0, rs1_reads_aux__1__base__prev_timestamp_0]
+mult=is_valid, args=[1, from_state__fp_0 + 4, a__4_0, a__5_0, a__6_0, a__7_0, from_state__timestamp_0 + 6]
+mult=is_valid, args=[5, 0, from_state__fp_0, 0, 0, 0, from_state__timestamp_0 + 7]
+mult=is_valid, args=[1, from_state__fp_0, a__0_0, a__1_0, a__2_0, a__3_0, from_state__timestamp_0 + 8]
+mult=-is_valid, args=[1, from_state__fp_0 + 8, writes_aux__0__prev_data__0_1, writes_aux__0__prev_data__1_1, writes_aux__0__prev_data__2_1, writes_aux__0__prev_data__3_1, writes_aux__0__base__prev_timestamp_1]
+mult=is_valid, args=[1, from_state__fp_0 + 8, a__0_0, a__1_0, a__2_0, a__3_0, from_state__timestamp_0 + 10]
 
 // Bus 3 (VARIABLE_RANGE_CHECKER):
-mult=is_valid * 1, args=[fp_read_aux__base__timestamp_lt_aux__lower_decomp__0_0, 17]
-mult=is_valid * 1, args=[15360 * fp_read_aux__base__prev_timestamp_0 + 15360 * fp_read_aux__base__timestamp_lt_aux__lower_decomp__0_0 + 15360 - 15360 * from_state__timestamp_0, 12]
-mult=is_valid * 1, args=[rs1_reads_aux__0__base__timestamp_lt_aux__lower_decomp__0_0, 17]
-mult=is_valid * 1, args=[15360 * rs1_reads_aux__0__base__prev_timestamp_0 + 15360 * rs1_reads_aux__0__base__timestamp_lt_aux__lower_decomp__0_0 - 15360 * from_state__timestamp_0, 12]
-mult=is_valid * 1, args=[rs1_reads_aux__1__base__timestamp_lt_aux__lower_decomp__0_0, 17]
-mult=is_valid * 1, args=[15360 * rs1_reads_aux__1__base__prev_timestamp_0 + 15360 * rs1_reads_aux__1__base__timestamp_lt_aux__lower_decomp__0_0 - (15360 * from_state__timestamp_0 + 15360), 12]
-mult=is_valid * 1, args=[writes_aux__0__base__timestamp_lt_aux__lower_decomp__0_1, 17]
-mult=is_valid * 1, args=[15360 * writes_aux__0__base__prev_timestamp_1 + 15360 * writes_aux__0__base__timestamp_lt_aux__lower_decomp__0_1 - (15360 * from_state__timestamp_0 + 138240), 12]
+mult=is_valid, args=[fp_read_aux__base__timestamp_lt_aux__lower_decomp__0_0, 17]
+mult=is_valid, args=[15360 * fp_read_aux__base__prev_timestamp_0 + 15360 * fp_read_aux__base__timestamp_lt_aux__lower_decomp__0_0 + 15360 - 15360 * from_state__timestamp_0, 12]
+mult=is_valid, args=[rs1_reads_aux__0__base__timestamp_lt_aux__lower_decomp__0_0, 17]
+mult=is_valid, args=[15360 * rs1_reads_aux__0__base__prev_timestamp_0 + 15360 * rs1_reads_aux__0__base__timestamp_lt_aux__lower_decomp__0_0 - 15360 * from_state__timestamp_0, 12]
+mult=is_valid, args=[rs1_reads_aux__1__base__timestamp_lt_aux__lower_decomp__0_0, 17]
+mult=is_valid, args=[15360 * rs1_reads_aux__1__base__prev_timestamp_0 + 15360 * rs1_reads_aux__1__base__timestamp_lt_aux__lower_decomp__0_0 - (15360 * from_state__timestamp_0 + 15360), 12]
+mult=is_valid, args=[writes_aux__0__base__timestamp_lt_aux__lower_decomp__0_1, 17]
+mult=is_valid, args=[15360 * writes_aux__0__base__prev_timestamp_1 + 15360 * writes_aux__0__base__timestamp_lt_aux__lower_decomp__0_1 - (15360 * from_state__timestamp_0 + 138240), 12]
 
 // Bus 6 (BITWISE_LOOKUP):
-mult=is_valid * 1, args=[a__0_0, a__1_0, 0, 0]
-mult=is_valid * 1, args=[a__2_0, a__3_0, 0, 0]
-mult=is_valid * 1, args=[a__4_0, a__5_0, 0, 0]
-mult=is_valid * 1, args=[a__6_0, a__7_0, 0, 0]
+mult=is_valid, args=[a__0_0, a__1_0, 0, 0]
+mult=is_valid, args=[a__2_0, a__3_0, 0, 0]
+mult=is_valid, args=[a__4_0, a__5_0, 0, 0]
+mult=is_valid, args=[a__6_0, a__7_0, 0, 0]
 
 // Algebraic constraints:
 (7864320 * a__0_0 - (7864320 * writes_aux__0__prev_data__0_0 + 519045120 * is_valid)) * (7864320 * a__0_0 - (7864320 * writes_aux__0__prev_data__0_0 + 519045121)) = 0

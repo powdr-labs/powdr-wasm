@@ -6,13 +6,11 @@ use openvm_circuit::{
     utils::next_power_of_two_or_zero,
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
+    Chip, bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
 };
-use openvm_cuda_backend::{
-    base::DeviceMatrix, chip::get_empty_air_proving_ctx, prover_backend::GpuBackend, types::F,
-};
+use openvm_cuda_backend::{GpuBackend, base::DeviceMatrix, prelude::F};
 use openvm_cuda_common::copy::MemCopyH2D;
-use openvm_stark_backend::{Chip, prover::types::AirProvingContext};
+use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
     Rv32HintStoreCols, Rv32HintStoreLayout, Rv32HintStoreRecordMut, adapters::RV32_CELL_BITS,
@@ -40,7 +38,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32HintStoreChipGpu {
         let width = Rv32HintStoreCols::<u8>::width();
         let records = arena.allocated_mut();
         if records.is_empty() {
-            return get_empty_air_proving_ctx::<GpuBackend>();
+            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
 
         let mut offsets = Vec::<OffsetInfo>::new();

@@ -27,7 +27,7 @@ openvm-circuit-derive = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-rv32im-transpiler = { workspace = true }
 openvm-transpiler.workspace = true
-openvm-native-circuit = { workspace = true }
+openvm-recursion-circuit = { workspace = true }
 openvm-stark-sdk = { workspace = true }
 openvm-stark-backend = { workspace = true }
 wasmparser = { workspace = true }
@@ -54,7 +54,7 @@ cuda = [
   "crush-circuit/cuda",
   "autoprecompiles/cuda",
   "openvm-circuit/cuda",
-  "openvm-native-circuit/cuda",
+  "openvm-recursion-circuit/cuda",
   "powdr-openvm/cuda",
   "powdr-openvm-riscv/cuda",
   "dep:openvm-cuda-backend",
@@ -63,7 +63,7 @@ touchemall = [
   "cuda",
   "crush-circuit/touchemall",
   "openvm-circuit/touchemall",
-  "openvm-native-circuit/touchemall",
+  "openvm-recursion-circuit/touchemall",
   "openvm-cuda-backend/touchemall",
 ]
 

@@ -22,23 +22,23 @@ Symbolic machine using 13 unique main columns:
   is_valid
 
 // Bus 0 (EXECUTION_BRIDGE):
-mult=is_valid * -1, args=[0, from_state__timestamp_0]
-mult=is_valid * 1, args=[8, from_state__timestamp_0 + 2]
+mult=-is_valid, args=[0, from_state__timestamp_0]
+mult=is_valid, args=[8, from_state__timestamp_0 + 2]
 
 // Bus 1 (MEMORY):
-mult=is_valid * -1, args=[5, 0, from_state__fp_0, fp_read_aux__base__prev_timestamp_0]
-mult=is_valid * 1, args=[5, 0, from_state__fp_0, from_state__timestamp_0]
-mult=is_valid * -1, args=[1, from_state__fp_0, rs_val__0_0, rs_val__1_0, rs_val__2_0, rs_val__3_0, rs_read_aux__base__prev_timestamp_0]
-mult=is_valid * 1, args=[1, from_state__fp_0, rs_val__0_0, rs_val__1_0, rs_val__2_0, rs_val__3_0, from_state__timestamp_0 + 1]
+mult=-is_valid, args=[5, 0, from_state__fp_0, 0, 0, 0, fp_read_aux__base__prev_timestamp_0]
+mult=is_valid, args=[5, 0, from_state__fp_0, 0, 0, 0, from_state__timestamp_0]
+mult=-is_valid, args=[1, from_state__fp_0, rs_val__0_0, rs_val__1_0, rs_val__2_0, rs_val__3_0, rs_read_aux__base__prev_timestamp_0]
+mult=is_valid, args=[1, from_state__fp_0, rs_val__0_0, rs_val__1_0, rs_val__2_0, rs_val__3_0, from_state__timestamp_0 + 1]
 
 // Bus 3 (VARIABLE_RANGE_CHECKER):
-mult=is_valid * 1, args=[fp_read_aux__base__timestamp_lt_aux__lower_decomp__0_0, 17]
-mult=is_valid * 1, args=[15360 * fp_read_aux__base__prev_timestamp_0 + 15360 * fp_read_aux__base__timestamp_lt_aux__lower_decomp__0_0 + 15360 - 15360 * from_state__timestamp_0, 12]
-mult=is_valid * 1, args=[rs_read_aux__base__timestamp_lt_aux__lower_decomp__0_0, 17]
-mult=is_valid * 1, args=[15360 * rs_read_aux__base__prev_timestamp_0 + 15360 * rs_read_aux__base__timestamp_lt_aux__lower_decomp__0_0 - 15360 * from_state__timestamp_0, 12]
+mult=is_valid, args=[fp_read_aux__base__timestamp_lt_aux__lower_decomp__0_0, 17]
+mult=is_valid, args=[15360 * fp_read_aux__base__prev_timestamp_0 + 15360 * fp_read_aux__base__timestamp_lt_aux__lower_decomp__0_0 + 15360 - 15360 * from_state__timestamp_0, 12]
+mult=is_valid, args=[rs_read_aux__base__timestamp_lt_aux__lower_decomp__0_0, 17]
+mult=is_valid, args=[15360 * rs_read_aux__base__prev_timestamp_0 + 15360 * rs_read_aux__base__timestamp_lt_aux__lower_decomp__0_0 - 15360 * from_state__timestamp_0, 12]
 
 // Algebraic constraints:
 cond_is_zero_0 * (cond_is_zero_0 - 1) = 0
 cond_is_zero_0 * (rs_val__0_0 + rs_val__1_0 + rs_val__2_0 + rs_val__3_0) = 0
-free_var_27 * (rs_val__0_0 + rs_val__1_0 + rs_val__2_0 + rs_val__3_0) + cond_is_zero_0 - 1 * is_valid = 0
+free_var_27 * (rs_val__0_0 + rs_val__1_0 + rs_val__2_0 + rs_val__3_0) + cond_is_zero_0 - is_valid = 0
 is_valid * (is_valid - 1) = 0

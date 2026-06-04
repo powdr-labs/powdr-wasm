@@ -70,7 +70,9 @@ pub struct LinkedProgram<'a, F: PrimeField32> {
     memory_image: SparseMemoryImage,
 }
 
-impl<'a, F: PrimeField32> LinkedProgram<'a, F> {
+impl<'a, F: PrimeField32 + openvm_stark_backend::p3_field::InjectiveMonomial<7>>
+    LinkedProgram<'a, F>
+{
     pub fn new(mut module: Module<'a>, functions: Vec<FunctionAsm<Directive<F>>>) -> Self {
         let (linked_program, mut label_map) = crush::interpreter::linker::link(functions, 1);
 
@@ -401,6 +403,15 @@ impl<F: PrimeField32> crush::loader::settings::Settings for OpenVMSettings<F> {
             Some(id)
         } else {
             None
+        }
+    }
+
+    fn get_static_target(directive: &Directive<F>) -> Option<&str> {
+        match directive {
+            Directive::Jump { target }
+            | Directive::JumpIf { target, .. }
+            | Directive::JumpIfZero { target, .. } => Some(target),
+            _ => None,
         }
     }
 

@@ -1,6 +1,6 @@
 use openvm_circuit::arch::testing::{TestBuilder, memory::gen_pointer};
 use openvm_instructions::{VmOpcode, instruction::Instruction};
-use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
+use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rand::{Rng, rngs::StdRng};
 
@@ -22,9 +22,9 @@ pub fn rv32_rand_write_register_or_imm<const NUM_LIMBS: usize>(
     let rs2 = imm.unwrap_or_else(|| gen_pointer(rng, NUM_LIMBS));
     let rd = gen_pointer(rng, NUM_LIMBS);
 
-    tester.write::<NUM_LIMBS>(1, rs1, rs1_writes.map(BabyBear::from_canonical_u8));
+    tester.write::<NUM_LIMBS>(1, rs1, rs1_writes.map(BabyBear::from_u8));
     if !rs2_is_imm {
-        tester.write::<NUM_LIMBS>(1, rs2, rs2_writes.map(BabyBear::from_canonical_u8));
+        tester.write::<NUM_LIMBS>(1, rs2, rs2_writes.map(BabyBear::from_u8));
     }
 
     (
@@ -38,7 +38,7 @@ pub fn rv32_rand_write_register_or_imm<const NUM_LIMBS: usize>(
 
 #[allow(dead_code)]
 pub fn generate_rv32_is_type_immediate(rng: &mut StdRng) -> (usize, [u8; RV32_REGISTER_NUM_LIMBS]) {
-    let mut imm: u32 = rng.gen_range(0..(1 << RV_IS_TYPE_IMM_BITS));
+    let mut imm: u32 = rng.random_range(0..(1 << RV_IS_TYPE_IMM_BITS));
     if (imm & 0x800) != 0 {
         imm |= !0xFFF
     }
@@ -51,13 +51,4 @@ pub fn generate_rv32_is_type_immediate(rng: &mut StdRng) -> (usize, [u8; RV32_RE
             (imm >> 16) as u8,
         ],
     )
-}
-
-#[allow(dead_code)]
-pub fn get_verification_error(is_interaction_error: bool) -> VerificationError {
-    if is_interaction_error {
-        VerificationError::ChallengePhaseError
-    } else {
-        VerificationError::OodEvaluationMismatch
-    }
 }

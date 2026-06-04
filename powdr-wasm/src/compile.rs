@@ -4,15 +4,13 @@ use std::path::Path;
 
 use autoprecompiles::CrushISA;
 use openvm_sdk::StdIn;
-use openvm_sdk::config::{AppConfig, DEFAULT_APP_LOG_BLOWUP};
-use openvm_stark_sdk::config::FriParameters;
+use openvm_sdk::config::{AggregationSystemParams, AppConfig};
+use openvm_stark_sdk::config::{MAX_APP_LOG_STACKED_HEIGHT, app_params_with_100_bits_security};
 use powdr_autoprecompiles::{
-    PowdrConfig,
-    empirical_constraints::EmpiricalConstraints,
-    pgo::{CellPgo, NonePgo},
+    PowdrConfig, empirical_constraints::EmpiricalConstraints, pgo::PgoConfig,
 };
 use powdr_openvm::{
-    customize_exe::{OpenVmApcCandidate, customize},
+    customize_exe::{compile_apcs, setup},
     execution_profile_from_guest,
     program::OriginalCompiledProgram,
 };
@@ -32,25 +30,20 @@ pub fn compile_crush_to_disk(
     let apc_start = std::time::Instant::now();
     let apc_count = config.autoprecompiles;
 
-    let compiled = if apc_count > 0 {
+    let pgo_config = if apc_count > 0 {
         let execution_profile = execution_profile_from_guest(&original_program, stdin);
-        customize(
-            original_program,
-            config,
-            CellPgo::<_, OpenVmApcCandidate<CrushISA>>::with_pgo_data_and_max_columns(
-                execution_profile,
-                None,
-            ),
-            EmpiricalConstraints::default(),
-        )
+        PgoConfig::Cell(execution_profile, None)
     } else {
-        customize(
-            original_program,
-            config,
-            NonePgo::default(),
-            EmpiricalConstraints::default(),
-        )
+        PgoConfig::None
     };
+    let degree_bound = config.degree_bound;
+    let apcs = compile_apcs(
+        &original_program,
+        &config,
+        pgo_config,
+        EmpiricalConstraints::default(),
+    );
+    let compiled = setup(original_program, apcs, degree_bound);
     tracing::info!("APC generation took {:?}", apc_start.elapsed());
 
     // Serialize compiled program
@@ -63,10 +56,9 @@ pub fn compile_crush_to_disk(
     );
 
     // Keygen
-    let app_fri_params =
-        FriParameters::standard_with_100_bits_conjectured_security(DEFAULT_APP_LOG_BLOWUP);
-    let app_config = AppConfig::new(app_fri_params, compiled.vm_config.clone());
-    let sdk = CrushSdk::new_without_transpiler(app_config)?;
+    let system_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
+    let app_config = AppConfig::new(compiled.vm_config.clone(), system_params);
+    let sdk = CrushSdk::new_without_transpiler(app_config, AggregationSystemParams::default())?;
 
     let keygen_start = std::time::Instant::now();
 
@@ -78,7 +70,7 @@ pub fn compile_crush_to_disk(
 
     tracing::info!("Generating aggregation proving key...");
     let agg_pk = sdk.agg_pk();
-    let agg_pk_bytes = rmp_serde::to_vec(agg_pk)?;
+    let agg_pk_bytes = rmp_serde::to_vec(&agg_pk)?;
     std::fs::write(output_dir.join(AGG_PK_FILE), &agg_pk_bytes)?;
     tracing::info!("Wrote agg_pk ({:.1} MB)", agg_pk_bytes.len() as f64 / 1e6);
 
@@ -134,10 +126,9 @@ pub fn compile_riscv_to_disk(
     );
 
     // Keygen
-    let app_fri_params =
-        FriParameters::standard_with_100_bits_conjectured_security(DEFAULT_APP_LOG_BLOWUP);
-    let app_config = AppConfig::new(app_fri_params, compiled.vm_config.clone());
-    let sdk = RiscvSdk::new_without_transpiler(app_config)?;
+    let system_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
+    let app_config = AppConfig::new(compiled.vm_config.clone(), system_params);
+    let sdk = RiscvSdk::new_without_transpiler(app_config, AggregationSystemParams::default())?;
 
     let keygen_start = std::time::Instant::now();
 
@@ -149,7 +140,7 @@ pub fn compile_riscv_to_disk(
 
     tracing::info!("Generating aggregation proving key...");
     let agg_pk = sdk.agg_pk();
-    let agg_pk_bytes = rmp_serde::to_vec(agg_pk)?;
+    let agg_pk_bytes = rmp_serde::to_vec(&agg_pk)?;
     std::fs::write(output_dir.join(AGG_PK_FILE), &agg_pk_bytes)?;
     tracing::info!("Wrote agg_pk ({:.1} MB)", agg_pk_bytes.len() as f64 / 1e6);
 

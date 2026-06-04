@@ -4,9 +4,7 @@
 use crush_circuit::{CrushConfig, CrushCpuBuilder};
 use openvm_circuit::arch::{VirtualMachine, VmState, execution_mode::Segment};
 use openvm_instructions::exe::VmExe;
-use openvm_stark_sdk::{
-    engine::StarkEngine, openvm_stark_backend::prover::hal::DeviceDataTransporter,
-};
+use openvm_stark_sdk::openvm_stark_backend::{StarkEngine, prover::DeviceDataTransporter};
 
 use crate::proving::{F, default_engine, vm_proving_key};
 
