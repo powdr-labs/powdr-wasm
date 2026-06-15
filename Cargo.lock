@@ -993,7 +993,7 @@ checksum = "460fbee9c2c2f33933d720630a6a0bac33ba7053db5344fac858d4b8952d77d5"
 [[package]]
 name = "crush"
 version = "0.0.0"
-source = "git+https://github.com/powdr-labs/crush.git?rev=330723c#330723c6a06ad4d6231ecdbeb1c6e2227e628a3e"
+source = "git+https://github.com/powdr-labs/crush.git?rev=80f82911#80f82911d379fdf2f3efb95189709e5135868077"
 dependencies = [
  "clap",
  "derive-where",

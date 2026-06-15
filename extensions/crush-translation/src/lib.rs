@@ -25,6 +25,9 @@ use crush::{
     },
     utils::tree::Tree,
 };
+
+pub use crush::interpreter::linker::ExecDropHint;
+pub use crush::loader::rwm::settings::DropHint;
 use crush_circuit::CrushConfig;
 use itertools::Itertools;
 use openvm_circuit::{
@@ -68,17 +71,27 @@ pub struct LinkedProgram<'a, F: PrimeField32> {
     /// Linked instructions without the startup code:
     linked_instructions: Vec<Instruction<F>>,
     memory_image: SparseMemoryImage,
+    /// Register-liveness hints indexed by word-PC: entry `pc / NUM_LIMBS`
+    /// holds the hints attached to the instruction at byte PC `pc`. The
+    /// leading slot (for the linker's reserved nop at PC 0) is always empty.
+    drop_hints: Vec<Vec<ExecDropHint>>,
 }
 
 impl<'a, F: PrimeField32 + openvm_stark_backend::p3_field::InjectiveMonomial<7>>
     LinkedProgram<'a, F>
 {
     pub fn new(mut module: Module<'a>, functions: Vec<FunctionAsm<Directive<F>>>) -> Self {
-        let (linked_program, mut label_map) = crush::interpreter::linker::link(functions, 1);
+        let crush::interpreter::linker::LinkedProgram {
+            program: linked_program,
+            mut labels,
+            drop_hints,
+        } = crush::interpreter::linker::link(functions, 1);
 
-        for v in label_map.values_mut() {
-            v.pc *= riscv::RV32_REGISTER_NUM_LIMBS as u32;
+        let num_limbs = riscv::RV32_REGISTER_NUM_LIMBS as u32;
+        for v in labels.values_mut() {
+            v.pc *= num_limbs;
         }
+        let label_map = labels;
 
         let start_offset = linked_program.len();
 
@@ -97,6 +110,7 @@ impl<'a, F: PrimeField32 + openvm_stark_backend::p3_field::InjectiveMonomial<7>>
 
         // We assume that the loop above removes a single `nop` introduced by the linker.
         assert_eq!(linked_instructions.len(), start_offset - 1);
+        assert_eq!(drop_hints.len(), start_offset);
 
         let memory_image = std::mem::take(&mut module.initial_memory)
             .into_iter()
@@ -148,7 +162,15 @@ impl<'a, F: PrimeField32 + openvm_stark_backend::p3_field::InjectiveMonomial<7>>
             label_map,
             linked_instructions,
             memory_image,
+            drop_hints,
         }
+    }
+
+    /// Register-liveness hints indexed by word-PC: `drop_hints()[pc / NUM_LIMBS]`
+    /// holds the hints attached to the instruction at byte PC `pc`. The leading
+    /// slot belongs to the linker's reserved nop at PC 0 and is always empty.
+    pub fn drop_hints(&self) -> &[Vec<ExecDropHint>] {
+        &self.drop_hints
     }
 
     pub fn program_with_entry_point(&self, entry_point: &str) -> VmExe<F> {
@@ -333,6 +355,10 @@ pub enum Directive<F> {
         reg_dest: u32,
     },
     Instruction(Instruction<F>),
+    /// Register-liveness hint. Carried through the linker's side channel and
+    /// stripped from the executable program; backends that ignore liveness
+    /// can drop it on the floor.
+    DropHint(DropHint),
 }
 
 type Ctx<'a, 'b> = Context<'a, 'b>;
@@ -468,6 +494,7 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
         value_ptr: Range<u32>,
         immediate: u32,
         label: String,
+        last_reg_usage: bool,
     ) -> Vec<Directive<F>> {
         let comparison = c.allocate_tmp_type::<Self>(ValType::I32);
 
@@ -478,11 +505,18 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
                 ComparisonFunction::GreaterThanOrEqualUnsigned
                 | ComparisonFunction::LessThanUnsigned => ib::lt_u_imm,
             };
-            vec![Directive::Instruction(cmp_insn(
+            let mut v = Vec::with_capacity(3);
+            if last_reg_usage {
+                v.push(Directive::DropHint(DropHint::DropAfterNextInstruction(
+                    value_ptr.start,
+                )));
+            }
+            v.push(Directive::Instruction(cmp_insn(
                 comparison.start as usize,
                 value_ptr.start as usize,
                 imm_f,
-            ))]
+            )));
+            v
         } else {
             // Otherwise, we need to compose the immediate into a register:
             let cmp_insn = match cmp {
@@ -496,19 +530,32 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
             let imm_lo: u16 = (immediate & 0xffff) as u16;
             let imm_hi: u16 = ((immediate >> 16) & 0xffff) as u16;
 
-            vec![
-                Directive::Instruction(ib::const_32_imm(
-                    const_value.start as usize,
-                    imm_lo,
-                    imm_hi,
-                )),
-                Directive::Instruction(cmp_insn(
-                    comparison.start as usize,
-                    value_ptr.start as usize,
-                    const_value.start as usize,
-                )),
-            ]
+            let mut v = Vec::with_capacity(5);
+            v.push(Directive::Instruction(ib::const_32_imm(
+                const_value.start as usize,
+                imm_lo,
+                imm_hi,
+            )));
+            if last_reg_usage {
+                v.push(Directive::DropHint(DropHint::DropAfterNextInstruction(
+                    value_ptr.start,
+                )));
+            }
+            v.push(Directive::DropHint(DropHint::DropAfterNextInstruction(
+                const_value.start,
+            )));
+            v.push(Directive::Instruction(cmp_insn(
+                comparison.start as usize,
+                value_ptr.start as usize,
+                const_value.start as usize,
+            )));
+            v
         };
+
+        // The jump is the last use of `comparison`.
+        directives.push(Directive::DropHint(DropHint::DropAfterNextInstruction(
+            comparison.start,
+        )));
 
         // We use "less than" to compare both "less than" and "greater than or equal",
         // so, if it is the later, we must jump if the condition is false.
@@ -953,12 +1000,18 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
             })
             .unwrap_or_else(|| translate_complex_ins(c, module, op, inputs, output, unaligned))
     }
+
+    fn emit_drop_hint(&self, _c: &mut Context<'a, '_>, hint: DropHint) -> Directive<F> {
+        Directive::DropHint(hint)
+    }
 }
 
 impl<F: PrimeField32> Directive<F> {
     fn into_instruction(self, label_map: &HashMap<String, LabelValue>) -> Option<Instruction<F>> {
         match self {
-            Directive::Nop | Directive::Label { .. } => None,
+            // Labels and drop hints are stripped during linking and should
+            // never reach here, but handle them as no-ops for exhaustiveness.
+            Directive::Nop | Directive::Label { .. } | Directive::DropHint(_) => None,
             Directive::Jump { target } => {
                 let pc = label_map.get(&target).unwrap().pc;
                 Some(ib::jump(pc as usize))
@@ -2538,6 +2591,13 @@ impl<F: Clone> crush::interpreter::linker::Directive for Directive<F> {
             })
         } else {
             None
+        }
+    }
+
+    fn as_drop_hint(&self) -> Option<DropHint> {
+        match *self {
+            Directive::DropHint(h) => Some(h),
+            _ => None,
         }
     }
 }
