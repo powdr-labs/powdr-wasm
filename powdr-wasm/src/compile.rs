@@ -7,10 +7,10 @@ use openvm_sdk::StdIn;
 use openvm_sdk::config::{AggregationSystemParams, AppConfig};
 use openvm_stark_sdk::config::{MAX_APP_LOG_STACKED_HEIGHT, app_params_with_100_bits_security};
 use powdr_autoprecompiles::{
-    PowdrConfig, empirical_constraints::EmpiricalConstraints, pgo::PgoConfig,
+    GenerateConfig, PgoData, SelectConfig, empirical_constraints::EmpiricalConstraints,
 };
 use powdr_openvm::{
-    customize_exe::{compile_apcs, setup},
+    customize_exe::{generate_apcs, select_apcs, setup},
     execution_profile_from_guest,
     program::OriginalCompiledProgram,
 };
@@ -22,27 +22,30 @@ use crate::proving::{AGG_PK_FILE, APP_PK_FILE, COMPILED_PROGRAM_FILE, CrushSdk, 
 pub fn compile_crush_to_disk(
     original_program: OriginalCompiledProgram<CrushISA>,
     stdin: StdIn,
-    config: PowdrConfig,
+    generate: GenerateConfig,
+    select: SelectConfig,
     output_dir: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(output_dir)?;
 
     let apc_start = std::time::Instant::now();
-    let apc_count = config.autoprecompiles;
+    let apc_count = select.autoprecompiles;
 
-    let pgo_config = if apc_count > 0 {
+    let pgo_data = if apc_count > 0 {
         let execution_profile = execution_profile_from_guest(&original_program, stdin);
-        PgoConfig::Cell(execution_profile, None)
+        PgoData::Cell(execution_profile, None)
     } else {
-        PgoConfig::None
+        PgoData::None
     };
-    let degree_bound = config.degree_bound;
-    let apcs = compile_apcs(
+    let generate = generate.with_select_defaults(pgo_data.pgo_type(), select);
+    let degree_bound = generate.degree_bound;
+    let ranked = generate_apcs(
         &original_program,
-        &config,
-        pgo_config,
+        &generate,
+        pgo_data,
         EmpiricalConstraints::default(),
     );
+    let apcs = select_apcs(ranked, select);
     let compiled = setup(original_program, apcs, degree_bound);
     tracing::info!("APC generation took {:?}", apc_start.elapsed());
 
@@ -84,7 +87,8 @@ pub fn compile_crush_to_disk(
 pub fn compile_riscv_to_disk(
     program: &str,
     stdin: StdIn,
-    config: PowdrConfig,
+    generate: GenerateConfig,
+    select: SelectConfig,
     output_dir: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(output_dir)?;
@@ -99,21 +103,24 @@ pub fn compile_riscv_to_disk(
     .map_err(|e| eyre::eyre!("{e}"))?;
 
     let apc_start = std::time::Instant::now();
-    let apc_count = config.autoprecompiles;
-    let pgo_config = if apc_count > 0 {
+    let apc_count = select.autoprecompiles;
+    let pgo_data = if apc_count > 0 {
         let execution_profile =
             powdr_openvm::execution_profile_from_guest(&original, stdin.clone());
-        powdr_openvm_riscv::PgoConfig::Cell(execution_profile, None)
+        powdr_openvm_riscv::PgoData::Cell(execution_profile, None)
     } else {
-        powdr_openvm_riscv::PgoConfig::None
+        powdr_openvm_riscv::PgoData::None
     };
-    let compiled = powdr_openvm_riscv::compile_exe(
-        original,
-        config,
-        pgo_config,
-        powdr_autoprecompiles::empirical_constraints::EmpiricalConstraints::default(),
-    )
-    .map_err(|e| eyre::eyre!("{e}"))?;
+    let generate = generate.with_select_defaults(pgo_data.pgo_type(), select);
+    let degree_bound = generate.degree_bound;
+    let ranked = powdr_openvm_riscv::generate_apcs(
+        &original,
+        &generate,
+        pgo_data,
+        EmpiricalConstraints::default(),
+    );
+    let apcs = powdr_openvm_riscv::select_apcs(ranked, select);
+    let compiled = powdr_openvm_riscv::setup(original, apcs, degree_bound);
     tracing::info!("APC generation took {:?}", apc_start.elapsed());
 
     // Serialize compiled program

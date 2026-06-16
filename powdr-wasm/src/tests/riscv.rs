@@ -1,5 +1,6 @@
 use openvm_sdk::StdIn;
-use powdr_openvm_riscv::{GuestOptions, PgoConfig};
+use powdr_autoprecompiles::{PgoData, SelectConfig};
+use powdr_openvm_riscv::GuestOptions;
 
 /// Compile and execute an OpenVM RISC-V guest program via powdr-openvm.
 fn run_openvm_guest(guest: &str, args: &[u32]) -> Result<(), Box<dyn std::error::Error>> {
@@ -10,13 +11,18 @@ fn run_openvm_guest(guest: &str, args: &[u32]) -> Result<(), Box<dyn std::error:
 
     let original = powdr_openvm_riscv::compile_openvm(guest_str, GuestOptions::default())?;
 
-    let config = powdr_openvm::default_powdr_openvm_config(0, 0);
-    let compiled = powdr_openvm_riscv::compile_exe(
-        original,
-        config,
-        PgoConfig::None,
+    let generate = powdr_openvm::default_generate_config();
+    let select = SelectConfig::new(0, 0);
+    let pgo_data = PgoData::None;
+    let generate = generate.with_select_defaults(pgo_data.pgo_type(), select);
+    let ranked = powdr_openvm_riscv::generate_apcs(
+        &original,
+        &generate,
+        pgo_data,
         powdr_autoprecompiles::empirical_constraints::EmpiricalConstraints::default(),
-    )?;
+    );
+    let apcs = powdr_openvm_riscv::select_apcs(ranked, select);
+    let compiled = powdr_openvm_riscv::setup(original, apcs, generate.degree_bound);
 
     let mut stdin = StdIn::default();
     for arg in args {

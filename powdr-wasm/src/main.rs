@@ -34,7 +34,7 @@ use crate::builtin_functions::BuiltinFunction;
 use crush_translation::{Directive, LinkedProgram, OpenVMSettings};
 
 use crush_circuit::CrushConfig;
-use powdr_autoprecompiles::PowdrConfig;
+use powdr_autoprecompiles::{GenerateConfig, SelectConfig};
 
 #[derive(Parser)]
 struct CliArgs {
@@ -59,22 +59,24 @@ struct PowdrArgs {
 }
 
 impl PowdrArgs {
-    fn build_powdr_config(&self) -> PowdrConfig {
-        let mut config = powdr_openvm::default_powdr_openvm_config(self.apc_count, 0);
+    fn build_powdr_config(&self) -> (GenerateConfig, SelectConfig) {
+        let mut generate = powdr_openvm::default_generate_config();
         if let Some(ref apc_candidates_dir) = self.apc_candidates_dir {
-            config = config.with_apc_candidates_dir(apc_candidates_dir);
+            generate = generate.with_apc_candidates_dir(apc_candidates_dir);
         }
-        config = config.with_superblocks(1, self.apc_max_instructions, self.apc_exec_count_cutoff);
-        config
+        generate =
+            generate.with_superblocks(1, self.apc_max_instructions, self.apc_exec_count_cutoff);
+        (generate, SelectConfig::new(self.apc_count, 0))
     }
 
-    fn build_riscv_powdr_config(&self) -> PowdrConfig {
-        let mut config = powdr_openvm_riscv::default_powdr_openvm_config(self.apc_count, 0);
+    fn build_riscv_powdr_config(&self) -> (GenerateConfig, SelectConfig) {
+        let mut generate = powdr_openvm_riscv::default_generate_config();
         if let Some(ref apc_candidates_dir) = self.apc_candidates_dir {
-            config = config.with_apc_candidates_dir(apc_candidates_dir);
+            generate = generate.with_apc_candidates_dir(apc_candidates_dir);
         }
-        config = config.with_superblocks(1, self.apc_max_instructions, self.apc_exec_count_cutoff);
-        config
+        generate =
+            generate.with_superblocks(1, self.apc_max_instructions, self.apc_exec_count_cutoff);
+        (generate, SelectConfig::new(self.apc_count, 0))
     }
 }
 
@@ -275,8 +277,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let original_program =
                 load_wasm_original_program(&wasm_bytes, &function, unaligned_memory);
             let stdin = make_stdin(&input);
-            let powdr_config = powdr.build_powdr_config();
-            compile::compile_crush_to_disk(original_program, stdin, powdr_config, &output_dir)
+            let (generate, select) = powdr.build_powdr_config();
+            compile::compile_crush_to_disk(original_program, stdin, generate, select, &output_dir)
                 .map_err(|e| eyre::eyre!("{e}"))?;
             println!("Compiled to {}", output_dir.display());
         }
@@ -287,8 +289,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             output_dir,
         } => {
             let stdin = make_stdin(&input);
-            let powdr_config = powdr.build_riscv_powdr_config();
-            compile::compile_riscv_to_disk(&program, stdin, powdr_config, &output_dir)
+            let (generate, select) = powdr.build_riscv_powdr_config();
+            compile::compile_riscv_to_disk(&program, stdin, generate, select, &output_dir)
                 .map_err(|e| eyre::eyre!("{e}"))?;
             println!("Compiled RISC-V to {}", output_dir.display());
         }
@@ -317,12 +319,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let wasm_bytes = std::fs::read(&program).expect("Failed to read WASM file");
                     let original_program =
                         load_wasm_original_program(&wasm_bytes, &function, unaligned_memory);
-                    let powdr_config = powdr.build_powdr_config();
+                    let (generate, select) = powdr.build_powdr_config();
                     proving::prove(
                         original_program,
                         stdin,
                         recursion,
-                        powdr_config,
+                        generate,
+                        select,
                         cache_dir.as_deref(),
                     )
                     .map_err(|e| eyre::eyre!("{e}"))?;
@@ -398,23 +401,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     )
                     .map_err(|e| eyre::eyre!("{e}"))?;
 
-                    let config = powdr.build_riscv_powdr_config();
-                    let pgo_config = if powdr.apc_count > 0 {
+                    let (generate, select) = powdr.build_riscv_powdr_config();
+                    let pgo_data = if powdr.apc_count > 0 {
                         let stdin = make_stdin(&input);
                         let execution_profile =
                             powdr_openvm::execution_profile_from_guest(&original, stdin);
-                        powdr_openvm_riscv::PgoConfig::Cell(execution_profile, None)
+                        powdr_openvm_riscv::PgoData::Cell(execution_profile, None)
                     } else {
-                        powdr_openvm_riscv::PgoConfig::None
+                        powdr_openvm_riscv::PgoData::None
                     };
-                    let compiled = powdr_openvm_riscv::compile_exe(
-                        original,
-                        config,
-                        pgo_config,
+                    let generate = generate.with_select_defaults(pgo_data.pgo_type(), select);
+                    let degree_bound = generate.degree_bound;
+                    let ranked = powdr_openvm_riscv::generate_apcs(
+                        &original,
+                        &generate,
+                        pgo_data,
                         powdr_autoprecompiles::empirical_constraints::EmpiricalConstraints::default(
                         ),
-                    )
-                    .map_err(|e| eyre::eyre!("{e}"))?;
+                    );
+                    let apcs = powdr_openvm_riscv::select_apcs(ranked, select);
+                    let compiled = powdr_openvm_riscv::setup(original, apcs, degree_bound);
 
                     let stdin = make_stdin(&input);
                     powdr_openvm_riscv::prove(&compiled, false, true, stdin, None)

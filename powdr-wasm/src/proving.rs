@@ -23,13 +23,13 @@ use openvm_stark_sdk::{
     openvm_stark_backend::{keygen::types::MultiStarkProvingKey, prover::DeviceDataTransporter},
 };
 use powdr_autoprecompiles::{
-    PowdrConfig, empirical_constraints::EmpiricalConstraints, pgo::PgoConfig,
+    GenerateConfig, PgoData, SelectConfig, empirical_constraints::EmpiricalConstraints,
 };
 use powdr_openvm::extraction_utils::OriginalVmConfig;
 use powdr_openvm::program::CompiledProgram;
 use powdr_openvm::{DEFAULT_DEGREE_BOUND, SpecializedConfig};
 use powdr_openvm::{
-    customize_exe::{compile_apcs, setup},
+    customize_exe::{generate_apcs, select_apcs, setup},
     execution_profile_from_guest,
     program::OriginalCompiledProgram,
 };
@@ -203,23 +203,26 @@ pub fn prove(
     original_program: OriginalCompiledProgram<CrushISA>,
     stdin: StdIn,
     recursion: bool,
-    powdr_config: PowdrConfig,
+    generate: GenerateConfig,
+    select: SelectConfig,
     cache_dir: Option<&Path>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let apc_count = powdr_config.autoprecompiles;
-    let pgo_config = if apc_count > 0 {
+    let apc_count = select.autoprecompiles;
+    let pgo_data = if apc_count > 0 {
         let execution_profile = execution_profile_from_guest(&original_program, stdin.clone());
-        PgoConfig::Cell(execution_profile, None)
+        PgoData::Cell(execution_profile, None)
     } else {
-        PgoConfig::None
+        PgoData::None
     };
-    let degree_bound = powdr_config.degree_bound;
-    let apcs = compile_apcs(
+    let generate = generate.with_select_defaults(pgo_data.pgo_type(), select);
+    let degree_bound = generate.degree_bound;
+    let ranked = generate_apcs(
         &original_program,
-        &powdr_config,
-        pgo_config,
+        &generate,
+        pgo_data,
         EmpiricalConstraints::default(),
     );
+    let apcs = select_apcs(ranked, select);
     let compiled = setup(original_program, apcs, degree_bound);
     let app_fri_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
     let app_config = AppConfig::new(compiled.vm_config.clone(), app_fri_params);
