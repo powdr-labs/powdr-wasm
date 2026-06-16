@@ -398,6 +398,11 @@ fn drop_after_next<F>(reg: u32) -> Directive<F> {
     Directive::DropHint(DropHint::DropAfterNextInstruction(reg))
 }
 
+/// Helper: emit a [`DropHint::DropNow`] hint as a directive.
+fn drop_now<F>(reg: u32) -> Directive<F> {
+    Directive::DropHint(DropHint::DropNow(reg))
+}
+
 impl<F: PrimeField32> crush::loader::settings::Settings for OpenVMSettings<F> {
     type Directive = Directive<F>;
 
@@ -789,13 +794,9 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
                                 mem_start as u16,
                                 (mem_start >> 16) as u16,
                             )));
-                            directives.push(Directive::DropHint(
-                                DropHint::DropAfterNextInstruction(mem_start_reg as u32),
-                            ));
-                            // Last use of `buf_ptr` is this add (debug_print uses `adjusted`).
-                            directives.push(Directive::DropHint(
-                                DropHint::DropAfterNextInstruction(buf_ptr as u32),
-                            ));
+                            directives.push(drop_after_next(mem_start_reg as u32));
+                                // Last use of `buf_ptr` is this add (debug_print uses `adjusted`).
+                            directives.push(drop_after_next(buf_ptr as u32));
                             directives.push(Directive::Instruction(ib::add(
                                 adjusted,
                                 buf_ptr,
@@ -805,14 +806,10 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
                         };
 
                         if drop_print_ptr {
-                            directives.push(Directive::DropHint(
-                                DropHint::DropAfterNextInstruction(print_ptr as u32),
-                            ));
+                            directives.push(drop_after_next(print_ptr as u32));
                         } else {
                             // `print_ptr == buf_ptr`; this debug_print is its last use.
-                            directives.push(Directive::DropHint(
-                                DropHint::DropAfterNextInstruction(buf_ptr as u32),
-                            ));
+                            directives.push(drop_after_next(buf_ptr as u32));
                         }
                         directives.push(Directive::Instruction(ib::debug_print(
                             print_ptr,
@@ -2172,12 +2169,16 @@ fn translate_complex_ins<'a, F: PrimeField32>(
                 Directive::Jump {
                     target: continuation_label.clone(),
                 },
-                // Error case: write 0xFFFFFFFF to output.
                 Directive::Label {
                     id: error_label,
                     namespace: c.function_name().map(str::to_owned),
                     frame_size: None,
                 },
+                // Error case: these temporaries are dead on both failure branches.
+                drop_now(new_size as u32),
+                drop_now(header_addr_reg.start),
+                drop_now(size_reg as u32),
+                // Error case: write 0xFFFFFFFF to output.
                 Directive::Instruction(ib::const_32_imm(output, 0xFFFF, 0xFFFF)),
                 // Continue:
                 Directive::Label {
