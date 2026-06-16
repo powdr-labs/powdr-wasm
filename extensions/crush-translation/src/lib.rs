@@ -393,6 +393,11 @@ impl<F> OpenVMSettings<F> {
     }
 }
 
+/// Helper: emit a [`DropHint::DropAfterNextInstruction`] hint as a directive.
+fn drop_after_next<F>(reg: u32) -> Directive<F> {
+    Directive::DropHint(DropHint::DropAfterNextInstruction(reg))
+}
+
 impl<F: PrimeField32> crush::loader::settings::Settings for OpenVMSettings<F> {
     type Directive = Directive<F>;
 
@@ -507,9 +512,7 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
             };
             let mut v = Vec::with_capacity(3);
             if last_reg_usage {
-                v.push(Directive::DropHint(DropHint::DropAfterNextInstruction(
-                    value_ptr.start,
-                )));
+                v.push(drop_after_next(value_ptr.start));
             }
             v.push(Directive::Instruction(cmp_insn(
                 comparison.start as usize,
@@ -537,13 +540,9 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
                 imm_hi,
             )));
             if last_reg_usage {
-                v.push(Directive::DropHint(DropHint::DropAfterNextInstruction(
-                    value_ptr.start,
-                )));
+                v.push(drop_after_next(value_ptr.start));
             }
-            v.push(Directive::DropHint(DropHint::DropAfterNextInstruction(
-                const_value.start,
-            )));
+            v.push(drop_after_next(const_value.start));
             v.push(Directive::Instruction(cmp_insn(
                 comparison.start as usize,
                 value_ptr.start as usize,
@@ -553,9 +552,7 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
         };
 
         // The jump is the last use of `comparison`.
-        directives.push(Directive::DropHint(DropHint::DropAfterNextInstruction(
-            comparison.start,
-        )));
+        directives.push(drop_after_next(comparison.start));
 
         // We use "less than" to compare both "less than" and "greater than or equal",
         // so, if it is the later, we must jump if the condition is false.
@@ -623,6 +620,7 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
                 value as u16,
                 (value >> 16) as u16,
             )));
+            directives.push(drop_after_next(tmp as u32));
             directives.push(Directive::Instruction(ib::storew(tmp, addr_reg, mem_start)));
         };
 
@@ -660,7 +658,7 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
                 let mut directives = vec![];
                 // Use a temporary register for the adjusted pointer to avoid
                 // clobbering the input register (which may be a live WASM local).
-                let effective_ptr = if mem_start > 0 {
+                let (effective_ptr, scratch_to_drop) = if mem_start > 0 {
                     let tmp = c.allocate_tmp_type::<OpenVMSettings<F>>(ValType::I32).start as usize;
                     if let Ok(imm) = AluImm::try_from(mem_start) {
                         directives.push(Directive::Instruction(ib::add_imm(tmp, mem_ptr, imm)));
@@ -673,12 +671,16 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
                             mem_start as u16,
                             (mem_start >> 16) as u16,
                         )));
+                        directives.push(drop_after_next(tmp2 as u32));
                         directives.push(Directive::Instruction(ib::add(tmp, mem_ptr, tmp2)));
                     }
-                    tmp
+                    (tmp, Some(tmp))
                 } else {
-                    mem_ptr
+                    (mem_ptr, None)
                 };
+                if let Some(t) = scratch_to_drop {
+                    directives.push(drop_after_next(t as u32));
+                }
                 directives.push(Directive::Instruction(ib::hint_buffer(
                     num_words,
                     effective_ptr,
@@ -773,8 +775,8 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
 
                         // debug_print encodes mem_imm as u16, so when mem_start is
                         // large we pre-add it to buf_ptr and pass mem_imm=0.
-                        let (print_ptr, print_mem_imm) = if mem_start < (1 << 16) {
-                            (buf_ptr, mem_start as u16)
+                        let (print_ptr, print_mem_imm, drop_print_ptr) = if mem_start < (1 << 16) {
+                            (buf_ptr, mem_start as u16, false)
                         } else {
                             let adjusted = c
                                 .allocate_tmp_type::<OpenVMSettings<F>>(ValType::I32)
@@ -787,20 +789,39 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
                                 mem_start as u16,
                                 (mem_start >> 16) as u16,
                             )));
+                            directives.push(Directive::DropHint(
+                                DropHint::DropAfterNextInstruction(mem_start_reg as u32),
+                            ));
+                            // Last use of `buf_ptr` is this add (debug_print uses `adjusted`).
+                            directives.push(Directive::DropHint(
+                                DropHint::DropAfterNextInstruction(buf_ptr as u32),
+                            ));
                             directives.push(Directive::Instruction(ib::add(
                                 adjusted,
                                 buf_ptr,
                                 mem_start_reg,
                             )));
-                            (adjusted, 0u16)
+                            (adjusted, 0u16, true)
                         };
 
+                        if drop_print_ptr {
+                            directives.push(Directive::DropHint(
+                                DropHint::DropAfterNextInstruction(print_ptr as u32),
+                            ));
+                        } else {
+                            // `print_ptr == buf_ptr`; this debug_print is its last use.
+                            directives.push(Directive::DropHint(
+                                DropHint::DropAfterNextInstruction(buf_ptr as u32),
+                            ));
+                        }
                         directives.push(Directive::Instruction(ib::debug_print(
                             print_ptr,
                             buf_len,
                             print_mem_imm,
                         )));
 
+                        // Last use of `buf_len` is the following storew.
+                        directives.push(drop_after_next(buf_len as u32));
                         // Store buf_len as nwritten (only accounts for first iov).
                         directives.push(Directive::Instruction(ib::storew(
                             buf_len,
@@ -849,6 +870,8 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
                             mem_start as u16,
                             (mem_start >> 16) as u16,
                         )));
+                        // The add below is the last use of `mem_start_reg`.
+                        directives.push(drop_after_next(mem_start_reg as u32));
                         directives.push(Directive::Instruction(ib::add(
                             time_addr,
                             time_ptr,
@@ -863,7 +886,8 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
                             time_addr, time_addr, 4i16,
                         )));
 
-                        // hint_storew: write high 4 bytes
+                        // hint_storew: write high 4 bytes (last use of time_addr).
+                        directives.push(drop_after_next(time_addr as u32));
                         directives.push(Directive::Instruction(ib::hint_storew(time_addr)));
 
                         set_output_const(&mut directives, &outputs, 0);
@@ -898,13 +922,17 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
                             mem_start as u16,
                             (mem_start >> 16) as u16,
                         )));
+                        // The following add is the last use of `mem_start_reg`.
+                        directives.push(drop_after_next(mem_start_reg as u32));
                         directives.push(Directive::Instruction(ib::add(
                             buf_addr,
                             buf,
                             mem_start_reg,
                         )));
 
-                        // hint_buffer: write num_words words from hint stream to memory
+                        // hint_buffer is the last use of `num_words` and `buf_addr`.
+                        directives.push(drop_after_next(num_words as u32));
+                        directives.push(drop_after_next(buf_addr as u32));
                         directives
                             .push(Directive::Instruction(ib::hint_buffer(num_words, buf_addr)));
 
@@ -1606,9 +1634,13 @@ fn translate_complex_ins<'a, F: PrimeField32>(
             let global = &module.globals[global_index as usize];
             match global {
                 Global::Mutable(allocated_var) => {
-                    load_from_const_addr(c, allocated_var.address, output.unwrap())
-                        .0
-                        .into()
+                    let (mut directives, base_addr_reg) =
+                        load_from_const_addr(c, allocated_var.address, output.unwrap());
+                    // base_addr_reg is unused after the last load; insert the drop
+                    // right before that load so the hint binds to the last reader.
+                    let last_load_idx = directives.len() - 1;
+                    directives.insert(last_load_idx, drop_after_next(base_addr_reg.start));
+                    directives.into()
                 }
                 Global::Immutable(op) => {
                     translate_complex_ins(c, module, op.clone(), &[], output, unaligned)
@@ -1635,7 +1667,9 @@ fn translate_complex_ins<'a, F: PrimeField32>(
                         Directive::Instruction(ib::or(acc, acc, tmp)),
                         Directive::Instruction(ib::loadbu(tmp, base_addr, imm + 3)),
                         Directive::Instruction(ib::shl_imm(tmp, tmp, 24_i16)),
+                        drop_after_next(tmp as u32),
                         Directive::Instruction(ib::or(acc, acc, tmp)),
+                        drop_after_next(acc as u32),
                         Directive::Instruction(ib::add_imm(output, acc, AluImm::from(0))),
                     ]
                     .into()
@@ -1648,7 +1682,9 @@ fn translate_complex_ins<'a, F: PrimeField32>(
                         Directive::Instruction(ib::loadhu(acc, base_addr, imm)),
                         Directive::Instruction(ib::loadhu(tmp, base_addr, imm + 2)),
                         Directive::Instruction(ib::shl_imm(tmp, tmp, 16_i16)),
+                        drop_after_next(tmp as u32),
                         Directive::Instruction(ib::or(acc, acc, tmp)),
+                        drop_after_next(acc as u32),
                         Directive::Instruction(ib::add_imm(output, acc, AluImm::from(0))),
                     ]
                     .into()
@@ -1675,7 +1711,9 @@ fn translate_complex_ins<'a, F: PrimeField32>(
                         },
                         Directive::Instruction(ib::shl_imm(tmp, tmp, 8_i16)),
                         Directive::Instruction(ib::loadbu(acc, base_addr, imm)),
+                        drop_after_next(tmp as u32),
                         Directive::Instruction(ib::or(acc, acc, tmp)),
+                        drop_after_next(acc as u32),
                         Directive::Instruction(ib::add_imm(output, acc, AluImm::from(0))),
                     ]
                     .into()
@@ -1737,8 +1775,11 @@ fn translate_complex_ins<'a, F: PrimeField32>(
                         Directive::Instruction(ib::or(acc_hi, acc_hi, tmp)),
                         Directive::Instruction(ib::loadbu(tmp, base_addr, imm + 7)),
                         Directive::Instruction(ib::shl_imm(tmp, tmp, 24_i16)),
+                        drop_after_next(tmp as u32),
                         Directive::Instruction(ib::or(acc_hi, acc_hi, tmp)),
+                        drop_after_next(acc_lo as u32),
                         Directive::Instruction(ib::add_imm(output, acc_lo, AluImm::from(0))),
+                        drop_after_next(acc_hi as u32),
                         Directive::Instruction(ib::add_imm(output + 1, acc_hi, AluImm::from(0))),
                     ]
                 }
@@ -1758,8 +1799,11 @@ fn translate_complex_ins<'a, F: PrimeField32>(
                         Directive::Instruction(ib::loadhu(acc_hi, base_addr, imm + 4)),
                         Directive::Instruction(ib::loadhu(tmp, base_addr, imm + 6)),
                         Directive::Instruction(ib::shl_imm(tmp, tmp, 16_i16)),
+                        drop_after_next(tmp as u32),
                         Directive::Instruction(ib::or(acc_hi, acc_hi, tmp)),
+                        drop_after_next(acc_lo as u32),
                         Directive::Instruction(ib::add_imm(output, acc_lo, AluImm::from(0))),
+                        drop_after_next(acc_hi as u32),
                         Directive::Instruction(ib::add_imm(output + 1, acc_hi, AluImm::from(0))),
                     ]
                 }
@@ -1796,6 +1840,7 @@ fn translate_complex_ins<'a, F: PrimeField32>(
                 } else {
                     Directive::Instruction(ib::loadbu(acc, base_addr, imm))
                 },
+                drop_after_next(acc as u32),
                 Directive::Instruction(ib::add_imm(output + 1, acc, AluImm::from(0))),
                 // shift i64 val right, keeping the sign.
                 // The low 32 bits of the input are discarded by the shift.
@@ -1824,7 +1869,9 @@ fn translate_complex_ins<'a, F: PrimeField32>(
                         // load b0
                         Directive::Instruction(ib::loadbu(acc, base_addr, imm)),
                         // combine b0 and b1
+                        drop_after_next(tmp as u32),
                         Directive::Instruction(ib::or(acc, acc, tmp)),
+                        drop_after_next(acc as u32),
                         Directive::Instruction(ib::add_imm(output + 1, acc, AluImm::from(0))),
                         // shift i64 val right, keeping the sign.
                         // The low 32 bits of the input are discarded by the shift.
@@ -1838,6 +1885,7 @@ fn translate_complex_ins<'a, F: PrimeField32>(
                         vec![
                             // load signed halfword as i32 on the hi part of the i64 val
                             Directive::Instruction(ib::loadh(acc, base_addr, imm)),
+                            drop_after_next(acc as u32),
                             Directive::Instruction(ib::add_imm(output + 1, acc, AluImm::from(0))),
                             // shift i64 val right, keeping the sign.
                             // The low 32 bits of the input are discarded by the shift.
@@ -1849,6 +1897,7 @@ fn translate_complex_ins<'a, F: PrimeField32>(
                         vec![
                             // load unsigned lo i32
                             Directive::Instruction(ib::loadhu(acc, base_addr, imm)),
+                            drop_after_next(acc as u32),
                             Directive::Instruction(ib::add_imm(output, acc, AluImm::from(0))),
                             // zero out hi i32
                             Directive::Instruction(ib::const_32_imm(output + 1, 0x0, 0x0)),
@@ -1888,7 +1937,9 @@ fn translate_complex_ins<'a, F: PrimeField32>(
                         Directive::Instruction(ib::or(acc, acc, tmp)),
                         Directive::Instruction(ib::loadbu(tmp, base_addr, imm + 3)),
                         Directive::Instruction(ib::shl_imm(tmp, tmp, 24_i16)),
+                        drop_after_next(tmp as u32),
                         Directive::Instruction(ib::or(acc, acc, tmp)),
+                        drop_after_next(acc as u32),
                         Directive::Instruction(ib::add_imm(val_32, acc, AluImm::from(0))),
                     ]);
                 }
@@ -1902,7 +1953,9 @@ fn translate_complex_ins<'a, F: PrimeField32>(
                         // shift h1
                         Directive::Instruction(ib::shl_imm(tmp, tmp, 16_i16)),
                         // combine h0 and h1
+                        drop_after_next(tmp as u32),
                         Directive::Instruction(ib::or(acc, acc, tmp)),
+                        drop_after_next(acc as u32),
                         Directive::Instruction(ib::add_imm(val_32, acc, AluImm::from(0))),
                     ]);
                 }
@@ -1941,6 +1994,7 @@ fn translate_complex_ins<'a, F: PrimeField32>(
                         Directive::Instruction(ib::storeb(tmp, base_addr, imm + 2)),
                         // shift and store byte 3
                         Directive::Instruction(ib::shr_u_imm(tmp, value, 24_i16)),
+                        drop_after_next(tmp as u32),
                         Directive::Instruction(ib::storeb(tmp, base_addr, imm + 3)),
                     ]
                     .into()
@@ -1952,6 +2006,7 @@ fn translate_complex_ins<'a, F: PrimeField32>(
                         Directive::Instruction(ib::storeh(value, base_addr, imm)),
                         // shift and store halfword 1
                         Directive::Instruction(ib::shr_u_imm(tmp, value, 16_i16)),
+                        drop_after_next(tmp as u32),
                         Directive::Instruction(ib::storeh(tmp, base_addr, imm + 2)),
                     ]
                     .into()
@@ -1979,6 +2034,7 @@ fn translate_complex_ins<'a, F: PrimeField32>(
                         Directive::Instruction(ib::storeb(value, base_addr, imm)),
                         // shift and store byte 1
                         Directive::Instruction(ib::shr_u_imm(b1, value, 8_i16)),
+                        drop_after_next(b1 as u32),
                         Directive::Instruction(ib::storeb(b1, base_addr, imm + 1)),
                     ]
                     .into()
@@ -2018,6 +2074,7 @@ fn translate_complex_ins<'a, F: PrimeField32>(
                         Directive::Instruction(ib::storeb(tmp, base_addr, imm + 6)),
                         // shift and store byte 7
                         Directive::Instruction(ib::shr_u_imm(tmp, value_hi, 24_i16)),
+                        drop_after_next(tmp as u32),
                         Directive::Instruction(ib::storeb(tmp, base_addr, imm + 7)),
                     ]
                 }
@@ -2034,6 +2091,7 @@ fn translate_complex_ins<'a, F: PrimeField32>(
                         Directive::Instruction(ib::storeh(value_hi, base_addr, imm + 4)),
                         // shift and store halfword 3
                         Directive::Instruction(ib::shr_u_imm(tmp, value_hi, 16_i16)),
+                        drop_after_next(tmp as u32),
                         Directive::Instruction(ib::storeh(tmp, base_addr, imm + 6)),
                     ]
                 }
@@ -2049,9 +2107,14 @@ fn translate_complex_ins<'a, F: PrimeField32>(
 
         Op::MemorySize { mem } => {
             assert_eq!(mem, 0, "Only a single linear memory is supported");
-            load_from_const_addr(c, module.memory.unwrap().start, output.unwrap())
-                .0
-                .into()
+            let (mut directives, base_addr_reg) =
+                load_from_const_addr(c, module.memory.unwrap().start, output.unwrap());
+            let last_load_idx = directives.len() - 1;
+            directives.insert(
+                last_load_idx,
+                drop_after_next(base_addr_reg.start),
+            );
+            directives.into()
         }
         Op::MemoryGrow { mem } => {
             assert_eq!(mem, 0, "Only a single linear memory is supported");
@@ -2077,9 +2140,12 @@ fn translate_complex_ins<'a, F: PrimeField32>(
             directives.extend([
                 // Calculate the new size:
                 Directive::Instruction(ib::add(new_size, size_reg, inputs[0].start as usize)),
-                // Check if the new size is greater than the max size.
+                // Check if the new size is greater than the max size (last use of max_size_reg).
+                drop_after_next(max_size_reg as u32),
                 Directive::Instruction(ib::gt_u(is_gt_max as usize, new_size, max_size_reg)),
-                // If the new size is greater than the max size, branch to the error label.
+                // If the new size is greater than the max size, branch to the error label
+                // (last use of is_gt_max).
+                drop_after_next(is_gt_max),
                 Directive::JumpIf {
                     target: error_label.clone(),
                     condition_reg: is_gt_max,
@@ -2087,15 +2153,20 @@ fn translate_complex_ins<'a, F: PrimeField32>(
                 // Check if the new size is less than to the current size (which means an overflow occurred),
                 // which means the requested size is too large.
                 Directive::Instruction(ib::lt_u(is_lt_curr as usize, new_size, size_reg)),
-                // If the requested size overflows, branch to the error label.
+                // If the requested size overflows, branch to the error label
+                // (last use of is_lt_curr).
+                drop_after_next(is_lt_curr),
                 Directive::JumpIf {
                     target: error_label.clone(),
                     condition_reg: is_lt_curr,
                 },
                 // Success case:
-                // - write new size to header.
+                // - write new size to header (last use of new_size and header_addr_reg).
+                drop_after_next(new_size as u32),
+                drop_after_next(header_addr_reg.start),
                 Directive::Instruction(ib::storew(new_size, header_addr_reg.start as usize, 0)),
-                // - write old size to output.
+                // - write old size to output (last use of size_reg).
+                drop_after_next(size_reg as u32),
                 Directive::Instruction(ib::add_imm(output, size_reg, AluImm::from(0))),
                 // - jump to continuation label.
                 Directive::Jump {
@@ -2302,7 +2373,8 @@ fn emit_table_get<'a, F: PrimeField32>(
     let base_addr = table_segment.start + TABLE_SEGMENT_HEADER_SIZE;
 
     // Read the 3 words of the reference into contiguous registers
-    assert_eq!(dest_ptr.len(), 3);
+    let len = dest_ptr.len();
+    assert_eq!(len, 3);
 
     let mut instrs = vec![Directive::Instruction(ib::mul_imm(
         mul_result,
@@ -2310,12 +2382,22 @@ fn emit_table_get<'a, F: PrimeField32>(
         TABLE_ENTRY_SIZE,
     ))];
 
-    instrs.extend(dest_ptr.enumerate().map(|(i, dest_reg)| {
-        Directive::Instruction(ib::loadw(
+    instrs.extend(dest_ptr.enumerate().flat_map(|(i, dest_reg)| {
+        let last = i + 1 == len;
+        let load = Directive::Instruction(ib::loadw(
             dest_reg as usize,
             mul_result,
             base_addr + (i as u32) * 4,
-        ))
+        ));
+        if last {
+            // Last load reads mul_result for the last time.
+            vec![
+                drop_after_next(mul_result as u32),
+                load,
+            ]
+        } else {
+            vec![load]
+        }
     }));
 
     instrs
@@ -2329,6 +2411,8 @@ enum RotDirection {
 trait RotOps<F: PrimeField32> {
     fn val_type() -> ValType;
     fn num_bits() -> i16;
+    /// Number of contiguous machine words an operand occupies (1 for I32, 2 for I64).
+    fn num_words() -> u32;
     fn mask_rot_bits(dest: usize, src: usize) -> Instruction<F>;
     fn num_bits_const(dest: usize) -> Vec<Directive<F>>;
     fn shl(dest: usize, val: usize, amount: usize) -> Instruction<F>;
@@ -2347,6 +2431,9 @@ impl<F: PrimeField32> RotOps<F> for I32Rot {
     }
     fn num_bits() -> i16 {
         32
+    }
+    fn num_words() -> u32 {
+        1
     }
     fn mask_rot_bits(dest: usize, src: usize) -> Instruction<F> {
         ib::and_imm(dest, src, 32_i16 - 1)
@@ -2383,6 +2470,9 @@ impl<F: PrimeField32> RotOps<F> for I64Rot {
     }
     fn num_bits() -> i16 {
         64
+    }
+    fn num_words() -> u32 {
+        2
     }
     fn mask_rot_bits(dest: usize, src: usize) -> Instruction<F> {
         ib::and_imm_64(dest, src, 64_i16 - 1)
@@ -2424,6 +2514,11 @@ fn translate_rot<'a, F: PrimeField32, R: RotOps<F>>(
     let value = inputs[0].as_register().unwrap().start as usize;
     let output = output.start as usize;
 
+    // Emit a `DropAfterNextInstruction` hint for each word of an operand.
+    let drop_words_after_next = |reg: usize| {
+        (0..R::num_words()).map(move |w| drop_after_next(reg as u32 + w))
+    };
+
     let shift_ref = c
         .allocate_tmp_type::<OpenVMSettings<F>>(R::val_type())
         .start as usize;
@@ -2449,33 +2544,29 @@ fn translate_rot<'a, F: PrimeField32, R: RotOps<F>>(
 
             let mut directives = R::num_bits_const(const_num_bits);
 
-            directives.extend(
-                [
-                    // mask the shift amount to the valid range
-                    R::mask_rot_bits(shift_ref_amount, reg),
-                    // calculate the shift amount for the opposite direction
-                    R::sub(shift_back_amount, const_num_bits, shift_ref_amount),
-                ]
-                .map(Directive::Instruction),
-            );
+            directives.extend([
+                // mask the shift amount to the valid range
+                Directive::Instruction(R::mask_rot_bits(shift_ref_amount, reg)),
+            ]);
+            // Last use of `const_num_bits` is the following sub.
+            directives.extend(drop_words_after_next(const_num_bits));
+            directives.push(Directive::Instruction(R::sub(
+                shift_back_amount,
+                const_num_bits,
+                shift_ref_amount,
+            )));
 
-            directives.extend(
-                match direction {
-                    RotDirection::Left => [
-                        // shift left
-                        R::shl(shift_ref, value, shift_ref_amount),
-                        // shift right
-                        R::shr_u(shift_back, value, shift_back_amount),
-                    ],
-                    RotDirection::Right => [
-                        // shift right
-                        R::shr_u(shift_ref, value, shift_ref_amount),
-                        // shift left
-                        R::shl(shift_back, value, shift_back_amount),
-                    ],
-                }
-                .map(Directive::Instruction),
-            );
+            // Each subsequent shift is the last use of one of the shift-amount tmps.
+            directives.extend(drop_words_after_next(shift_ref_amount));
+            directives.push(Directive::Instruction(match direction {
+                RotDirection::Left => R::shl(shift_ref, value, shift_ref_amount),
+                RotDirection::Right => R::shr_u(shift_ref, value, shift_ref_amount),
+            }));
+            directives.extend(drop_words_after_next(shift_back_amount));
+            directives.push(Directive::Instruction(match direction {
+                RotDirection::Left => R::shr_u(shift_back, value, shift_back_amount),
+                RotDirection::Right => R::shl(shift_back, value, shift_back_amount),
+            }));
 
             directives
         }
@@ -2504,7 +2595,9 @@ fn translate_rot<'a, F: PrimeField32, R: RotOps<F>>(
         }
     };
 
-    // or the two shifts
+    // The or is the last use of both shift_ref and shift_back.
+    directives.extend(drop_words_after_next(shift_ref));
+    directives.extend(drop_words_after_next(shift_back));
     directives.push(Directive::Instruction(R::or(output, shift_ref, shift_back)));
 
     directives.into()
@@ -2561,12 +2654,23 @@ fn store_to_const_addr<'a, F: PrimeField32>(
         (base_addr >> 16) as u16,
     ))];
 
-    directives.extend(input.enumerate().map(|(i, input_reg)| {
-        Directive::Instruction(ib::storew(
+    let n = input.len();
+    directives.extend(input.enumerate().flat_map(|(i, input_reg)| {
+        let last = i + 1 == n;
+        let store = Directive::Instruction(ib::storew(
             input_reg as usize,
             base_addr_reg.start as usize,
             i as u32 * 4,
-        ))
+        ));
+        if last {
+            // Last store reads base_addr_reg for the last time.
+            vec![
+                drop_after_next(base_addr_reg.start),
+                store,
+            ]
+        } else {
+            vec![store]
+        }
     }));
 
     directives
