@@ -14,7 +14,7 @@ fn run_openvm_guest(guest: &str, args: &[u32]) -> Result<(), Box<dyn std::error:
     let generate = powdr_openvm::default_generate_config();
     let select = SelectConfig::new(0, 0);
     let compiled =
-        crate::compile::compile_with_pipeline(original, StdIn::default(), generate, select);
+        crate::compile::compile_with_pipeline(original, StdIn::default(), generate, select, None);
 
     let mut stdin = StdIn::default();
     for arg in args {

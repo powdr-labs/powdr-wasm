@@ -1,11 +1,12 @@
 //! Compile-to-disk pipelines for crush and RISC-V.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use autoprecompiles::CrushISA;
 use openvm_sdk::StdIn;
 use openvm_sdk::config::{AggregationSystemParams, AppConfig};
 use openvm_stark_sdk::config::{MAX_APP_LOG_STACKED_HEIGHT, app_params_with_100_bits_security};
+use powdr_autoprecompiles::execution_profile::ExecutionProfile;
 use powdr_autoprecompiles::{GenerateConfig, PgoConfig, PgoType, SelectConfig};
 use powdr_openvm::{
     StagedPipeline, execution_profile_from_guest,
@@ -16,18 +17,23 @@ use powdr_openvm::{
 
 use crate::proving::{AGG_PK_FILE, APP_PK_FILE, COMPILED_PROGRAM_FILE, CrushSdk, RiscvSdk};
 
-/// Run powdr's staged APC pipeline (generate → select → setup) with no on-disk
-/// artifact cache, returning the compiled program. Shared by the crush and
-/// RISC-V compile/prove paths.
+/// Run powdr's staged APC pipeline (generate → select → setup), returning the
+/// compiled program. Shared by the crush and RISC-V compile/prove paths.
 ///
 /// `select.autoprecompiles == 0` selects no autoprecompiles (`PgoType::None`);
 /// otherwise candidates are ranked by cell density (`PgoType::Cell`) and the
 /// top `select.autoprecompiles` are kept.
+///
+/// When `artifacts_dir` is `Some`, each stage's result is cached under it and
+/// reused on matching reruns (see powdr's `--artifacts-dir`); `None` runs every
+/// stage inline. The PGO profile is keyed on `profile_input`, which is what
+/// [`make_pgo_profile`] rebuilds it from on a cache miss.
 pub(crate) fn compile_with_pipeline<ISA: OpenVmISA>(
     original_program: OriginalCompiledProgram<'static, ISA>,
-    stdin: StdIn,
+    profile_input: StdIn,
     generate: GenerateConfig,
     select: SelectConfig,
+    artifacts_dir: Option<PathBuf>,
 ) -> CompiledProgram<ISA> {
     let pgo_type = if select.autoprecompiles > 0 {
         PgoType::Cell
@@ -35,15 +41,28 @@ pub(crate) fn compile_with_pipeline<ISA: OpenVmISA>(
         PgoType::None
     };
     let generate = generate.with_select_defaults(pgo_type, select);
-    // No on-disk cache, so the hashing `inputs` / `max_columns` are irrelevant.
-    let pgo_config = PgoConfig::new(pgo_type, None, Vec::new());
-    StagedPipeline::new(original_program, None).setup(
+    // The serialized profiling input is the PGO profile's cache key; `None`
+    // `max_columns` means no whole-VM column budget.
+    let inputs = rmp_serde::to_vec(&profile_input).expect("failed to serialize profiling input");
+    let pgo_config = PgoConfig::new(pgo_type, None, inputs);
+    StagedPipeline::new(original_program, artifacts_dir).setup(
         &generate,
         &pgo_config,
         select,
-        move |guest, _inputs| execution_profile_from_guest(guest, stdin),
+        make_pgo_profile,
         make_default_empirical_constraints,
     )
+}
+
+/// Rebuild the PGO execution profile from the serialized profiling input held
+/// in `PgoConfig::inputs`. Only invoked on a generate-stage cache miss.
+fn make_pgo_profile<ISA: OpenVmISA>(
+    guest: &OriginalCompiledProgram<'static, ISA>,
+    inputs: &[u8],
+) -> ExecutionProfile {
+    let profile_input: StdIn =
+        rmp_serde::from_slice(inputs).expect("failed to deserialize profiling input");
+    execution_profile_from_guest(guest, profile_input)
 }
 
 /// Compile a crush program: load WASM, PGO, APC generation, keygen.
@@ -53,12 +72,13 @@ pub fn compile_crush_to_disk(
     stdin: StdIn,
     generate: GenerateConfig,
     select: SelectConfig,
+    artifacts_dir: Option<PathBuf>,
     output_dir: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(output_dir)?;
 
     let apc_start = std::time::Instant::now();
-    let compiled = compile_with_pipeline(original_program, stdin, generate, select);
+    let compiled = compile_with_pipeline(original_program, stdin, generate, select, artifacts_dir);
     tracing::info!("APC generation took {:?}", apc_start.elapsed());
 
     // Serialize compiled program
@@ -101,6 +121,7 @@ pub fn compile_riscv_to_disk(
     stdin: StdIn,
     generate: GenerateConfig,
     select: SelectConfig,
+    artifacts_dir: Option<PathBuf>,
     output_dir: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(output_dir)?;
@@ -115,7 +136,7 @@ pub fn compile_riscv_to_disk(
     .map_err(|e| eyre::eyre!("{e}"))?;
 
     let apc_start = std::time::Instant::now();
-    let compiled = compile_with_pipeline(original, stdin, generate, select);
+    let compiled = compile_with_pipeline(original, stdin, generate, select, artifacts_dir);
     tracing::info!("APC generation took {:?}", apc_start.elapsed());
 
     // Serialize compiled program

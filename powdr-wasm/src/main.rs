@@ -40,6 +40,13 @@ use powdr_autoprecompiles::{GenerateConfig, SelectConfig};
 struct CliArgs {
     #[command(subcommand)]
     command: Commands,
+
+    /// If set, APC pipeline stage artifacts are persisted under
+    /// `<artifacts-dir>/<stage>/<hash>/` and reused on matching reruns.
+    /// Hashing only uses each stage's own arguments, so a later-stage change
+    /// (e.g. a different runtime input) does not invalidate earlier-stage caches.
+    #[arg(long, global = true)]
+    artifacts_dir: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -220,8 +227,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     setup_tracing_with_log_level(Level::INFO);
 
     // Parse command line arguments
-    let cli_args = CliArgs::parse();
-    match cli_args.command {
+    let CliArgs {
+        command,
+        artifacts_dir,
+    } = CliArgs::parse();
+    match command {
         Commands::Print {
             program,
             unaligned_memory,
@@ -274,8 +284,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 load_wasm_original_program(&program, &function, unaligned_memory);
             let stdin = make_stdin(&input);
             let (generate, select) = powdr.build_powdr_config();
-            compile::compile_crush_to_disk(original_program, stdin, generate, select, &output_dir)
-                .map_err(|e| eyre::eyre!("{e}"))?;
+            compile::compile_crush_to_disk(
+                original_program,
+                stdin,
+                generate,
+                select,
+                artifacts_dir,
+                &output_dir,
+            )
+            .map_err(|e| eyre::eyre!("{e}"))?;
             println!("Compiled to {}", output_dir.display());
         }
         Commands::CompileRiscv {
@@ -286,8 +303,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         } => {
             let stdin = make_stdin(&input);
             let (generate, select) = powdr.build_riscv_powdr_config();
-            compile::compile_riscv_to_disk(&program, stdin, generate, select, &output_dir)
-                .map_err(|e| eyre::eyre!("{e}"))?;
+            compile::compile_riscv_to_disk(
+                &program,
+                stdin,
+                generate,
+                select,
+                artifacts_dir,
+                &output_dir,
+            )
+            .map_err(|e| eyre::eyre!("{e}"))?;
             println!("Compiled RISC-V to {}", output_dir.display());
         }
         Commands::Prove {
@@ -321,6 +345,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         recursion,
                         generate,
                         select,
+                        artifacts_dir,
                         cache_dir.as_deref(),
                     )
                     .map_err(|e| eyre::eyre!("{e}"))?;
@@ -402,6 +427,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         make_stdin(&input),
                         generate,
                         select,
+                        artifacts_dir,
                     );
 
                     let stdin = make_stdin(&input);

@@ -1,6 +1,6 @@
 //! Proving infrastructure: engine setup, cached proving key, mock proof, and real proof.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use autoprecompiles::CrushISA;
@@ -198,11 +198,17 @@ pub fn prove(
     recursion: bool,
     generate: GenerateConfig,
     select: SelectConfig,
+    artifacts_dir: Option<PathBuf>,
     cache_dir: Option<&Path>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let apc_count = select.autoprecompiles;
-    let compiled =
-        crate::compile::compile_with_pipeline(original_program, stdin.clone(), generate, select);
+    let compiled = crate::compile::compile_with_pipeline(
+        original_program,
+        stdin.clone(),
+        generate,
+        select,
+        artifacts_dir,
+    );
     let app_fri_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
     let app_config = AppConfig::new(compiled.vm_config.clone(), app_fri_params);
     let sdk = if apc_count == 0 {
