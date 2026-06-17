@@ -6,21 +6,50 @@ use autoprecompiles::CrushISA;
 use openvm_sdk::StdIn;
 use openvm_sdk::config::{AggregationSystemParams, AppConfig};
 use openvm_stark_sdk::config::{MAX_APP_LOG_STACKED_HEIGHT, app_params_with_100_bits_security};
-use powdr_autoprecompiles::{
-    GenerateConfig, PgoData, SelectConfig, empirical_constraints::EmpiricalConstraints,
-};
+use powdr_autoprecompiles::{GenerateConfig, PgoConfig, PgoType, SelectConfig};
 use powdr_openvm::{
-    customize_exe::{generate_apcs, select_apcs, setup},
-    execution_profile_from_guest,
-    program::OriginalCompiledProgram,
+    StagedPipeline, execution_profile_from_guest,
+    isa::OpenVmISA,
+    make_default_empirical_constraints,
+    program::{CompiledProgram, OriginalCompiledProgram},
 };
 
 use crate::proving::{AGG_PK_FILE, APP_PK_FILE, COMPILED_PROGRAM_FILE, CrushSdk, RiscvSdk};
 
+/// Run powdr's staged APC pipeline (generate → select → setup) with no on-disk
+/// artifact cache, returning the compiled program. Shared by the crush and
+/// RISC-V compile/prove paths.
+///
+/// `select.autoprecompiles == 0` selects no autoprecompiles (`PgoType::None`);
+/// otherwise candidates are ranked by cell density (`PgoType::Cell`) and the
+/// top `select.autoprecompiles` are kept.
+pub(crate) fn compile_with_pipeline<ISA: OpenVmISA>(
+    original_program: OriginalCompiledProgram<'static, ISA>,
+    stdin: StdIn,
+    generate: GenerateConfig,
+    select: SelectConfig,
+) -> CompiledProgram<ISA> {
+    let pgo_type = if select.autoprecompiles > 0 {
+        PgoType::Cell
+    } else {
+        PgoType::None
+    };
+    let generate = generate.with_select_defaults(pgo_type, select);
+    // No on-disk cache, so the hashing `inputs` / `max_columns` are irrelevant.
+    let pgo_config = PgoConfig::new(pgo_type, None, Vec::new());
+    StagedPipeline::new(original_program, None).setup(
+        &generate,
+        &pgo_config,
+        select,
+        move |guest, _inputs| execution_profile_from_guest(guest, stdin),
+        make_default_empirical_constraints,
+    )
+}
+
 /// Compile a crush program: load WASM, PGO, APC generation, keygen.
 /// Saves the compiled program and proving keys to `output_dir`.
 pub fn compile_crush_to_disk(
-    original_program: OriginalCompiledProgram<CrushISA>,
+    original_program: OriginalCompiledProgram<'static, CrushISA>,
     stdin: StdIn,
     generate: GenerateConfig,
     select: SelectConfig,
@@ -29,24 +58,7 @@ pub fn compile_crush_to_disk(
     std::fs::create_dir_all(output_dir)?;
 
     let apc_start = std::time::Instant::now();
-    let apc_count = select.autoprecompiles;
-
-    let pgo_data = if apc_count > 0 {
-        let execution_profile = execution_profile_from_guest(&original_program, stdin);
-        PgoData::Cell(execution_profile, None)
-    } else {
-        PgoData::None
-    };
-    let generate = generate.with_select_defaults(pgo_data.pgo_type(), select);
-    let degree_bound = generate.degree_bound;
-    let ranked = generate_apcs(
-        &original_program,
-        &generate,
-        pgo_data,
-        EmpiricalConstraints::default(),
-    );
-    let apcs = select_apcs(ranked, select);
-    let compiled = setup(original_program, apcs, degree_bound);
+    let compiled = compile_with_pipeline(original_program, stdin, generate, select);
     tracing::info!("APC generation took {:?}", apc_start.elapsed());
 
     // Serialize compiled program
@@ -103,24 +115,7 @@ pub fn compile_riscv_to_disk(
     .map_err(|e| eyre::eyre!("{e}"))?;
 
     let apc_start = std::time::Instant::now();
-    let apc_count = select.autoprecompiles;
-    let pgo_data = if apc_count > 0 {
-        let execution_profile =
-            powdr_openvm::execution_profile_from_guest(&original, stdin.clone());
-        powdr_openvm_riscv::PgoData::Cell(execution_profile, None)
-    } else {
-        powdr_openvm_riscv::PgoData::None
-    };
-    let generate = generate.with_select_defaults(pgo_data.pgo_type(), select);
-    let degree_bound = generate.degree_bound;
-    let ranked = powdr_openvm_riscv::generate_apcs(
-        &original,
-        &generate,
-        pgo_data,
-        EmpiricalConstraints::default(),
-    );
-    let apcs = powdr_openvm_riscv::select_apcs(ranked, select);
-    let compiled = powdr_openvm_riscv::setup(original, apcs, degree_bound);
+    let compiled = compile_with_pipeline(original, stdin, generate, select);
     tracing::info!("APC generation took {:?}", apc_start.elapsed());
 
     // Serialize compiled program

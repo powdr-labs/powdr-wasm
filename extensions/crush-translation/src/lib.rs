@@ -62,18 +62,18 @@ pub const ERROR_CODE_OFFSET: u32 = 100;
 
 pub const ERROR_ABORT_CODE: u32 = 200;
 
-pub struct LinkedProgram<'a, F: PrimeField32> {
-    module: Module<'a>,
+pub struct LinkedProgram<F: PrimeField32> {
     label_map: HashMap<String, LabelValue>,
     /// Linked instructions without the startup code:
     linked_instructions: Vec<Instruction<F>>,
     memory_image: SparseMemoryImage,
+    /// Number of input/output words for each exported function, indexed by
+    /// function index.
+    exported_func_io_words: HashMap<u32, (usize, usize)>,
 }
 
-impl<'a, F: PrimeField32 + openvm_stark_backend::p3_field::InjectiveMonomial<7>>
-    LinkedProgram<'a, F>
-{
-    pub fn new(mut module: Module<'a>, functions: Vec<FunctionAsm<Directive<F>>>) -> Self {
+impl<F: PrimeField32 + openvm_stark_backend::p3_field::InjectiveMonomial<7>> LinkedProgram<F> {
+    pub fn new(mut module: Module<'_>, functions: Vec<FunctionAsm<Directive<F>>>) -> Self {
         let (linked_program, mut label_map) = crush::interpreter::linker::link(functions, 1);
 
         for v in label_map.values_mut() {
@@ -143,20 +143,33 @@ impl<'a, F: PrimeField32 + openvm_stark_backend::p3_field::InjectiveMonomial<7>>
             })
             .collect();
 
+        // Precompute the I/O word counts for every exported function (the
+        // possible entry points) so we can drop the borrowing `Module`.
+        let exported_func_io_words = module
+            .exported_functions
+            .keys()
+            .map(|&func_idx| {
+                let ty = &module.get_func_type(func_idx).ty;
+                let in_words =
+                    crush::loader::word_count_types::<OpenVMSettings<F>>(ty.params()) as usize;
+                let out_words =
+                    crush::loader::word_count_types::<OpenVMSettings<F>>(ty.results()) as usize;
+                (func_idx, (in_words, out_words))
+            })
+            .collect();
+
         Self {
-            module,
             label_map,
             linked_instructions,
             memory_image,
+            exported_func_io_words,
         }
     }
 
     pub fn program_with_entry_point(&self, entry_point: &str) -> VmExe<F> {
-        // Create the startup code to call the entry point function.
-        let entry_point = &self.label_map[entry_point];
         let entry_point_start = self.linked_instructions.len();
         let mut linked_instructions = self.linked_instructions.clone();
-        linked_instructions.extend(create_startup_code(&self.module, entry_point));
+        linked_instructions.extend(self.startup_code(entry_point));
 
         // TODO: make crush read and carry debug info
         // The first instruction was removed, which was a nop inserted by the linker,
@@ -224,80 +237,75 @@ impl<'a, F: PrimeField32 + openvm_stark_backend::p3_field::InjectiveMonomial<7>>
 
         labels
     }
-}
 
-fn create_startup_code<F>(ctx: &Module, entry_point: &LabelValue) -> Vec<Instruction<F>>
-where
-    F: PrimeField32,
-{
-    use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS as NUM_LIMBS;
+    /// Build the startup boilerplate that reads the entry point's inputs from
+    /// the hint stream, calls the function, reveals its outputs, and halts.
+    fn startup_code(&self, entry_point: &str) -> Vec<Instruction<F>> {
+        use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS as NUM_LIMBS;
+        let entry_point = &self.label_map[entry_point];
+        let (num_input_words, num_output_words) = self.exported_func_io_words[&entry_point
+            .func_idx
+            .expect("entry point must be a function")];
+        // Registers used by startup code (relative to initial FP):
+        //   reg 0: zero_reg (holds value 0, also used as pointer to mem[0])
+        //   reg 1: save_mem0_reg (holds saved value of mem[0] during hint reads)
+        let zero_reg: usize = 0;
+        let save_mem0_reg: usize = 1;
 
-    let entry_point_func_type = &ctx.get_func_type(entry_point.func_idx.unwrap()).ty;
-    let params = entry_point_func_type.params();
-    let results = entry_point_func_type.results();
-    let num_input_words = crush::loader::word_count_types::<OpenVMSettings<F>>(params) as usize;
-    let num_output_words = crush::loader::word_count_types::<OpenVMSettings<F>>(results) as usize;
+        // Frame offset for entry function = 2 (startup uses 2 registers)
+        let frame_offset: usize = 2;
 
-    // Registers used by startup code (relative to initial FP):
-    //   reg 0: zero_reg (holds value 0, also used as pointer to mem[0])
-    //   reg 1: save_mem0_reg (holds saved value of mem[0] during hint reads)
-    let zero_reg: usize = 0;
-    let save_mem0_reg: usize = 1;
+        // Callee frame layout (relative to callee's FP = initial_FP + frame_offset * NUM_LIMBS):
+        //   reg 0..num_args: function parameters
+        //   reg 0..num_outputs: function return values (overlapping with params)
+        //   reg max(args,outs): saved_ret_pc
+        //   reg max(args,outs)+1: saved_caller_fp
+        let max_io = num_input_words.max(num_output_words);
+        let save_pc_reg = max_io;
+        let save_fp_reg = max_io + 1;
 
-    // Frame offset for entry function = 2 (startup uses 2 registers)
-    let frame_offset: usize = 2;
+        let mut code = vec![
+            // 1. Set zero_reg = 0
+            ib::const_32_imm(zero_reg, 0, 0),
+        ];
 
-    // Callee frame layout (relative to callee's FP = initial_FP + frame_offset * NUM_LIMBS):
-    //   reg 0..num_args: function parameters
-    //   reg 0..num_outputs: function return values (overlapping with params)
-    //   reg max(args,outs): saved_ret_pc
-    //   reg max(args,outs)+1: saved_caller_fp
-    let max_io = num_input_words.max(num_output_words);
-    let save_pc_reg = max_io;
-    let save_fp_reg = max_io + 1;
+        // 2. Read inputs using mem[0] as scratch space.
+        //    Save mem[0] first, then use it for hint_storew, then restore it.
+        if num_input_words > 0 {
+            // Save mem[0] into save_mem0_reg
+            code.push(ib::loadw(save_mem0_reg, zero_reg, 0));
 
-    let mut code = vec![
-        // 1. Set zero_reg = 0
-        ib::const_32_imm(zero_reg, 0, 0),
-    ];
+            // For each input word, read from hint stream via mem[0]
+            for i in 0..num_input_words {
+                code.push(ib::prepare_read());
+                code.push(ib::hint_storew(zero_reg)); // skip length word -> MEM[0]
+                code.push(ib::hint_storew(zero_reg)); // write data -> MEM[0]
+                code.push(ib::loadw(frame_offset + i, zero_reg, 0)); // load from MEM[0] into callee's arg register
+            }
 
-    // 2. Read inputs using mem[0] as scratch space.
-    //    Save mem[0] first, then use it for hint_storew, then restore it.
-    if num_input_words > 0 {
-        // Save mem[0] into save_mem0_reg
-        code.push(ib::loadw(save_mem0_reg, zero_reg, 0));
-
-        // For each input word, read from hint stream via mem[0]
-        for i in 0..num_input_words {
-            code.push(ib::prepare_read());
-            code.push(ib::hint_storew(zero_reg)); // skip length word -> MEM[0]
-            code.push(ib::hint_storew(zero_reg)); // write data -> MEM[0]
-            code.push(ib::loadw(frame_offset + i, zero_reg, 0)); // load from MEM[0] into callee's arg register
+            // Restore mem[0]
+            code.push(ib::storew(save_mem0_reg, zero_reg, 0));
         }
 
-        // Restore mem[0]
-        code.push(ib::storew(save_mem0_reg, zero_reg, 0));
+        // 3. Call the entry function
+        //    save_pc and save_fp are relative to callee's FP
+        //    fp_offset must be frame_offset * NUM_LIMBS because ib::call does NOT multiply fp_offset
+        code.push(ib::call(
+            save_pc_reg,
+            save_fp_reg,
+            entry_point.pc as usize,
+            frame_offset * NUM_LIMBS,
+        ));
+
+        // 4. Reveal output values
+        for i in 0..num_output_words {
+            code.push(ib::reveal_imm(frame_offset + i, zero_reg, i * 4));
+        }
+
+        // 5. Halt
+        code.push(ib::halt());
+        code
     }
-
-    // 3. Call the entry function
-    //    save_pc and save_fp are relative to callee's FP
-    //    fp_offset must be frame_offset * NUM_LIMBS because ib::call does NOT multiply fp_offset
-    code.push(ib::call(
-        save_pc_reg,
-        save_fp_reg,
-        entry_point.pc as usize,
-        frame_offset * NUM_LIMBS,
-    ));
-
-    // 4. Reveal output values
-    for i in 0..num_output_words {
-        code.push(ib::reveal_imm(frame_offset + i, zero_reg, i * 4));
-    }
-
-    // 5. Halt
-    code.push(ib::halt());
-
-    code
 }
 
 // The instructions in this IR are 1-to-1 mapped to OpenVM instructions,

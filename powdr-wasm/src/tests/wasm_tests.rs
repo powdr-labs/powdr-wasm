@@ -228,7 +228,7 @@ fn parse_val(s: &str) -> Result<u32, Box<dyn std::error::Error>> {
     }
 }
 
-fn load_wasm_module(wasm_bytes: &[u8]) -> LinkedProgram<'_, F> {
+fn load_wasm_module(wasm_bytes: &[u8]) -> LinkedProgram<F> {
     let (module, functions) = load_wasm(wasm_bytes, false);
     LinkedProgram::new(module, functions)
 }
@@ -236,7 +236,7 @@ fn load_wasm_module(wasm_bytes: &[u8]) -> LinkedProgram<'_, F> {
 fn load_wasm_module_with_settings(
     wasm_bytes: &[u8],
     settings: OpenVMSettings<F>,
-) -> LinkedProgram<'_, F> {
+) -> LinkedProgram<F> {
     let (module, functions) = load_wasm_with_settings(wasm_bytes, settings);
     LinkedProgram::new(module, functions)
 }

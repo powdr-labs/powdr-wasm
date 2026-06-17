@@ -402,25 +402,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .map_err(|e| eyre::eyre!("{e}"))?;
 
                     let (generate, select) = powdr.build_riscv_powdr_config();
-                    let pgo_data = if powdr.apc_count > 0 {
-                        let stdin = make_stdin(&input);
-                        let execution_profile =
-                            powdr_openvm::execution_profile_from_guest(&original, stdin);
-                        powdr_openvm_riscv::PgoData::Cell(execution_profile, None)
-                    } else {
-                        powdr_openvm_riscv::PgoData::None
-                    };
-                    let generate = generate.with_select_defaults(pgo_data.pgo_type(), select);
-                    let degree_bound = generate.degree_bound;
-                    let ranked = powdr_openvm_riscv::generate_apcs(
-                        &original,
-                        &generate,
-                        pgo_data,
-                        powdr_autoprecompiles::empirical_constraints::EmpiricalConstraints::default(
-                        ),
+                    let compiled = compile::compile_with_pipeline(
+                        original,
+                        make_stdin(&input),
+                        generate,
+                        select,
                     );
-                    let apcs = powdr_openvm_riscv::select_apcs(ranked, select);
-                    let compiled = powdr_openvm_riscv::setup(original, apcs, degree_bound);
 
                     let stdin = make_stdin(&input);
                     powdr_openvm_riscv::prove(&compiled, false, true, stdin, None)
@@ -451,11 +438,11 @@ fn load_wasm_exe(program: &str, function: &str, unaligned_memory: bool) -> VmExe
     linked_program.program_with_entry_point(function)
 }
 
-fn load_wasm_original_program<'a>(
-    wasm_bytes: &'a [u8],
+fn load_wasm_original_program(
+    wasm_bytes: &[u8],
     function: &str,
     unaligned_memory: bool,
-) -> OriginalCompiledProgram<'a, autoprecompiles::CrushISA> {
+) -> OriginalCompiledProgram<'static, autoprecompiles::CrushISA> {
     let (module, functions) = load_wasm(wasm_bytes, unaligned_memory);
     let linked_program = LinkedProgram::new(module, functions);
     let exe = Arc::new(linked_program.program_with_entry_point(function));
