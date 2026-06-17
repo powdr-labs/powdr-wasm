@@ -18,7 +18,7 @@ use openvm_instructions::exe::VmExe;
 use openvm_sdk::StdIn;
 use openvm_stark_sdk::bench::serialize_metric_snapshot;
 use powdr_openvm::{extraction_utils::OriginalVmConfig, program::OriginalCompiledProgram};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::AtomicU32;
 use std::sync::mpsc::channel;
@@ -243,11 +243,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             metrics,
             unaligned_memory,
         } => {
-            let wasm_bytes = std::fs::read(&program).expect("Failed to read WASM file");
-            let (module, functions) = load_wasm(&wasm_bytes, unaligned_memory);
-
             // Create and execute program
-            let mut linked_program = LinkedProgram::new(module, functions);
+            let mut linked_program = load_wasm_module(&program, unaligned_memory);
             let stdin = make_stdin(&input);
 
             let run = || -> Result<()> {
@@ -273,9 +270,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             output_dir,
             unaligned_memory,
         } => {
-            let wasm_bytes = std::fs::read(&program).expect("Failed to read WASM file");
             let original_program =
-                load_wasm_original_program(&wasm_bytes, &function, unaligned_memory);
+                load_wasm_original_program(&program, &function, unaligned_memory);
             let stdin = make_stdin(&input);
             let (generate, select) = powdr.build_powdr_config();
             compile::compile_crush_to_disk(original_program, stdin, generate, select, &output_dir)
@@ -316,9 +312,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         program.expect("program is required when --compiled-dir is not provided");
                     let function =
                         function.expect("function is required when --compiled-dir is not provided");
-                    let wasm_bytes = std::fs::read(&program).expect("Failed to read WASM file");
                     let original_program =
-                        load_wasm_original_program(&wasm_bytes, &function, unaligned_memory);
+                        load_wasm_original_program(&program, &function, unaligned_memory);
                     let (generate, select) = powdr.build_powdr_config();
                     proving::prove(
                         original_program,
@@ -431,20 +426,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn load_wasm_exe(program: &str, function: &str, unaligned_memory: bool) -> VmExe<F> {
+/// Read and link a WASM module from the file at `program`.
+fn load_wasm_module(program: impl AsRef<Path>, unaligned_memory: bool) -> LinkedProgram<F> {
     let wasm_bytes = std::fs::read(program).expect("Failed to read WASM file");
     let (module, functions) = load_wasm(&wasm_bytes, unaligned_memory);
-    let linked_program = LinkedProgram::new(module, functions);
-    linked_program.program_with_entry_point(function)
+    LinkedProgram::new(module, functions)
+}
+
+/// Like [`load_wasm_module`], but with explicit loader settings. Only used by
+/// tests that need to vary settings beyond the `unaligned_memory` flag.
+#[cfg(test)]
+fn load_wasm_module_with_settings(
+    program: impl AsRef<Path>,
+    settings: OpenVMSettings<F>,
+) -> LinkedProgram<F> {
+    let wasm_bytes = std::fs::read(program).expect("Failed to read WASM file");
+    let (module, functions) = load_wasm_with_settings(&wasm_bytes, settings);
+    LinkedProgram::new(module, functions)
+}
+
+fn load_wasm_exe(program: &str, function: &str, unaligned_memory: bool) -> VmExe<F> {
+    load_wasm_module(program, unaligned_memory).program_with_entry_point(function)
 }
 
 fn load_wasm_original_program(
-    wasm_bytes: &[u8],
+    program: impl AsRef<Path>,
     function: &str,
     unaligned_memory: bool,
 ) -> OriginalCompiledProgram<'static, autoprecompiles::CrushISA> {
-    let (module, functions) = load_wasm(wasm_bytes, unaligned_memory);
-    let linked_program = LinkedProgram::new(module, functions);
+    let linked_program = load_wasm_module(program, unaligned_memory);
     let exe = Arc::new(linked_program.program_with_entry_point(function));
     let vm_config = OriginalVmConfig::new(CrushConfig::default());
 
