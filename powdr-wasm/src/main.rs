@@ -17,8 +17,10 @@ use openvm_circuit::arch::VmState;
 use openvm_instructions::exe::VmExe;
 use openvm_sdk::StdIn;
 use openvm_stark_sdk::bench::serialize_metric_snapshot;
-use powdr_openvm::{extraction_utils::OriginalVmConfig, program::OriginalCompiledProgram};
-use std::path::PathBuf;
+use powdr_openvm::{
+    StagedPipeline, extraction_utils::OriginalVmConfig, program::OriginalCompiledProgram,
+};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::AtomicU32;
 use std::sync::mpsc::channel;
@@ -40,6 +42,13 @@ use powdr_autoprecompiles::{GenerateConfig, SelectConfig};
 struct CliArgs {
     #[command(subcommand)]
     command: Commands,
+
+    /// If set, APC pipeline stage artifacts are persisted under
+    /// `<artifacts-dir>/<stage>/<hash>/` and reused on matching reruns.
+    /// Hashing only uses each stage's own arguments, so a later-stage change
+    /// (e.g. a different runtime input) does not invalidate earlier-stage caches.
+    #[arg(long, global = true)]
+    artifacts_dir: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -61,16 +70,6 @@ struct PowdrArgs {
 impl PowdrArgs {
     fn build_powdr_config(&self) -> (GenerateConfig, SelectConfig) {
         let mut generate = powdr_openvm::default_generate_config();
-        if let Some(ref apc_candidates_dir) = self.apc_candidates_dir {
-            generate = generate.with_apc_candidates_dir(apc_candidates_dir);
-        }
-        generate =
-            generate.with_superblocks(1, self.apc_max_instructions, self.apc_exec_count_cutoff);
-        (generate, SelectConfig::new(self.apc_count, 0))
-    }
-
-    fn build_riscv_powdr_config(&self) -> (GenerateConfig, SelectConfig) {
-        let mut generate = powdr_openvm_riscv::default_generate_config();
         if let Some(ref apc_candidates_dir) = self.apc_candidates_dir {
             generate = generate.with_apc_candidates_dir(apc_candidates_dir);
         }
@@ -220,8 +219,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     setup_tracing_with_log_level(Level::INFO);
 
     // Parse command line arguments
-    let cli_args = CliArgs::parse();
-    match cli_args.command {
+    let CliArgs {
+        command,
+        artifacts_dir,
+    } = CliArgs::parse();
+    match command {
         Commands::Print {
             program,
             unaligned_memory,
@@ -243,11 +245,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             metrics,
             unaligned_memory,
         } => {
-            let wasm_bytes = std::fs::read(&program).expect("Failed to read WASM file");
-            let (module, functions) = load_wasm(&wasm_bytes, unaligned_memory);
-
             // Create and execute program
-            let mut linked_program = LinkedProgram::new(module, functions);
+            let mut linked_program = load_wasm_module(&program, unaligned_memory);
             let stdin = make_stdin(&input);
 
             let run = || -> Result<()> {
@@ -273,13 +272,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             output_dir,
             unaligned_memory,
         } => {
-            let wasm_bytes = std::fs::read(&program).expect("Failed to read WASM file");
             let original_program =
-                load_wasm_original_program(&wasm_bytes, &function, unaligned_memory);
+                load_wasm_original_program(&program, &function, unaligned_memory);
             let stdin = make_stdin(&input);
             let (generate, select) = powdr.build_powdr_config();
-            compile::compile_crush_to_disk(original_program, stdin, generate, select, &output_dir)
-                .map_err(|e| eyre::eyre!("{e}"))?;
+            compile::compile_crush_to_disk(
+                original_program,
+                stdin,
+                generate,
+                select,
+                artifacts_dir,
+                &output_dir,
+            )
+            .map_err(|e| eyre::eyre!("{e}"))?;
             println!("Compiled to {}", output_dir.display());
         }
         Commands::CompileRiscv {
@@ -289,9 +294,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             output_dir,
         } => {
             let stdin = make_stdin(&input);
-            let (generate, select) = powdr.build_riscv_powdr_config();
-            compile::compile_riscv_to_disk(&program, stdin, generate, select, &output_dir)
-                .map_err(|e| eyre::eyre!("{e}"))?;
+            let (generate, select) = powdr.build_powdr_config();
+            compile::compile_riscv_to_disk(
+                &program,
+                stdin,
+                generate,
+                select,
+                artifacts_dir,
+                &output_dir,
+            )
+            .map_err(|e| eyre::eyre!("{e}"))?;
             println!("Compiled RISC-V to {}", output_dir.display());
         }
         Commands::Prove {
@@ -316,9 +328,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         program.expect("program is required when --compiled-dir is not provided");
                     let function =
                         function.expect("function is required when --compiled-dir is not provided");
-                    let wasm_bytes = std::fs::read(&program).expect("Failed to read WASM file");
                     let original_program =
-                        load_wasm_original_program(&wasm_bytes, &function, unaligned_memory);
+                        load_wasm_original_program(&program, &function, unaligned_memory);
                     let (generate, select) = powdr.build_powdr_config();
                     proving::prove(
                         original_program,
@@ -326,6 +337,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         recursion,
                         generate,
                         select,
+                        artifacts_dir,
                         cache_dir.as_deref(),
                     )
                     .map_err(|e| eyre::eyre!("{e}"))?;
@@ -401,26 +413,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     )
                     .map_err(|e| eyre::eyre!("{e}"))?;
 
-                    let (generate, select) = powdr.build_riscv_powdr_config();
-                    let pgo_data = if powdr.apc_count > 0 {
-                        let stdin = make_stdin(&input);
-                        let execution_profile =
-                            powdr_openvm::execution_profile_from_guest(&original, stdin);
-                        powdr_openvm_riscv::PgoData::Cell(execution_profile, None)
-                    } else {
-                        powdr_openvm_riscv::PgoData::None
-                    };
-                    let generate = generate.with_select_defaults(pgo_data.pgo_type(), select);
-                    let degree_bound = generate.degree_bound;
-                    let ranked = powdr_openvm_riscv::generate_apcs(
-                        &original,
-                        &generate,
-                        pgo_data,
-                        powdr_autoprecompiles::empirical_constraints::EmpiricalConstraints::default(
-                        ),
+                    let (generate, select) = powdr.build_powdr_config();
+                    let pipeline = StagedPipeline::new(original, artifacts_dir);
+                    let compiled = compile::compile_with_pipeline(
+                        pipeline,
+                        make_stdin(&input),
+                        generate,
+                        select,
                     );
-                    let apcs = powdr_openvm_riscv::select_apcs(ranked, select);
-                    let compiled = powdr_openvm_riscv::setup(original, apcs, degree_bound);
 
                     let stdin = make_stdin(&input);
                     powdr_openvm_riscv::prove(&compiled, false, true, stdin, None)
@@ -444,20 +444,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn load_wasm_exe(program: &str, function: &str, unaligned_memory: bool) -> VmExe<F> {
+/// Read and link a WASM module from the file at `program`.
+fn load_wasm_module(program: impl AsRef<Path>, unaligned_memory: bool) -> LinkedProgram<F> {
     let wasm_bytes = std::fs::read(program).expect("Failed to read WASM file");
     let (module, functions) = load_wasm(&wasm_bytes, unaligned_memory);
-    let linked_program = LinkedProgram::new(module, functions);
-    linked_program.program_with_entry_point(function)
+    LinkedProgram::new(module, functions)
 }
 
-fn load_wasm_original_program<'a>(
-    wasm_bytes: &'a [u8],
+/// Like [`load_wasm_module`], but with explicit loader settings. Only used by
+/// tests that need to vary settings beyond the `unaligned_memory` flag.
+#[cfg(test)]
+fn load_wasm_module_with_settings(
+    program: impl AsRef<Path>,
+    settings: OpenVMSettings<F>,
+) -> LinkedProgram<F> {
+    let wasm_bytes = std::fs::read(program).expect("Failed to read WASM file");
+    let (module, functions) = load_wasm_with_settings(&wasm_bytes, settings);
+    LinkedProgram::new(module, functions)
+}
+
+fn load_wasm_exe(program: &str, function: &str, unaligned_memory: bool) -> VmExe<F> {
+    load_wasm_module(program, unaligned_memory).program_with_entry_point(function)
+}
+
+fn load_wasm_original_program(
+    program: impl AsRef<Path>,
     function: &str,
     unaligned_memory: bool,
-) -> OriginalCompiledProgram<'a, autoprecompiles::CrushISA> {
-    let (module, functions) = load_wasm(wasm_bytes, unaligned_memory);
-    let linked_program = LinkedProgram::new(module, functions);
+) -> OriginalCompiledProgram<'static, autoprecompiles::CrushISA> {
+    let linked_program = load_wasm_module(program, unaligned_memory);
     let exe = Arc::new(linked_program.program_with_entry_point(function));
     let vm_config = OriginalVmConfig::new(CrushConfig::default());
 

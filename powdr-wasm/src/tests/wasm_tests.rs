@@ -228,19 +228,6 @@ fn parse_val(s: &str) -> Result<u32, Box<dyn std::error::Error>> {
     }
 }
 
-fn load_wasm_module(wasm_bytes: &[u8]) -> LinkedProgram<'_, F> {
-    let (module, functions) = load_wasm(wasm_bytes, false);
-    LinkedProgram::new(module, functions)
-}
-
-fn load_wasm_module_with_settings(
-    wasm_bytes: &[u8],
-    settings: OpenVMSettings<F>,
-) -> LinkedProgram<'_, F> {
-    let (module, functions) = load_wasm_with_settings(wasm_bytes, settings);
-    LinkedProgram::new(module, functions)
-}
-
 fn run_and_prove_single_wasm_test(
     module_path: &str,
     function: &str,
@@ -248,8 +235,7 @@ fn run_and_prove_single_wasm_test(
     expected: &[u32],
     byte_inputs: &[&[u8]],
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let wasm_bytes = std::fs::read(module_path).expect("Failed to read WASM file");
-    let mut module = load_wasm_module(&wasm_bytes);
+    let mut module = load_wasm_module(module_path, false);
     run_wasm_test_function(&mut module, function, args, expected, true, byte_inputs)
 }
 
@@ -492,8 +478,7 @@ fn run_wasm_test_with_settings(
 
         // Load the module to be executed multiple times.
         println!("Loading test module: {module_path}");
-        let wasm_bytes = std::fs::read(full_module_path).expect("Failed to read WASM file");
-        let mut module = load_wasm_module_with_settings(&wasm_bytes, settings);
+        let mut module = load_wasm_module_with_settings(full_module_path, settings);
 
         for (function, args, expected) in cases {
             match expected {
@@ -646,10 +631,10 @@ fn test_keeper_wasi() {
     //   GOOS=wasip1 GOARCH=wasm go build -gcflags=all=-d=softfloat -tags "crush" -o keeper_wasi.wasm
     let payload = std::fs::read("../sample-programs/keeper/hoodi_payload.bin")
         .expect("failed to read hoodi_payload.bin");
-    let wasm_bytes =
-        std::fs::read("../sample-programs/keeper_wasi.wasm").expect("failed to read WASM file");
-    let mut module =
-        load_wasm_module_with_settings(&wasm_bytes, OpenVMSettings::new().with_unaligned_memory());
+    let mut module = load_wasm_module_with_settings(
+        "../sample-programs/keeper_wasi.wasm",
+        OpenVMSettings::new().with_unaligned_memory(),
+    );
 
     // Capture exe before execute() mutates memory_image.
     let exe = module.program_with_entry_point("_start");
@@ -676,10 +661,10 @@ fn test_keeper_decode_only() {
     // Used to measure the cycle cost of deserialization alone.
     let payload = std::fs::read("../sample-programs/keeper/hoodi_payload.bin")
         .expect("failed to read hoodi_payload.bin");
-    let wasm_bytes = std::fs::read("../sample-programs/keeper_decode_only.wasm")
-        .expect("failed to read WASM file");
-    let mut module =
-        load_wasm_module_with_settings(&wasm_bytes, OpenVMSettings::new().with_unaligned_memory());
+    let mut module = load_wasm_module_with_settings(
+        "../sample-programs/keeper_decode_only.wasm",
+        OpenVMSettings::new().with_unaligned_memory(),
+    );
 
     // Capture exe before execute() mutates memory_image.
     let exe = module.program_with_entry_point("_start");
@@ -804,8 +789,7 @@ fn run_eth_block(block_input: &str, prove: bool) {
         env!("CARGO_MANIFEST_DIR")
     );
     let input_bytes = std::fs::read(&input_path).expect("Failed to read block input");
-    let wasm_bytes = std::fs::read(&wasm_path).expect("Failed to read WASM file");
-    let mut module = load_wasm_module(&wasm_bytes);
+    let mut module = load_wasm_module(&wasm_path, false);
     run_wasm_test_function(&mut module, "main", &[0, 0], &[], prove, &[&input_bytes]).unwrap()
 }
 

@@ -1,5 +1,5 @@
 use openvm_sdk::StdIn;
-use powdr_autoprecompiles::{PgoData, SelectConfig};
+use powdr_autoprecompiles::SelectConfig;
 use powdr_openvm_riscv::GuestOptions;
 
 /// Compile and execute an OpenVM RISC-V guest program via powdr-openvm.
@@ -13,16 +13,9 @@ fn run_openvm_guest(guest: &str, args: &[u32]) -> Result<(), Box<dyn std::error:
 
     let generate = powdr_openvm::default_generate_config();
     let select = SelectConfig::new(0, 0);
-    let pgo_data = PgoData::None;
-    let generate = generate.with_select_defaults(pgo_data.pgo_type(), select);
-    let ranked = powdr_openvm_riscv::generate_apcs(
-        &original,
-        &generate,
-        pgo_data,
-        powdr_autoprecompiles::empirical_constraints::EmpiricalConstraints::default(),
-    );
-    let apcs = powdr_openvm_riscv::select_apcs(ranked, select);
-    let compiled = powdr_openvm_riscv::setup(original, apcs, generate.degree_bound);
+    let pipeline = powdr_openvm::StagedPipeline::new(original, None);
+    let compiled =
+        crate::compile::compile_with_pipeline(pipeline, StdIn::default(), generate, select);
 
     let mut stdin = StdIn::default();
     for arg in args {

@@ -40,7 +40,7 @@ use formatter::crush_instruction_formatter;
 pub struct CrushISA;
 
 impl OpenVmISA for CrushISA {
-    type LinkedProgram<'a> = LinkedProgram<'a, BabyBear>;
+    type LinkedProgram<'a> = LinkedProgram<BabyBear>;
     type Executor<F: openvm_circuit::arch::VmField> = CrushConfigExecutor<F>;
     type Config = CrushConfig;
     type CpuBuilder = CrushCpuBuilder;
