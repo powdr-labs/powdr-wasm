@@ -25,7 +25,7 @@ use openvm_stark_sdk::{
 use powdr_autoprecompiles::{GenerateConfig, SelectConfig};
 use powdr_openvm::extraction_utils::OriginalVmConfig;
 use powdr_openvm::program::{CompiledProgram, OriginalCompiledProgram};
-use powdr_openvm::{DEFAULT_DEGREE_BOUND, SpecializedConfig};
+use powdr_openvm::{DEFAULT_DEGREE_BOUND, SpecializedConfig, StagedPipeline};
 
 pub type F = openvm_stark_sdk::p3_baby_bear::BabyBear;
 type SC = BabyBearPoseidon2Config;
@@ -202,13 +202,8 @@ pub fn prove(
     cache_dir: Option<&Path>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let apc_count = select.autoprecompiles;
-    let compiled = crate::compile::compile_with_pipeline(
-        original_program,
-        stdin.clone(),
-        generate,
-        select,
-        artifacts_dir,
-    );
+    let pipeline = StagedPipeline::new(original_program, artifacts_dir);
+    let compiled = crate::compile::compile_with_pipeline(pipeline, stdin.clone(), generate, select);
     let app_fri_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
     let app_config = AppConfig::new(compiled.vm_config.clone(), app_fri_params);
     let sdk = if apc_count == 0 {

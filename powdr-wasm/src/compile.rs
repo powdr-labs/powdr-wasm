@@ -17,23 +17,18 @@ use powdr_openvm::{
 
 use crate::proving::{AGG_PK_FILE, APP_PK_FILE, COMPILED_PROGRAM_FILE, CrushSdk, RiscvSdk};
 
-/// Run powdr's staged APC pipeline (generate → select → setup), returning the
-/// compiled program. Shared by the crush and RISC-V compile/prove paths.
+/// Run powdr's staged APC pipeline (generate → select → setup) on `pipeline`,
+/// returning the compiled program. Shared by the crush and RISC-V
+/// compile/prove paths.
 ///
 /// `select.autoprecompiles == 0` selects no autoprecompiles (`PgoType::None`);
 /// otherwise candidates are ranked by cell density (`PgoType::Cell`) and the
 /// top `select.autoprecompiles` are kept.
-///
-/// When `artifacts_dir` is `Some`, each stage's result is cached under it and
-/// reused on matching reruns (see powdr's `--artifacts-dir`); `None` runs every
-/// stage inline. The PGO profile is keyed on `profile_input`, which is what
-/// [`make_pgo_profile`] rebuilds it from on a cache miss.
 pub(crate) fn compile_with_pipeline<ISA: OpenVmISA>(
-    original_program: OriginalCompiledProgram<'static, ISA>,
+    pipeline: StagedPipeline<ISA>,
     profile_input: StdIn,
     generate: GenerateConfig,
     select: SelectConfig,
-    artifacts_dir: Option<PathBuf>,
 ) -> CompiledProgram<ISA> {
     let pgo_type = if select.autoprecompiles > 0 {
         PgoType::Cell
@@ -45,7 +40,7 @@ pub(crate) fn compile_with_pipeline<ISA: OpenVmISA>(
     // `max_columns` means no whole-VM column budget.
     let inputs = rmp_serde::to_vec(&profile_input).expect("failed to serialize profiling input");
     let pgo_config = PgoConfig::new(pgo_type, None, inputs);
-    StagedPipeline::new(original_program, artifacts_dir).setup(
+    pipeline.setup(
         &generate,
         &pgo_config,
         select,
@@ -78,7 +73,8 @@ pub fn compile_crush_to_disk(
     std::fs::create_dir_all(output_dir)?;
 
     let apc_start = std::time::Instant::now();
-    let compiled = compile_with_pipeline(original_program, stdin, generate, select, artifacts_dir);
+    let pipeline = StagedPipeline::new(original_program, artifacts_dir);
+    let compiled = compile_with_pipeline(pipeline, stdin, generate, select);
     tracing::info!("APC generation took {:?}", apc_start.elapsed());
 
     // Serialize compiled program
@@ -136,7 +132,8 @@ pub fn compile_riscv_to_disk(
     .map_err(|e| eyre::eyre!("{e}"))?;
 
     let apc_start = std::time::Instant::now();
-    let compiled = compile_with_pipeline(original, stdin, generate, select, artifacts_dir);
+    let pipeline = StagedPipeline::new(original, artifacts_dir);
+    let compiled = compile_with_pipeline(pipeline, stdin, generate, select);
     tracing::info!("APC generation took {:?}", apc_start.elapsed());
 
     // Serialize compiled program

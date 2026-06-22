@@ -17,7 +17,9 @@ use openvm_circuit::arch::VmState;
 use openvm_instructions::exe::VmExe;
 use openvm_sdk::StdIn;
 use openvm_stark_sdk::bench::serialize_metric_snapshot;
-use powdr_openvm::{extraction_utils::OriginalVmConfig, program::OriginalCompiledProgram};
+use powdr_openvm::{
+    StagedPipeline, extraction_utils::OriginalVmConfig, program::OriginalCompiledProgram,
+};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::AtomicU32;
@@ -68,16 +70,6 @@ struct PowdrArgs {
 impl PowdrArgs {
     fn build_powdr_config(&self) -> (GenerateConfig, SelectConfig) {
         let mut generate = powdr_openvm::default_generate_config();
-        if let Some(ref apc_candidates_dir) = self.apc_candidates_dir {
-            generate = generate.with_apc_candidates_dir(apc_candidates_dir);
-        }
-        generate =
-            generate.with_superblocks(1, self.apc_max_instructions, self.apc_exec_count_cutoff);
-        (generate, SelectConfig::new(self.apc_count, 0))
-    }
-
-    fn build_riscv_powdr_config(&self) -> (GenerateConfig, SelectConfig) {
-        let mut generate = powdr_openvm_riscv::default_generate_config();
         if let Some(ref apc_candidates_dir) = self.apc_candidates_dir {
             generate = generate.with_apc_candidates_dir(apc_candidates_dir);
         }
@@ -302,7 +294,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             output_dir,
         } => {
             let stdin = make_stdin(&input);
-            let (generate, select) = powdr.build_riscv_powdr_config();
+            let (generate, select) = powdr.build_powdr_config();
             compile::compile_riscv_to_disk(
                 &program,
                 stdin,
@@ -421,13 +413,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     )
                     .map_err(|e| eyre::eyre!("{e}"))?;
 
-                    let (generate, select) = powdr.build_riscv_powdr_config();
+                    let (generate, select) = powdr.build_powdr_config();
+                    let pipeline = StagedPipeline::new(original, artifacts_dir);
                     let compiled = compile::compile_with_pipeline(
-                        original,
+                        pipeline,
                         make_stdin(&input),
                         generate,
                         select,
-                        artifacts_dir,
                     );
 
                     let stdin = make_stdin(&input);
