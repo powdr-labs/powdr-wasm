@@ -803,7 +803,7 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
                                 (mem_start >> 16) as u16,
                             )));
                             directives.push(drop_after_next(mem_start_reg as u32));
-                                // Last use of `buf_ptr` is this add (debug_print uses `adjusted`).
+                            // Last use of `buf_ptr` is this add (debug_print uses `adjusted`).
                             directives.push(drop_after_next(buf_ptr as u32));
                             directives.push(Directive::Instruction(ib::add(
                                 adjusted,
@@ -2400,10 +2400,7 @@ fn emit_table_get<'a, F: PrimeField32>(
         ));
         if last {
             // Last load reads mul_result for the last time.
-            vec![
-                drop_after_next(mul_result as u32),
-                load,
-            ]
+            vec![drop_after_next(mul_result as u32), load]
         } else {
             vec![load]
         }
@@ -2524,9 +2521,8 @@ fn translate_rot<'a, F: PrimeField32, R: RotOps<F>>(
     let output = output.start as usize;
 
     // Emit a `DropAfterNextInstruction` hint for each word of an operand.
-    let drop_words_after_next = |reg: usize| {
-        (0..R::num_words()).map(move |w| drop_after_next(reg as u32 + w))
-    };
+    let drop_words_after_next =
+        |reg: usize| (0..R::num_words()).map(move |w| drop_after_next(reg as u32 + w));
 
     let shift_ref = c
         .allocate_tmp_type::<OpenVMSettings<F>>(R::val_type())
@@ -2673,10 +2669,7 @@ fn store_to_const_addr<'a, F: PrimeField32>(
         ));
         if last {
             // Last store reads base_addr_reg for the last time.
-            vec![
-                drop_after_next(base_addr_reg.start),
-                store,
-            ]
+            vec![drop_after_next(base_addr_reg.start), store]
         } else {
             vec![store]
         }
