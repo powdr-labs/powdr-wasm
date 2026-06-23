@@ -40,7 +40,7 @@ use formatter::crush_instruction_formatter;
 pub struct CrushISA;
 
 impl OpenVmISA for CrushISA {
-    type LinkedProgram<'a> = LinkedProgram<'a, BabyBear>;
+    type LinkedProgram<'a> = LinkedProgram<BabyBear>;
     type Executor<F: openvm_circuit::arch::VmField> = CrushConfigExecutor<F>;
     type Config = CrushConfig;
     type CpuBuilder = CrushCpuBuilder;
@@ -187,8 +187,8 @@ mod tests {
 
     #[test]
     fn machine_extraction() {
-        let powdr_config = powdr_openvm::default_powdr_openvm_config(0, 0);
+        let generate = powdr_openvm::default_generate_config();
         let original_config = OriginalVmConfig::<CrushISA>::new(CrushConfig::default());
-        let _ = original_config.airs(powdr_config.degree_bound).unwrap();
+        let _ = original_config.airs(generate.degree_bound).unwrap();
     }
 }

@@ -1,6 +1,6 @@
 //! Proving infrastructure: engine setup, cached proving key, mock proof, and real proof.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use autoprecompiles::CrushISA;
@@ -22,17 +22,10 @@ use openvm_stark_sdk::{
     },
     openvm_stark_backend::{keygen::types::MultiStarkProvingKey, prover::DeviceDataTransporter},
 };
-use powdr_autoprecompiles::{
-    PowdrConfig, empirical_constraints::EmpiricalConstraints, pgo::PgoConfig,
-};
+use powdr_autoprecompiles::{GenerateConfig, SelectConfig};
 use powdr_openvm::extraction_utils::OriginalVmConfig;
-use powdr_openvm::program::CompiledProgram;
-use powdr_openvm::{DEFAULT_DEGREE_BOUND, SpecializedConfig};
-use powdr_openvm::{
-    customize_exe::{compile_apcs, setup},
-    execution_profile_from_guest,
-    program::OriginalCompiledProgram,
-};
+use powdr_openvm::program::{CompiledProgram, OriginalCompiledProgram};
+use powdr_openvm::{DEFAULT_DEGREE_BOUND, SpecializedConfig, StagedPipeline};
 
 pub type F = openvm_stark_sdk::p3_baby_bear::BabyBear;
 type SC = BabyBearPoseidon2Config;
@@ -200,27 +193,17 @@ fn build_sdk(cache_dir: Option<&Path>) -> Result<CrushSdk, Box<dyn std::error::E
 
 /// Generate and verify a real cryptographic proof, with optional recursion.
 pub fn prove(
-    original_program: OriginalCompiledProgram<CrushISA>,
+    original_program: OriginalCompiledProgram<'static, CrushISA>,
     stdin: StdIn,
     recursion: bool,
-    powdr_config: PowdrConfig,
+    generate: GenerateConfig,
+    select: SelectConfig,
+    artifacts_dir: Option<PathBuf>,
     cache_dir: Option<&Path>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let apc_count = powdr_config.autoprecompiles;
-    let pgo_config = if apc_count > 0 {
-        let execution_profile = execution_profile_from_guest(&original_program, stdin.clone());
-        PgoConfig::Cell(execution_profile, None)
-    } else {
-        PgoConfig::None
-    };
-    let degree_bound = powdr_config.degree_bound;
-    let apcs = compile_apcs(
-        &original_program,
-        &powdr_config,
-        pgo_config,
-        EmpiricalConstraints::default(),
-    );
-    let compiled = setup(original_program, apcs, degree_bound);
+    let apc_count = select.autoprecompiles;
+    let pipeline = StagedPipeline::new(original_program, artifacts_dir);
+    let compiled = crate::compile::compile_with_pipeline(pipeline, stdin.clone(), generate, select);
     let app_fri_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
     let app_config = AppConfig::new(compiled.vm_config.clone(), app_fri_params);
     let sdk = if apc_count == 0 {
