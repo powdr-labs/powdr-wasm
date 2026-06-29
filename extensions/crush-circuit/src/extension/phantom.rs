@@ -10,13 +10,12 @@ use openvm_stark_backend::p3_field::{Field, PrimeField32};
 use rand::{Rng, rngs::StdRng};
 
 use crate::adapters::{memory_read, read_rv32_register};
-use crate::memory_config::FpMemory;
 
 use openvm_instructions::riscv::RV32_MEMORY_AS;
 
-/// Reads a 32-bit register value from memory, applying FP offset.
-fn read_register<F: PrimeField32>(memory: &GuestMemory, reg_offset: u32) -> u32 {
-    let fp = memory.fp::<F>();
+/// Reads a 32-bit register value from memory, applying the FP offset.
+/// `fp` is supplied by the phantom executor from the VM execution state.
+fn read_register(memory: &GuestMemory, fp: u32, reg_offset: u32) -> u32 {
     read_rv32_register(memory, fp + reg_offset)
 }
 
@@ -30,6 +29,7 @@ impl<F: Field> PhantomSubExecutor<F> for HintInputSubEx {
         _: &GuestMemory,
         streams: &mut Streams<F>,
         _: &mut StdRng,
+        _fp: u32,
         _: PhantomDiscriminant,
         _: u32,
         _: u32,
@@ -67,14 +67,15 @@ impl<F: PrimeField32> PhantomSubExecutor<F> for PrintStrSubEx {
         memory: &GuestMemory,
         _: &mut Streams<F>,
         _: &mut StdRng,
+        fp: u32,
         _: PhantomDiscriminant,
         a: u32,
         b: u32,
         c_upper: u16,
     ) -> eyre::Result<()> {
         let mem_start = c_upper as u32;
-        let rd = read_register::<F>(memory, a);
-        let rs1 = read_register::<F>(memory, b);
+        let rd = read_register(memory, fp, a);
+        let rs1 = read_register(memory, fp, b);
         let bytes = (0..rs1)
             .map(|i| memory_read::<1>(memory, RV32_MEMORY_AS, mem_start + rd + i)[0])
             .collect::<Vec<u8>>();
@@ -93,12 +94,13 @@ impl<F: PrimeField32> PhantomSubExecutor<F> for HintRandomSubEx {
         memory: &GuestMemory,
         streams: &mut Streams<F>,
         rng: &mut StdRng,
+        fp: u32,
         _: PhantomDiscriminant,
         a: u32,
         _: u32,
         _: u16,
     ) -> eyre::Result<()> {
-        let len = read_register::<F>(memory, a) as usize;
+        let len = read_register(memory, fp, a) as usize;
         streams.hint_stream.clear();
         streams
             .hint_stream
@@ -129,6 +131,7 @@ impl<F: PrimeField32> PhantomSubExecutor<F> for ClockTimeGetSubEx {
         _: &GuestMemory,
         streams: &mut Streams<F>,
         _: &mut StdRng,
+        _fp: u32,
         _: PhantomDiscriminant,
         _: u32,
         _: u32,
@@ -162,6 +165,7 @@ impl<F: Field> PhantomSubExecutor<F> for TraceSyscallSubEx {
         _: &GuestMemory,
         _: &mut Streams<F>,
         _: &mut StdRng,
+        _fp: u32,
         _: PhantomDiscriminant,
         _: u32,
         _: u32,

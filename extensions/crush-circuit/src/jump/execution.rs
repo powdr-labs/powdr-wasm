@@ -19,10 +19,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use strum::EnumCount;
 
 use super::core::{JumpCoreFiller, JumpCoreRecord};
-use crate::{
-    adapters::{JumpAdapterExecutor, JumpAdapterFiller, RV32_REGISTER_NUM_LIMBS},
-    memory_config::FpMemory,
-};
+use crate::adapters::{JumpAdapterExecutor, JumpAdapterFiller, RV32_REGISTER_NUM_LIMBS};
 use openvm_circuit::arch::AdapterTraceFiller;
 
 /// Executor for the JUMP chip (preflight).
@@ -66,6 +63,7 @@ where
 
         <JumpAdapterExecutor as AdapterTraceExecutor<F>>::start(
             *state.pc,
+            *state.fp,
             state.memory,
             &mut adapter_record,
         );
@@ -229,7 +227,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const OPCODE
     pre_compute: &JumpPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let fp = exec_state.memory.fp::<F>();
+    let fp = exec_state.fp();
     let pc = exec_state.pc();
 
     // Always read the condition/offset register relative to FP.

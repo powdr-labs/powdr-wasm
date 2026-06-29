@@ -160,9 +160,8 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HIN
     pre_compute: &HintStorePreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<u32, ExecutionError> {
-    use crate::memory_config::FpMemory;
     let pc = exec_state.pc();
-    let fp = exec_state.memory.fp::<F>();
+    let fp = exec_state.fp();
     let mem_ptr_limbs = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, fp + pre_compute.b as u32);
     let mem_ptr = u32::from_le_bytes(mem_ptr_limbs);
 

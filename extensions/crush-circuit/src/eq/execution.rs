@@ -10,7 +10,7 @@ use std::{
     mem::size_of,
 };
 
-use crate::{adapters::W32_REG_OPS, execution::vm_read_multiple_ops, memory_config::FpMemory};
+use crate::{adapters::W32_REG_OPS, execution::vm_read_multiple_ops};
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_derive::PreflightExecutor;
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
@@ -181,7 +181,7 @@ unsafe fn execute_e12_impl<
     const { assert!(NUM_LIMBS == 4 || NUM_LIMBS == 8) };
     const { assert!(NUM_READ_OPS * RV32_REGISTER_NUM_LIMBS == NUM_LIMBS) };
 
-    let fp = exec_state.memory.fp::<F>();
+    let fp = exec_state.fp();
     let rs1 = vm_read_multiple_ops::<NUM_LIMBS, NUM_READ_OPS, _, _>(
         exec_state,
         RV32_REGISTER_AS,

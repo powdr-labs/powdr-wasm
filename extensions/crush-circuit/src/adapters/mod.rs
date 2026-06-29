@@ -14,8 +14,6 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
 
-use crate::memory_config::FP_AS;
-
 mod alu;
 pub mod call;
 mod jump;
@@ -46,20 +44,6 @@ pub const RV_IS_TYPE_IMM_BITS: usize = 12;
 pub const RV_B_TYPE_IMM_BITS: usize = 13;
 
 pub const RV_J_TYPE_IMM_BITS: usize = 21;
-
-#[inline(always)]
-pub fn fp_addr<F: PrimeCharacteristicRing>() -> MemoryAddress<F, F> {
-    MemoryAddress::new(F::from_u32(FP_AS), F::ZERO)
-}
-
-/// Build the 4-cell data block sent on the memory bus for an FP_AS access.
-/// Cell 0 carries the FP value; cells 1..4 are zero — matches what
-/// `FpMemory::set_fp` and the call adapter write into FP_AS, and the
-/// 4-cell `DEFAULT_BLOCK_SIZE` the v2 access adapter expects.
-#[inline]
-pub fn fp_block<E: PrimeCharacteristicRing>(fp: E) -> [E; 4] {
-    [fp, E::ZERO, E::ZERO, E::ZERO]
-}
 
 #[inline(always)]
 pub fn reg_addr<F: PrimeCharacteristicRing>(ptr: F) -> MemoryAddress<F, F> {
@@ -299,20 +283,6 @@ pub fn abstract_compose<T: PrimeCharacteristicRing, V: Mul<T, Output = T>>(
         .fold(T::ZERO, |acc, (i, limb)| {
             acc + limb * T::from_u32(1 << (i * RV32_CELL_BITS))
         })
-}
-
-/// Tracing read of the frame pointer from FP_AS address 0.
-/// Returns the fp value and records the previous timestamp for trace generation.
-#[inline(always)]
-pub fn tracing_read_fp<F: PrimeField32>(
-    memory: &mut TracingMemory,
-    prev_timestamp: &mut u32,
-) -> u32 {
-    // SAFETY: FP_AS uses native32 cell type (F). Block size 4 matches v2's
-    // DEFAULT_BLOCK_SIZE; only cell 0 carries the FP value.
-    let (t_prev, data) = unsafe { memory.read::<F, 4>(FP_AS, 0) };
-    *prev_timestamp = t_prev;
-    data[0].as_canonical_u32()
 }
 
 // TEMP[jpw]

@@ -22,11 +22,12 @@ pub struct ExecutionState<T> {
     pub timestamp: T,
 }
 
-/// Discards `fp` when converting to `OpenVmExecutionState`.
+/// Maps `fp` through; OpenVM's `ExecutionState` now carries the frame pointer too.
 impl<T> From<ExecutionState<T>> for OpenVmExecutionState<T> {
     fn from(state: ExecutionState<T>) -> Self {
         OpenVmExecutionState {
             pc: state.pc,
+            fp: state.fp,
             timestamp: state.timestamp,
         }
     }

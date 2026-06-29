@@ -161,7 +161,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Crush {
         inventory.add_executor(less_than, LessThanOpcode::iter().map(|x| x.global_opcode()))?;
 
         let less_than_64 = LessThan64Executor::new(
-            BaseAluAdapterExecutorDifferentInputsOutputs::default(),
+            BaseAluAdapterExecutorDifferentInputsOutputs,
             LessThan64Opcode::CLASS_OFFSET,
         );
         inventory.add_executor(
@@ -188,7 +188,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Crush {
         inventory.add_executor(eq, EqOpcode::iter().map(|x| x.global_opcode()))?;
 
         let eq_64 = Eq64Executor::new(
-            BaseAluAdapterExecutorDifferentInputsOutputs::default(),
+            BaseAluAdapterExecutorDifferentInputsOutputs,
             Eq64Opcode::CLASS_OFFSET,
         );
         inventory.add_executor(eq_64, Eq64Opcode::iter().map(|x| x.global_opcode()))?;

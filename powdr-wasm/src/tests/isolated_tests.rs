@@ -7,7 +7,7 @@
 //! - Preflight (VirtualMachine::execute_preflight)
 //! - Proof generation (VirtualMachine::prove)
 
-use crush_circuit::{CrushConfig, adapters::RV32_REGISTER_NUM_LIMBS, memory_config::FpMemory};
+use crush_circuit::{CrushConfig, adapters::RV32_REGISTER_NUM_LIMBS};
 use openvm_circuit::{
     arch::{ExecutionError, VmExecutor, VmState},
     system::memory::online::GuestMemory,
@@ -78,9 +78,9 @@ fn read_ram(memory: &GuestMemory, addr: u32) -> u32 {
     u32::from_le_bytes(bytes)
 }
 
-/// Read FP from memory.
-fn read_fp(memory: &GuestMemory) -> u32 {
-    memory.fp::<F>()
+/// Read FP from the VM execution state (no longer stored in memory).
+fn read_fp(state: &VmState<F>) -> u32 {
+    state.fp()
 }
 
 /// Build a VmExe from a test specification (program and PC only).
@@ -123,9 +123,7 @@ fn build_initial_state(spec: &TestSpec, exe: &VmExe<F>, vm_config: &CrushConfig)
 
     // Set initial FP
     // Again, the raw value stored in the state is the FP multiplied by RV32_REGISTER_NUM_LIMBS.
-    state
-        .memory
-        .set_fp::<F>(spec.start_fp * RV32_REGISTER_NUM_LIMBS as u32);
+    state.set_fp(spec.start_fp * RV32_REGISTER_NUM_LIMBS as u32);
 
     state
 }
@@ -155,7 +153,7 @@ fn verify_state(
 
     // Verify expected FP
     // The raw value stored in the state is the FP multiplied by RV32_REGISTER_NUM_LIMBS, so we need to divide it to get the actual FP.
-    let actual_fp = read_fp(&final_state.memory) / RV32_REGISTER_NUM_LIMBS as u32;
+    let actual_fp = read_fp(final_state) / RV32_REGISTER_NUM_LIMBS as u32;
     let expected_fp = spec.expected_fp.unwrap_or(spec.start_fp);
     if actual_fp != expected_fp {
         return Err(format!("FP expected {expected_fp}, got {actual_fp}").into());

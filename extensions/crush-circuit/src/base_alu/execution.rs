@@ -12,7 +12,6 @@ use std::{
 
 use crate::{
     execution::{vm_read_multiple_ops, vm_write_multiple_ops},
-    memory_config::FpMemory,
     utils::sign_extend_u32,
 };
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
@@ -216,7 +215,7 @@ unsafe fn execute_e12_impl<
     const { assert!(NUM_LIMBS == 4 || NUM_LIMBS == 8) };
     const { assert!(NUM_REG_OPS * RV32_REGISTER_NUM_LIMBS == NUM_LIMBS) };
 
-    let fp = exec_state.memory.fp::<F>();
+    let fp = exec_state.fp();
     let rs1 = vm_read_multiple_ops::<NUM_LIMBS, NUM_REG_OPS, _, _>(
         exec_state,
         RV32_REGISTER_AS,
