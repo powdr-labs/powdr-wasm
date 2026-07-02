@@ -11,18 +11,17 @@ use std::{
     mem::size_of,
 };
 
-use crate::adapters::{BaseAluAdapterExecutor, RV32_REGISTER_NUM_LIMBS, imm_to_bytes};
+use crate::adapters::{imm_to_bytes, BaseAluAdapterExecutor, RV32_REGISTER_NUM_LIMBS};
 use crate::execution::{vm_read_multiple_ops, vm_write_multiple_ops};
-use crate::memory_config::FpMemory;
 use crate::utils::sign_extend_u32;
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_derive::PreflightExecutor;
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
-    LocalOpcode,
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_CELL_BITS, RV32_IMM_AS, RV32_REGISTER_AS},
+    LocalOpcode,
 };
 use openvm_rv32im_circuit::DivRemExecutor as DivRemExecutorInner;
 use openvm_rv32im_transpiler::DivRemOpcode;
@@ -213,7 +212,7 @@ unsafe fn execute_e12_impl<
     const { assert!(NUM_LIMBS == 4 || NUM_LIMBS == 8) };
     const { assert!(NUM_REG_OPS * RV32_REGISTER_NUM_LIMBS == NUM_LIMBS) };
 
-    let fp = exec_state.memory.fp::<F>();
+    let fp = exec_state.extra_regs()[0];
     let rs1 = vm_read_multiple_ops::<NUM_LIMBS, NUM_REG_OPS, _, _>(
         exec_state,
         RV32_REGISTER_AS,

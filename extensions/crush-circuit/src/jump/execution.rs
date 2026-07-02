@@ -6,23 +6,20 @@ use std::{
 use openvm_circuit::{
     arch::*,
     system::memory::{
-        MemoryAuxColsFactory,
         online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_crush_transpiler::JumpOpcode;
 use openvm_instructions::{
-    LocalOpcode, instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS,
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use strum::EnumCount;
 
 use super::core::{JumpCoreFiller, JumpCoreRecord};
-use crate::{
-    adapters::{JumpAdapterExecutor, JumpAdapterFiller, RV32_REGISTER_NUM_LIMBS},
-    memory_config::FpMemory,
-};
+use crate::adapters::{JumpAdapterExecutor, JumpAdapterFiller, RV32_REGISTER_NUM_LIMBS};
 use openvm_circuit::arch::AdapterTraceFiller;
 
 /// Executor for the JUMP chip (preflight).
@@ -42,13 +39,13 @@ impl<F, RA> PreflightExecutor<F, RA> for JumpExecutor
 where
     F: PrimeField32,
     for<'buf> RA: RecordArena<
-            'buf,
-            EmptyAdapterCoreLayout<F, JumpAdapterExecutor>,
-            (
-                <JumpAdapterExecutor as AdapterTraceExecutor<F>>::RecordMut<'buf>,
-                &'buf mut JumpCoreRecord,
-            ),
-        >,
+        'buf,
+        EmptyAdapterCoreLayout<F, JumpAdapterExecutor>,
+        (
+            <JumpAdapterExecutor as AdapterTraceExecutor<F>>::RecordMut<'buf>,
+            &'buf mut JumpCoreRecord,
+        ),
+    >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", JumpOpcode::from_usize(opcode - self.offset))
@@ -66,6 +63,7 @@ where
 
         <JumpAdapterExecutor as AdapterTraceExecutor<F>>::start(
             *state.pc,
+            *state.extra_regs,
             state.memory,
             &mut adapter_record,
         );
@@ -229,7 +227,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const OPCODE
     pre_compute: &JumpPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let fp = exec_state.memory.fp::<F>();
+    let fp = exec_state.extra_regs()[0];
     let pc = exec_state.pc();
 
     // Always read the condition/offset register relative to FP.

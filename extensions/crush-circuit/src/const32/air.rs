@@ -1,20 +1,19 @@
 use std::borrow::Borrow;
 
-use crate::adapters::{fp_addr, fp_block, reg_addr};
-use crate::execution::ExecutionState;
-use openvm_circuit::arch::{ExecutionBridge, ExecutionState as OvmExecutionState};
-use openvm_circuit::system::memory::offline_checker::{
-    MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols,
+use crate::adapters::reg_addr;
+use openvm_circuit::arch::{
+    ExecutionBridge, ExecutionState, ExecutionState as OvmExecutionState, EXTRA_EXEC_REGS,
 };
-use openvm_circuit_primitives::{AlignedBorrow, bitwise_op_lookup::BitwiseOperationLookupBus};
+use openvm_circuit::system::memory::offline_checker::{MemoryBridge, MemoryWriteAuxCols};
+use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupBus, AlignedBorrow};
 use openvm_instructions::program::DEFAULT_PC_STEP;
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_stark_backend::interaction::InteractionBuilder;
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_backend::{
-    BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir,
     p3_air::{Air, BaseAir},
     p3_matrix::Matrix,
+    BaseAirWithPublicValues, ColumnsAir, PartitionedBaseAir,
 };
 use struct_reflection::{StructReflection, StructReflectionHelper};
 
@@ -22,10 +21,9 @@ use struct_reflection::{StructReflection, StructReflectionHelper};
 #[derive(AlignedBorrow, StructReflection)]
 pub struct Const32AdapterAirCol<T, const NUM_LIMBS: usize> {
     pub is_valid: T,
-    pub from_state: ExecutionState<T>,
+    pub from_state: ExecutionState<T, EXTRA_EXEC_REGS>,
     pub rd_ptr: T,
     pub imm_limbs: [T; NUM_LIMBS],
-    pub fp_read_aux: MemoryReadAuxCols<T>,
     pub write_aux: MemoryWriteAuxCols<T, NUM_LIMBS>,
 }
 
@@ -73,20 +71,13 @@ where
             timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
-        // Read fp
-        self.memory_bridge
-            .read(
-                fp_addr::<AB::F>(),
-                fp_block::<AB::Expr>(cols.from_state.fp.into()),
-                timestamp_pp(),
-                &cols.fp_read_aux,
-            )
-            .eval(builder, cols.is_valid);
+        // fp is carried in the execution state (received on the execution bus), not read from
+        // memory. The register write below uses `cols.from_state.extra_regs[0]` directly.
 
         // Write imm_limbs to register at rd_ptr + fp
         self.memory_bridge
             .write(
-                reg_addr(cols.rd_ptr + cols.from_state.fp),
+                reg_addr(cols.rd_ptr + cols.from_state.extra_regs[0]),
                 cols.imm_limbs,
                 timestamp_pp(),
                 &cols.write_aux,
@@ -123,6 +114,7 @@ where
                 OvmExecutionState {
                     pc: cols.from_state.pc + AB::F::from_u32(DEFAULT_PC_STEP),
                     timestamp: timestamp + AB::F::from_usize(timestamp_delta),
+                    extra_regs: [cols.from_state.extra_regs[0].into()],
                 },
             )
             .eval(builder, cols.is_valid);

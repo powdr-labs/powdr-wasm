@@ -3,15 +3,13 @@ Instructions:
   4: ADD_64 r2, r0, 0
 
 APC advantage:
-  - Main columns: 105 -> 33 (3.18x reduction)
-  - Bus interactions: 64 -> 24 (2.67x reduction)
-  - Constraints: 61 -> 5 (12.20x reduction)
+  - Main columns: 99 -> 31 (3.19x reduction)
+  - Bus interactions: 56 -> 20 (2.80x reduction)
+  - Constraints: 59 -> 5 (11.80x reduction)
 
-Symbolic machine using 33 unique main columns:
+Symbolic machine using 31 unique main columns:
   from_state__fp_0
   from_state__timestamp_0
-  fp_read_aux__base__prev_timestamp_0
-  fp_read_aux__base__timestamp_lt_aux__lower_decomp__0_0
   rs1_reads_aux__0__base__prev_timestamp_0
   rs1_reads_aux__0__base__timestamp_lt_aux__lower_decomp__0_0
   writes_aux__0__prev_data__0_0
@@ -43,32 +41,28 @@ Symbolic machine using 33 unique main columns:
   is_valid
 
 // Bus 0 (EXECUTION_BRIDGE):
-mult=-is_valid, args=[0, from_state__timestamp_0]
-mult=is_valid, args=[8, from_state__timestamp_0 + 11]
+mult=-is_valid, args=[0, from_state__fp_0, from_state__timestamp_0]
+mult=is_valid, args=[8, from_state__fp_0, from_state__timestamp_0 + 9]
 
 // Bus 1 (MEMORY):
-mult=-is_valid, args=[5, 0, from_state__fp_0, 0, 0, 0, fp_read_aux__base__prev_timestamp_0]
 mult=-is_valid, args=[1, from_state__fp_0, writes_aux__0__prev_data__0_0, writes_aux__0__prev_data__1_0, writes_aux__0__prev_data__2_0, writes_aux__0__prev_data__3_0, rs1_reads_aux__0__base__prev_timestamp_0]
-mult=is_valid, args=[5, 0, from_state__fp_0, 0, 0, 0, from_state__timestamp_0 + 4]
-mult=is_valid, args=[1, from_state__fp_0, a__0_0, a__1_0, a__2_0, a__3_0, from_state__timestamp_0 + 5]
+mult=is_valid, args=[1, from_state__fp_0, a__0_0, a__1_0, a__2_0, a__3_0, from_state__timestamp_0 + 3]
 mult=-is_valid, args=[1, from_state__fp_0 + 4, a__4_1, a__5_1, a__6_1, a__7_1, rs1_reads_aux__1__base__prev_timestamp_1]
-mult=is_valid, args=[1, from_state__fp_0 + 4, a__4_1, a__5_1, a__6_1, a__7_1, from_state__timestamp_0 + 6]
+mult=is_valid, args=[1, from_state__fp_0 + 4, a__4_1, a__5_1, a__6_1, a__7_1, from_state__timestamp_0 + 4]
 mult=-is_valid, args=[1, from_state__fp_0 + 8, writes_aux__0__prev_data__0_1, writes_aux__0__prev_data__1_1, writes_aux__0__prev_data__2_1, writes_aux__0__prev_data__3_1, writes_aux__0__base__prev_timestamp_1]
-mult=is_valid, args=[1, from_state__fp_0 + 8, a__0_0, a__1_0, a__2_0, a__3_0, from_state__timestamp_0 + 9]
+mult=is_valid, args=[1, from_state__fp_0 + 8, a__0_0, a__1_0, a__2_0, a__3_0, from_state__timestamp_0 + 7]
 mult=-is_valid, args=[1, from_state__fp_0 + 12, writes_aux__1__prev_data__0_1, writes_aux__1__prev_data__1_1, writes_aux__1__prev_data__2_1, writes_aux__1__prev_data__3_1, writes_aux__1__base__prev_timestamp_1]
-mult=is_valid, args=[1, from_state__fp_0 + 12, a__4_1, a__5_1, a__6_1, a__7_1, from_state__timestamp_0 + 10]
+mult=is_valid, args=[1, from_state__fp_0 + 12, a__4_1, a__5_1, a__6_1, a__7_1, from_state__timestamp_0 + 8]
 
 // Bus 3 (VARIABLE_RANGE_CHECKER):
-mult=is_valid, args=[fp_read_aux__base__timestamp_lt_aux__lower_decomp__0_0, 17]
-mult=is_valid, args=[15360 * fp_read_aux__base__prev_timestamp_0 + 15360 * fp_read_aux__base__timestamp_lt_aux__lower_decomp__0_0 + 15360 - 15360 * from_state__timestamp_0, 12]
 mult=is_valid, args=[rs1_reads_aux__0__base__timestamp_lt_aux__lower_decomp__0_0, 17]
-mult=is_valid, args=[15360 * rs1_reads_aux__0__base__prev_timestamp_0 + 15360 * rs1_reads_aux__0__base__timestamp_lt_aux__lower_decomp__0_0 - 15360 * from_state__timestamp_0, 12]
+mult=is_valid, args=[15360 * rs1_reads_aux__0__base__prev_timestamp_0 + 15360 * rs1_reads_aux__0__base__timestamp_lt_aux__lower_decomp__0_0 + 15360 - 15360 * from_state__timestamp_0, 12]
 mult=is_valid, args=[rs1_reads_aux__1__base__timestamp_lt_aux__lower_decomp__0_1, 17]
-mult=is_valid, args=[15360 * rs1_reads_aux__1__base__prev_timestamp_1 + 15360 * rs1_reads_aux__1__base__timestamp_lt_aux__lower_decomp__0_1 - (15360 * from_state__timestamp_0 + 76800), 12]
+mult=is_valid, args=[15360 * rs1_reads_aux__1__base__prev_timestamp_1 + 15360 * rs1_reads_aux__1__base__timestamp_lt_aux__lower_decomp__0_1 - (15360 * from_state__timestamp_0 + 46080), 12]
 mult=is_valid, args=[writes_aux__0__base__timestamp_lt_aux__lower_decomp__0_1, 17]
-mult=is_valid, args=[15360 * writes_aux__0__base__prev_timestamp_1 + 15360 * writes_aux__0__base__timestamp_lt_aux__lower_decomp__0_1 - (15360 * from_state__timestamp_0 + 122880), 12]
+mult=is_valid, args=[15360 * writes_aux__0__base__prev_timestamp_1 + 15360 * writes_aux__0__base__timestamp_lt_aux__lower_decomp__0_1 - (15360 * from_state__timestamp_0 + 92160), 12]
 mult=is_valid, args=[writes_aux__1__base__timestamp_lt_aux__lower_decomp__0_1, 17]
-mult=is_valid, args=[15360 * writes_aux__1__base__prev_timestamp_1 + 15360 * writes_aux__1__base__timestamp_lt_aux__lower_decomp__0_1 - (15360 * from_state__timestamp_0 + 138240), 12]
+mult=is_valid, args=[15360 * writes_aux__1__base__prev_timestamp_1 + 15360 * writes_aux__1__base__timestamp_lt_aux__lower_decomp__0_1 - (15360 * from_state__timestamp_0 + 107520), 12]
 
 // Bus 6 (BITWISE_LOOKUP):
 mult=is_valid, args=[a__0_0, a__1_0, 0, 0]

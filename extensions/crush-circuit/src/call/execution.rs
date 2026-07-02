@@ -10,14 +10,13 @@ use openvm_circuit::{
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_crush_transpiler::CallOpcode;
 use openvm_instructions::{
-    LocalOpcode, VmOpcode, instruction::Instruction, program::DEFAULT_PC_STEP,
-    riscv::RV32_REGISTER_AS,
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
+    VmOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::adapters::RV32_REGISTER_NUM_LIMBS;
 use crate::adapters::call::{CallAdapterWrite, CallData};
-use crate::memory_config::FpMemory;
+use crate::adapters::RV32_REGISTER_NUM_LIMBS;
 
 use super::core::CallCoreRecord;
 
@@ -57,10 +56,10 @@ where
     F: PrimeField32,
     A: 'static + AdapterTraceExecutor<F, ReadData = CallData<u8>, WriteData = CallAdapterWrite<u8>>,
     for<'buf> RA: RecordArena<
-            'buf,
-            EmptyAdapterCoreLayout<F, A>,
-            (A::RecordMut<'buf>, &'buf mut CallCoreRecord),
-        >,
+        'buf,
+        EmptyAdapterCoreLayout<F, A>,
+        (A::RecordMut<'buf>, &'buf mut CallCoreRecord),
+    >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
         let local_idx = VmOpcode::from_usize(opcode).local_opcode_idx(CallOpcode::CLASS_OFFSET);
@@ -76,7 +75,12 @@ where
         let opcode = CallOpcode::from_usize(local_idx);
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
-        A::start(*state.pc, state.memory, &mut adapter_record);
+        A::start(
+            *state.pc,
+            *state.extra_regs,
+            state.memory,
+            &mut adapter_record,
+        );
 
         // Read through the adapter: [new_fp_bytes, to_pc_bytes]
         // new_fp_bytes is only valid for RET (register read); zeros for CALL/CALL_INDIRECT
@@ -87,8 +91,8 @@ where
             .adapter
             .read(state.memory, instruction, &mut adapter_record);
 
-        // Get old FP from memory (hasn't been modified yet by the write phase)
-        let old_fp_val = state.memory.data.fp::<F>();
+        // Old FP comes from the VM execution state (no longer stored in memory).
+        let old_fp_val = state.extra_regs[0];
 
         // Compute actual new FP:
         // CALL/CALL_INDIRECT: new_fp = old_fp + immediate offset (d operand)
@@ -132,6 +136,8 @@ where
         };
 
         *state.pc = to_pc;
+        // FP is carried in the VM state; update it for the next instruction.
+        state.extra_regs[0] = new_fp;
 
         Ok(())
     }
@@ -207,7 +213,7 @@ unsafe fn execute_call_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 ) {
     // TODO: Instead of dispatching at runtime, we should do it at compile-time!
     let opcode = CallOpcode::from_repr(pre.opcode as usize).unwrap();
-    let fp = exec_state.memory.fp::<F>();
+    let fp = exec_state.extra_regs()[0];
 
     // Compute new FP:
     // CALL/CALL_INDIRECT: new_fp = old_fp + immediate offset (to_fp_operand)
@@ -257,7 +263,7 @@ unsafe fn execute_call_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     }
 
     // Set new FP
-    exec_state.memory.set_fp::<F>(new_fp);
+    exec_state.set_extra_regs([new_fp]);
 
     // Set new PC
     exec_state.set_pc(to_pc);

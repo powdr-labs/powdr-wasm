@@ -2,15 +2,13 @@ Instructions:
   0: NEQ_64 r4, r0, r2
 
 APC advantage:
-  - Main columns: 56 -> 37 (1.51x reduction)
-  - Bus interactions: 28 -> 26 (1.08x reduction)
-  - Constraints: 28 -> 11 (2.55x reduction)
+  - Main columns: 53 -> 35 (1.51x reduction)
+  - Bus interactions: 24 -> 22 (1.09x reduction)
+  - Constraints: 27 -> 11 (2.45x reduction)
 
-Symbolic machine using 37 unique main columns:
+Symbolic machine using 35 unique main columns:
   from_state__fp_0
   from_state__timestamp_0
-  fp_read_aux__base__prev_timestamp_0
-  fp_read_aux__base__timestamp_lt_aux__lower_decomp__0_0
   rs1_reads_aux__0__base__prev_timestamp_0
   rs1_reads_aux__0__base__timestamp_lt_aux__lower_decomp__0_0
   rs1_reads_aux__1__base__prev_timestamp_0
@@ -42,40 +40,36 @@ Symbolic machine using 37 unique main columns:
   c__6_0
   c__7_0
   cmp_result_0
-  free_var_64
+  free_var_61
   is_valid
 
 // Bus 0 (EXECUTION_BRIDGE):
-mult=-is_valid, args=[0, from_state__timestamp_0]
-mult=is_valid, args=[4, from_state__timestamp_0 + 6]
+mult=-is_valid, args=[0, from_state__fp_0, from_state__timestamp_0]
+mult=is_valid, args=[4, from_state__fp_0, from_state__timestamp_0 + 5]
 
 // Bus 1 (MEMORY):
-mult=-is_valid, args=[5, 0, from_state__fp_0, 0, 0, 0, fp_read_aux__base__prev_timestamp_0]
-mult=is_valid, args=[5, 0, from_state__fp_0, 0, 0, 0, from_state__timestamp_0]
 mult=-is_valid, args=[1, from_state__fp_0, b__0_0, b__1_0, b__2_0, b__3_0, rs1_reads_aux__0__base__prev_timestamp_0]
-mult=is_valid, args=[1, from_state__fp_0, b__0_0, b__1_0, b__2_0, b__3_0, from_state__timestamp_0 + 1]
+mult=is_valid, args=[1, from_state__fp_0, b__0_0, b__1_0, b__2_0, b__3_0, from_state__timestamp_0]
 mult=-is_valid, args=[1, from_state__fp_0 + 4, b__4_0, b__5_0, b__6_0, b__7_0, rs1_reads_aux__1__base__prev_timestamp_0]
-mult=is_valid, args=[1, from_state__fp_0 + 4, b__4_0, b__5_0, b__6_0, b__7_0, from_state__timestamp_0 + 2]
+mult=is_valid, args=[1, from_state__fp_0 + 4, b__4_0, b__5_0, b__6_0, b__7_0, from_state__timestamp_0 + 1]
 mult=-is_valid, args=[1, from_state__fp_0 + 8, c__0_0, c__1_0, c__2_0, c__3_0, rs2_reads_aux__0__base__prev_timestamp_0]
-mult=is_valid, args=[1, from_state__fp_0 + 8, c__0_0, c__1_0, c__2_0, c__3_0, from_state__timestamp_0 + 3]
+mult=is_valid, args=[1, from_state__fp_0 + 8, c__0_0, c__1_0, c__2_0, c__3_0, from_state__timestamp_0 + 2]
 mult=-is_valid, args=[1, from_state__fp_0 + 12, c__4_0, c__5_0, c__6_0, c__7_0, rs2_reads_aux__1__base__prev_timestamp_0]
-mult=is_valid, args=[1, from_state__fp_0 + 12, c__4_0, c__5_0, c__6_0, c__7_0, from_state__timestamp_0 + 4]
+mult=is_valid, args=[1, from_state__fp_0 + 12, c__4_0, c__5_0, c__6_0, c__7_0, from_state__timestamp_0 + 3]
 mult=-is_valid, args=[1, from_state__fp_0 + 16, writes_aux__0__prev_data__0_0, writes_aux__0__prev_data__1_0, writes_aux__0__prev_data__2_0, writes_aux__0__prev_data__3_0, writes_aux__0__base__prev_timestamp_0]
-mult=is_valid, args=[1, from_state__fp_0 + 16, cmp_result_0, 0, 0, 0, from_state__timestamp_0 + 5]
+mult=is_valid, args=[1, from_state__fp_0 + 16, cmp_result_0, 0, 0, 0, from_state__timestamp_0 + 4]
 
 // Bus 3 (VARIABLE_RANGE_CHECKER):
-mult=is_valid, args=[fp_read_aux__base__timestamp_lt_aux__lower_decomp__0_0, 17]
-mult=is_valid, args=[15360 * fp_read_aux__base__prev_timestamp_0 + 15360 * fp_read_aux__base__timestamp_lt_aux__lower_decomp__0_0 + 15360 - 15360 * from_state__timestamp_0, 12]
 mult=is_valid, args=[rs1_reads_aux__0__base__timestamp_lt_aux__lower_decomp__0_0, 17]
-mult=is_valid, args=[15360 * rs1_reads_aux__0__base__prev_timestamp_0 + 15360 * rs1_reads_aux__0__base__timestamp_lt_aux__lower_decomp__0_0 - 15360 * from_state__timestamp_0, 12]
+mult=is_valid, args=[15360 * rs1_reads_aux__0__base__prev_timestamp_0 + 15360 * rs1_reads_aux__0__base__timestamp_lt_aux__lower_decomp__0_0 + 15360 - 15360 * from_state__timestamp_0, 12]
 mult=is_valid, args=[rs1_reads_aux__1__base__timestamp_lt_aux__lower_decomp__0_0, 17]
-mult=is_valid, args=[15360 * rs1_reads_aux__1__base__prev_timestamp_0 + 15360 * rs1_reads_aux__1__base__timestamp_lt_aux__lower_decomp__0_0 - (15360 * from_state__timestamp_0 + 15360), 12]
+mult=is_valid, args=[15360 * rs1_reads_aux__1__base__prev_timestamp_0 + 15360 * rs1_reads_aux__1__base__timestamp_lt_aux__lower_decomp__0_0 - 15360 * from_state__timestamp_0, 12]
 mult=is_valid, args=[rs2_reads_aux__0__base__timestamp_lt_aux__lower_decomp__0_0, 17]
-mult=is_valid, args=[15360 * rs2_reads_aux__0__base__prev_timestamp_0 + 15360 * rs2_reads_aux__0__base__timestamp_lt_aux__lower_decomp__0_0 - (15360 * from_state__timestamp_0 + 30720), 12]
+mult=is_valid, args=[15360 * rs2_reads_aux__0__base__prev_timestamp_0 + 15360 * rs2_reads_aux__0__base__timestamp_lt_aux__lower_decomp__0_0 - (15360 * from_state__timestamp_0 + 15360), 12]
 mult=is_valid, args=[rs2_reads_aux__1__base__timestamp_lt_aux__lower_decomp__0_0, 17]
-mult=is_valid, args=[15360 * rs2_reads_aux__1__base__prev_timestamp_0 + 15360 * rs2_reads_aux__1__base__timestamp_lt_aux__lower_decomp__0_0 - (15360 * from_state__timestamp_0 + 46080), 12]
+mult=is_valid, args=[15360 * rs2_reads_aux__1__base__prev_timestamp_0 + 15360 * rs2_reads_aux__1__base__timestamp_lt_aux__lower_decomp__0_0 - (15360 * from_state__timestamp_0 + 30720), 12]
 mult=is_valid, args=[writes_aux__0__base__timestamp_lt_aux__lower_decomp__0_0, 17]
-mult=is_valid, args=[15360 * writes_aux__0__base__prev_timestamp_0 + 15360 * writes_aux__0__base__timestamp_lt_aux__lower_decomp__0_0 - (15360 * from_state__timestamp_0 + 61440), 12]
+mult=is_valid, args=[15360 * writes_aux__0__base__prev_timestamp_0 + 15360 * writes_aux__0__base__timestamp_lt_aux__lower_decomp__0_0 - (15360 * from_state__timestamp_0 + 46080), 12]
 
 // Algebraic constraints:
 cmp_result_0 * (cmp_result_0 - 1) = 0
@@ -87,5 +81,5 @@ cmp_result_0 * (cmp_result_0 - 1) = 0
 (1 - cmp_result_0) * (b__5_0 - c__5_0) = 0
 (1 - cmp_result_0) * (b__6_0 - c__6_0) = 0
 (1 - cmp_result_0) * (b__7_0 - c__7_0) = 0
-free_var_64 * ((b__0_0 - c__0_0) * (b__0_0 - c__0_0) + (b__1_0 - c__1_0) * (b__1_0 - c__1_0) + (b__2_0 - c__2_0) * (b__2_0 - c__2_0) + (b__3_0 - c__3_0) * (b__3_0 - c__3_0) + (b__4_0 - c__4_0) * (b__4_0 - c__4_0) + (b__5_0 - c__5_0) * (b__5_0 - c__5_0) + (b__6_0 - c__6_0) * (b__6_0 - c__6_0) + (b__7_0 - c__7_0) * (b__7_0 - c__7_0)) - cmp_result_0 = 0
+free_var_61 * ((b__0_0 - c__0_0) * (b__0_0 - c__0_0) + (b__1_0 - c__1_0) * (b__1_0 - c__1_0) + (b__2_0 - c__2_0) * (b__2_0 - c__2_0) + (b__3_0 - c__3_0) * (b__3_0 - c__3_0) + (b__4_0 - c__4_0) * (b__4_0 - c__4_0) + (b__5_0 - c__5_0) * (b__5_0 - c__5_0) + (b__6_0 - c__6_0) * (b__6_0 - c__6_0) + (b__7_0 - c__7_0) * (b__7_0 - c__7_0)) - cmp_result_0 = 0
 is_valid * (is_valid - 1) = 0

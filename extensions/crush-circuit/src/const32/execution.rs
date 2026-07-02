@@ -1,14 +1,11 @@
-use crate::adapters::tracing_read_fp;
 use crate::adapters::{decompose, tracing_write};
 use crate::air::Const32AdapterAirCol;
-use crate::memory_config::FpMemory;
 use itertools::Itertools;
 use openvm_circuit::arch::*;
-use openvm_circuit::system::memory::offline_checker::MemoryReadAuxRecord;
 use openvm_circuit::system::memory::offline_checker::MemoryWriteBytesAuxRecord;
 use openvm_circuit::system::memory::online::TracingMemory;
-use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
+use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -80,7 +77,8 @@ where
         record.rd_ptr = a.as_canonical_u32();
         record.imm = imm;
 
-        record.fp = tracing_read_fp::<F>(state.memory, &mut record.fp_read_aux.prev_timestamp);
+        // fp is carried in the VM execution state, not read from memory.
+        record.fp = state.extra_regs[0];
         tracing_write(
             state.memory,
             RV32_REGISTER_AS,
@@ -154,7 +152,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, Ctx: ExecutionCtxTrait, const NUM_LI
     pre_compute: &Const32PreCompute,
     exec_state: &mut VmExecState<F, openvm_circuit::system::memory::online::GuestMemory, Ctx>,
 ) {
-    let fp = exec_state.memory.fp::<F>();
+    let fp = exec_state.extra_regs()[0];
 
     let imm_bytes: [u8; NUM_LIMBS] = std::array::from_fn(|i| (pre_compute.imm >> (8 * i)) as u8);
     exec_state.vm_write::<u8, NUM_LIMBS>(RV32_REGISTER_AS, fp + pre_compute.target_reg, &imm_bytes);
@@ -207,7 +205,6 @@ pub struct Const32Record {
 
     pub rd_ptr: u32,
     pub imm: u32,
-    pub fp_read_aux: MemoryReadAuxRecord,
     pub writes_aux: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
 }
 
@@ -225,21 +222,14 @@ impl<F: PrimeField32, const NUM_LIMBS: usize> TraceFiller<F> for Const32Filler<N
         let record: &Const32Record = unsafe { get_record_from_slice(&mut row_slice, ()) };
         let cols: &mut Const32AdapterAirCol<F, NUM_LIMBS> = row_slice.borrow_mut();
 
-        // fp_read_aux: fill timestamp proof for FP read at from_timestamp + 0
-        mem_helper.fill(
-            record.fp_read_aux.prev_timestamp,
-            record.from_timestamp,
-            cols.fp_read_aux.as_mut(),
-        );
-
-        // write_aux: set prev_data and fill timestamp proof
-        // Write happens at from_timestamp + 1 (after FP read at from_timestamp + 0)
+        // write_aux: set prev_data and fill timestamp proof.
+        // fp is no longer read from memory, so the write is the first op (from_timestamp + 0).
         cols.write_aux.set_prev_data(std::array::from_fn(|i| {
             F::from_u8(record.writes_aux.prev_data[i])
         }));
         mem_helper.fill(
             record.writes_aux.prev_timestamp,
-            record.from_timestamp + 1,
+            record.from_timestamp,
             cols.write_aux.as_mut(),
         );
 
@@ -255,10 +245,12 @@ impl<F: PrimeField32, const NUM_LIMBS: usize> TraceFiller<F> for Const32Filler<N
         // rd_ptr
         cols.rd_ptr = F::from_u32(record.rd_ptr);
 
-        // from_state
-        cols.from_state.timestamp = F::from_u32(record.from_timestamp);
-        cols.from_state.fp = F::from_u32(record.fp);
-        cols.from_state.pc = F::from_u32(record.from_pc);
+        // from_state — snapshot first: its column layout (pc, timestamp, extra_regs) no longer
+        // aligns with the record, so a write would clobber a not-yet-read record field.
+        let (from_pc, fp, from_timestamp) = (record.from_pc, record.fp, record.from_timestamp);
+        cols.from_state.extra_regs[0] = F::from_u32(fp);
+        cols.from_state.timestamp = F::from_u32(from_timestamp);
+        cols.from_state.pc = F::from_u32(from_pc);
 
         // is_valid
         cols.is_valid = F::ONE;

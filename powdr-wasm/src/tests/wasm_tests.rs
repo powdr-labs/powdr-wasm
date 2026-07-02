@@ -289,12 +289,15 @@ fn run_wasm_test_function_raw(
         stdin
     };
 
-    let initial_state = VmState::initial(
+    let mut initial_state = VmState::initial(
         &vm_config.system,
         &exe.init_memory,
         exe.pc_start,
         make_stdin(),
     );
+    // Populate debug infos so the per-instruction backtrace metrics hook (enabled in debug
+    // builds) can index them; otherwise it panics on an empty table. Mirrors the isolated harness.
+    initial_state.metrics.debug_infos = exe.program.debug_infos();
 
     // Execution (also updates module.memory_image for wast test reuse)
     println!("  Execution");

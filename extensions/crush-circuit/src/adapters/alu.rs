@@ -1,26 +1,23 @@
-use std::{
-    borrow::{Borrow, BorrowMut},
-    sync::{Arc, Mutex},
-};
+use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller, BasicAdapterInterface,
-        MinimalInstruction, VmAdapterAir, get_record_from_slice,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
+        BasicAdapterInterface, MinimalInstruction, VmAdapterAir,
     },
     system::memory::{
-        MemoryAddress, MemoryAuxColsFactory,
         offline_checker::{
             MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
             MemoryWriteBytesAuxRecord,
         },
         online::TracingMemory,
+        MemoryAddress, MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::{
-    AlignedBytesBorrow,
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
+    AlignedBytesBorrow,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -29,20 +26,18 @@ use openvm_instructions::{
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
 };
 use openvm_stark_backend::{
-    ColumnsAir,
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+    ColumnsAir,
 };
 use struct_reflection::{StructReflection, StructReflectionHelper};
 
-use openvm_circuit::arch::ExecutionBridge;
-
-use crate::execution::ExecutionState;
+use openvm_circuit::arch::{ExecutionBridge, ExecutionState, EXTRA_EXEC_REGS};
 
 use super::{
-    RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, W32_REG_OPS, fp_addr, fp_block, reg_addr,
-    tracing_read, tracing_read_fp, tracing_read_imm, tracing_write,
+    reg_addr, tracing_read, tracing_read_imm, tracing_write, RV32_CELL_BITS,
+    RV32_REGISTER_NUM_LIMBS, W32_REG_OPS,
 };
 
 #[repr(C)]
@@ -52,14 +47,13 @@ pub struct BaseAluAdapterColsDifferentInputsOutputs<
     const NUM_READ_OPS: usize,
     const NUM_WRITE_OPS: usize,
 > {
-    pub from_state: ExecutionState<T>,
+    pub from_state: ExecutionState<T, EXTRA_EXEC_REGS>,
     pub rd_ptr: T,
     pub rs1_ptr: T,
     /// Pointer if rs2 was a read, immediate value otherwise
     pub rs2: T,
     /// 1 if rs2 was a read, 0 if an immediate
     pub rs2_as: T,
-    pub fp_read_aux: MemoryReadAuxCols<T>,
     pub rs1_reads_aux: [MemoryReadAuxCols<T>; NUM_READ_OPS],
     pub rs2_reads_aux: [MemoryReadAuxCols<T>; NUM_READ_OPS],
     pub writes_aux: [MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>; NUM_WRITE_OPS],
@@ -102,11 +96,11 @@ impl<F: Field, const NUM_LIMBS: usize, const NUM_READ_OPS: usize, const NUM_WRIT
 }
 
 impl<
-    AB: InteractionBuilder,
-    const NUM_LIMBS: usize,
-    const NUM_READ_OPS: usize,
-    const NUM_WRITE_OPS: usize,
-> VmAdapterAir<AB>
+        AB: InteractionBuilder,
+        const NUM_LIMBS: usize,
+        const NUM_READ_OPS: usize,
+        const NUM_WRITE_OPS: usize,
+    > VmAdapterAir<AB>
     for BaseAluAdapterAirDifferentInputsOutputs<NUM_LIMBS, NUM_READ_OPS, NUM_WRITE_OPS>
 {
     type Interface =
@@ -127,15 +121,8 @@ impl<
             timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
-        // Read fp
-        self.memory_bridge
-            .read(
-                fp_addr::<AB::F>(),
-                fp_block::<AB::Expr>(local.from_state.fp.into()),
-                timestamp_pp(),
-                &local.fp_read_aux,
-            )
-            .eval(builder, ctx.instruction.is_valid.clone());
+        // fp is carried in the execution state (received on the execution bus), not read from
+        // memory. The register reads/writes below use `local.from_state.extra_regs[0]` directly.
 
         // If rs2 is an immediate value, constrain that:
         // 1. It's a 16-bit two's complement integer (stored in rs2_limbs[0] and rs2_limbs[1])
@@ -165,7 +152,9 @@ impl<
                 std::array::from_fn(|i| ctx.reads[0][offset + i].clone());
             self.memory_bridge
                 .read(
-                    reg_addr(local.rs1_ptr + local.from_state.fp + AB::F::from_usize(offset)),
+                    reg_addr(
+                        local.rs1_ptr + local.from_state.extra_regs[0] + AB::F::from_usize(offset),
+                    ),
                     chunk,
                     timestamp_pp(),
                     &local.rs1_reads_aux[r],
@@ -187,7 +176,7 @@ impl<
                 .read(
                     MemoryAddress::new(
                         local.rs2_as,
-                        local.rs2 + local.from_state.fp + AB::F::from_usize(offset),
+                        local.rs2 + local.from_state.extra_regs[0] + AB::F::from_usize(offset),
                     ),
                     chunk,
                     timestamp_pp(),
@@ -203,7 +192,9 @@ impl<
                 std::array::from_fn(|i| ctx.writes[0][offset + i].clone());
             self.memory_bridge
                 .write(
-                    reg_addr(local.rd_ptr + local.from_state.fp + AB::F::from_usize(offset)),
+                    reg_addr(
+                        local.rd_ptr + local.from_state.extra_regs[0] + AB::F::from_usize(offset),
+                    ),
                     chunk,
                     timestamp_pp(),
                     &local.writes_aux[w],
@@ -235,26 +226,12 @@ impl<
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct BaseAluAdapterExecutorDifferentInputsOutputs<
     const NUM_LIMBS: usize,
     const NUM_READ_OPS: usize,
     const NUM_WRITE_OPS: usize,
-> {
-    /// Hack: This flag is used so that we fetch the frame pointer exactly once per instruction execution,
-    ///       BEFORE the first read.
-    has_fetched_fp: Arc<Mutex<bool>>,
-}
-
-impl<const NUM_LIMBS: usize, const NUM_READ_OPS: usize, const NUM_WRITE_OPS: usize> Default
-    for BaseAluAdapterExecutorDifferentInputsOutputs<NUM_LIMBS, NUM_READ_OPS, NUM_WRITE_OPS>
-{
-    fn default() -> Self {
-        Self {
-            has_fetched_fp: Arc::new(Mutex::new(false)),
-        }
-    }
-}
+>;
 
 #[derive(derive_new::new)]
 pub struct BaseAluAdapterFillerDifferentInputsOutputs<
@@ -282,40 +259,17 @@ pub struct BaseAluAdapterRecordDifferentInputsOutputs<
     /// 1 if rs2 was a read, 0 if an immediate
     pub rs2_as: u8,
 
-    pub fp_read_aux: MemoryReadAuxRecord,
     pub rs1_reads_aux: [MemoryReadAuxRecord; NUM_READ_OPS],
     pub rs2_reads_aux: [MemoryReadAuxRecord; NUM_READ_OPS],
     pub writes_aux: [MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>; NUM_WRITE_OPS],
 }
 
-impl<const NUM_LIMBS: usize, const NUM_READ_OPS: usize, const NUM_WRITE_OPS: usize>
-    BaseAluAdapterExecutorDifferentInputsOutputs<NUM_LIMBS, NUM_READ_OPS, NUM_WRITE_OPS>
-{
-    fn maybe_fetch_fp<F: PrimeField32>(
-        &self,
-        memory: &mut TracingMemory,
-        record: &mut BaseAluAdapterRecordDifferentInputsOutputs<NUM_READ_OPS, NUM_WRITE_OPS>,
-    ) {
-        let mut has_fetched_fp = self
-            .has_fetched_fp
-            .lock()
-            .expect("has_fetched_fp mutex poisoned");
-        if !*has_fetched_fp {
-            record.fp = tracing_read_fp::<F>(memory, &mut record.fp_read_aux.prev_timestamp);
-            *has_fetched_fp = true;
-        }
-    }
-
-    fn finalize_instruction(&self) {
-        *self
-            .has_fetched_fp
-            .lock()
-            .expect("has_fetched_fp mutex poisoned") = false;
-    }
-}
-
-impl<F: PrimeField32, const NUM_LIMBS: usize, const NUM_READ_OPS: usize, const NUM_WRITE_OPS: usize>
-    AdapterTraceExecutor<F>
+impl<
+        F: PrimeField32,
+        const NUM_LIMBS: usize,
+        const NUM_READ_OPS: usize,
+        const NUM_WRITE_OPS: usize,
+    > AdapterTraceExecutor<F>
     for BaseAluAdapterExecutorDifferentInputsOutputs<NUM_LIMBS, NUM_READ_OPS, NUM_WRITE_OPS>
 {
     const WIDTH: usize =
@@ -328,10 +282,12 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const NUM_READ_OPS: usize, const N
     #[inline(always)]
     fn start(
         pc: u32,
+        extra_regs: [u32; EXTRA_EXEC_REGS],
         memory: &TracingMemory,
         record: &mut &mut BaseAluAdapterRecordDifferentInputsOutputs<NUM_READ_OPS, NUM_WRITE_OPS>,
     ) {
         record.from_pc = pc;
+        record.fp = extra_regs[0];
         record.from_timestamp = memory.timestamp;
     }
 
@@ -349,8 +305,6 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const NUM_READ_OPS: usize, const N
         debug_assert!(
             e.as_canonical_u32() == RV32_REGISTER_AS || e.as_canonical_u32() == RV32_IMM_AS
         );
-
-        self.maybe_fetch_fp::<F>(memory, record);
 
         record.rs1_ptr = b.as_canonical_u32();
 
@@ -425,8 +379,6 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const NUM_READ_OPS: usize, const N
                 &mut record.writes_aux[w].prev_data,
             );
         }
-
-        self.finalize_instruction();
     }
 }
 
@@ -455,9 +407,10 @@ impl<F: PrimeField32, const NUM_READ_OPS: usize, const NUM_WRITE_OPS: usize> Ada
         > = adapter_row.borrow_mut();
 
         // We must assign in reverse
-        // Total memory ops after fp read: NUM_READ_OPS (rs1) + NUM_READ_OPS (rs2) + NUM_WRITE_OPS (rd)
+        // Total memory ops: NUM_READ_OPS (rs1) + NUM_READ_OPS (rs2) + NUM_WRITE_OPS (rd).
+        // fp is no longer read from memory, so the first op is at `from_timestamp + 0`.
         let timestamp_delta: u32 = 2 * NUM_READ_OPS as u32 + NUM_WRITE_OPS as u32;
-        let mut timestamp = record.from_timestamp + timestamp_delta;
+        let mut timestamp = record.from_timestamp + timestamp_delta - 1;
 
         // Writes (reverse order)
         for w in (0..NUM_WRITE_OPS).rev() {
@@ -501,20 +454,17 @@ impl<F: PrimeField32, const NUM_READ_OPS: usize, const NUM_WRITE_OPS: usize> Ada
             timestamp -= 1;
         }
 
-        // fp read
-        mem_helper.fill(
-            record.fp_read_aux.prev_timestamp,
-            timestamp,
-            adapter_row.fp_read_aux.as_mut(),
-        );
-
         adapter_row.rs2_as = F::from_u8(record.rs2_as);
         adapter_row.rs2 = F::from_u32(record.rs2);
         adapter_row.rs1_ptr = F::from_u32(record.rs1_ptr);
         adapter_row.rd_ptr = F::from_u32(record.rd_ptr);
-        adapter_row.from_state.timestamp = F::from_u32(timestamp);
-        adapter_row.from_state.fp = F::from_u32(record.fp);
-        adapter_row.from_state.pc = F::from_u32(record.from_pc);
+        // Snapshot record values before writing `from_state` columns: the column layout
+        // (pc, timestamp, extra_regs) no longer aligns with the record layout, so writing one
+        // column would otherwise clobber a record field still borrowed from the shared buffer.
+        let (from_pc, fp, from_timestamp) = (record.from_pc, record.fp, record.from_timestamp);
+        adapter_row.from_state.extra_regs[0] = F::from_u32(fp);
+        adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
+        adapter_row.from_state.pc = F::from_u32(from_pc);
     }
 }
 

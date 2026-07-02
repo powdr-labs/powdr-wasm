@@ -2,56 +2,51 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller, VmAdapterAir,
-        VmAdapterInterface, get_record_from_slice,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
+        VmAdapterAir, VmAdapterInterface,
     },
     system::memory::{
-        MemoryAuxColsFactory,
         offline_checker::{
             MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteAuxRecord, MemoryWriteBytesAuxRecord,
+            MemoryWriteBytesAuxRecord,
         },
         online::TracingMemory,
+        MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
 };
+use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_crush_transpiler::CallOpcode;
-use openvm_instructions::{LocalOpcode, instruction::Instruction, riscv::RV32_REGISTER_AS};
+use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, LocalOpcode};
 use openvm_stark_backend::{
-    ColumnsAir,
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+    ColumnsAir,
 };
 use struct_reflection::{StructReflection, StructReflectionHelper};
 
-use openvm_circuit::arch::ExecutionBridge;
+use openvm_circuit::arch::{ExecutionBridge, ExecutionState, EXTRA_EXEC_REGS};
 
-use crate::memory_config::FP_AS;
-use crate::{
-    adapters::{fp_addr, fp_block, reg_addr},
-    execution::ExecutionState,
-};
+use crate::adapters::reg_addr;
 
-use super::{RV32_REGISTER_NUM_LIMBS, tracing_read, tracing_read_fp};
+use super::{tracing_read, RV32_REGISTER_NUM_LIMBS};
 
 /// Call adapter columns.
 ///
-/// Memory operations in timestamp order:
-///   0. Read FP from FP_AS
-///   1. Read to_fp_reg (absolute FP for RET) - conditional on has_fp_read
-///   2. Read to_pc_reg (for RET, CALL_INDIRECT) - conditional on has_pc_read
-///   3. Write save_fp (for CALL, CALL_INDIRECT) - conditional on has_save
-///   4. Write save_pc (for CALL, CALL_INDIRECT) - conditional on has_save
-///   5. Write new FP to FP_AS - always
+/// FP is carried in the execution state (received on / emitted to the execution bus), so it is
+/// no longer read from or written to memory. Memory operations in timestamp order:
+///   0. Read to_fp_reg (absolute FP for RET) - conditional on has_fp_read
+///   1. Read to_pc_reg (for RET, CALL_INDIRECT) - conditional on has_pc_read
+///   2. Write save_fp (for CALL, CALL_INDIRECT) - conditional on has_save
+///   3. Write save_pc (for CALL, CALL_INDIRECT) - conditional on has_save
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection)]
 pub struct CallAdapterCols<T> {
-    pub from_state: ExecutionState<T>,
+    pub from_state: ExecutionState<T, EXTRA_EXEC_REGS>,
 
     /// Operand d: FP offset immediate (CALL/CALL_INDIRECT) or register pointer for absolute FP (RET)
     pub to_fp_operand: T,
@@ -63,14 +58,10 @@ pub struct CallAdapterCols<T> {
     pub to_pc_operand: T,
 
     /// Auxiliary columns for memory operations
-    pub fp_read_aux: MemoryReadAuxCols<T>,
     pub to_fp_read_aux: MemoryReadAuxCols<T>,
     pub to_pc_read_aux: MemoryReadAuxCols<T>,
     pub save_fp_write_aux: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
     pub save_pc_write_aux: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
-    /// FP_AS write: prev_data is 4 field elements (DEFAULT_BLOCK_SIZE for v2);
-    /// only cell 0 carries the FP, cells 1..4 are zero.
-    pub fp_write_aux: MemoryWriteAuxCols<T, 4>,
 
     /// Decomposition of to_fp_operand (used for CALL/CALL_INDIRECT), for range-checking
     pub offset_limbs: [T; 2],
@@ -175,20 +166,13 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for CallAdapterAir {
             .when(AB::Expr::ONE - is_valid.clone())
             .assert_zero(has_fp_read.clone());
 
-        // 0. Read current FP from FP_AS
-        self.memory_bridge
-            .read(
-                fp_addr::<AB::F>(),
-                fp_block::<AB::Expr>(local.from_state.fp.into()),
-                timestamp_pp(),
-                &local.fp_read_aux,
-            )
-            .eval(builder, is_valid.clone());
+        // fp is carried in the execution state: `local.from_state.extra_regs[0]` is the incoming fp
+        // (received on the execution bus), and the new fp is emitted in `to_state.fp` below.
 
-        // 1. Read to_fp_reg (conditional on has_fp_read - only RET reads absolute FP from register)
+        // 0. Read to_fp_reg (conditional on has_fp_read - only RET reads absolute FP from register)
         self.memory_bridge
             .read(
-                reg_addr(local.to_fp_operand + local.from_state.fp),
+                reg_addr(local.to_fp_operand + local.from_state.extra_regs[0]),
                 ctx.reads.fp_data.clone(),
                 timestamp_pp(),
                 &local.to_fp_read_aux,
@@ -198,7 +182,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for CallAdapterAir {
         // 2. Read to_pc_reg (conditional on has_pc_read)
         self.memory_bridge
             .read(
-                reg_addr(local.to_pc_operand + local.from_state.fp),
+                reg_addr(local.to_pc_operand + local.from_state.extra_regs[0]),
                 ctx.reads.pc_data.clone(),
                 timestamp_pp(),
                 &local.to_pc_read_aux,
@@ -234,7 +218,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for CallAdapterAir {
         builder
             .when(is_valid.clone())
             // TODO: Then it can be the same expression
-            .assert_eq(old_fp_composed, local.from_state.fp);
+            .assert_eq(old_fp_composed, local.from_state.extra_regs[0]);
 
         // Carry-chain constraints for fp + offset addition (conditioned on has_save)
         // Offset decomposition: offset_limbs[0] + offset_limbs[1] * 2^16 == to_fp_operand
@@ -292,16 +276,6 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for CallAdapterAir {
             )
             .eval(builder, has_save);
 
-        // 5. Write new FP to FP_AS
-        self.memory_bridge
-            .write(
-                fp_addr::<AB::F>(),
-                fp_block::<AB::Expr>(new_fp_composed),
-                timestamp_pp(),
-                &local.fp_write_aux,
-            )
-            .eval(builder, is_valid.clone());
-
         // Determine to_pc: either from immediate (c operand) or from register read
         let to_pc_from_reg = ctx
             .reads
@@ -314,8 +288,14 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for CallAdapterAir {
         let to_pc = local.to_pc_operand * (AB::Expr::ONE - has_pc_read.clone())
             + to_pc_from_reg * has_pc_read.clone();
 
+        // The new frame pointer is emitted on the execution bus (not written to memory).
+        let to_state = ExecutionState {
+            pc: to_pc,
+            timestamp: timestamp + AB::F::from_usize(timestamp_delta),
+            extra_regs: [new_fp_composed],
+        };
         self.execution_bridge
-            .execute_and_increment_or_set_pc(
+            .execute(
                 ctx.instruction.opcode,
                 [
                     local.save_pc_ptr.into(),
@@ -326,8 +306,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for CallAdapterAir {
                     has_fp_read,
                 ],
                 local.from_state.into(),
-                AB::F::from_usize(timestamp_delta),
-                (0u32, Some(to_pc)),
+                to_state.into(),
             )
             .eval(builder, is_valid);
     }
@@ -358,14 +337,10 @@ pub struct CallAdapterRecord {
     pub has_pc_read: bool,
     pub has_save: bool,
 
-    pub fp_read_aux: MemoryReadAuxRecord,
     pub to_fp_read_aux: MemoryReadAuxRecord,
     pub to_pc_read_aux: MemoryReadAuxRecord,
     pub save_fp_write_aux: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
     pub save_pc_write_aux: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
-    /// FP_AS write: prev_data is 4 u32 cells (DEFAULT_BLOCK_SIZE for v2 — each
-    /// cell stores a `field32` value; only cell 0 carries the FP).
-    pub fp_write_aux: MemoryWriteAuxRecord<u32, 4>,
 }
 
 impl<F: PrimeField32> AdapterTraceExecutor<F> for CallAdapterExecutor {
@@ -375,8 +350,14 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for CallAdapterExecutor {
     type RecordMut<'a> = &'a mut CallAdapterRecord;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory, record: &mut &mut CallAdapterRecord) {
+    fn start(
+        pc: u32,
+        extra_regs: [u32; EXTRA_EXEC_REGS],
+        memory: &TracingMemory,
+        record: &mut &mut CallAdapterRecord,
+    ) {
         record.from_pc = pc;
+        record.fp = extra_regs[0];
         record.from_timestamp = memory.timestamp;
     }
 
@@ -388,9 +369,6 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for CallAdapterExecutor {
         record: &mut &mut CallAdapterRecord,
     ) -> Self::ReadData {
         let &Instruction { a, b, c, d, .. } = instruction;
-
-        // 0. Read FP
-        record.fp = tracing_read_fp::<F>(memory, &mut record.fp_read_aux.prev_timestamp);
 
         // Decode instruction operands
         record.to_fp_operand = d.as_canonical_u32();
@@ -409,7 +387,7 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for CallAdapterExecutor {
         record.has_pc_read = has_pc_read;
         record.has_save = has_save;
 
-        // 1. Read to_fp_reg (conditional - only RET reads absolute FP from register)
+        // 0. Read to_fp_reg (conditional - only RET reads absolute FP from register)
         let has_fp_read = !has_save;
         let new_fp_bytes: [u8; RV32_REGISTER_NUM_LIMBS] = if has_fp_read {
             tracing_read(
@@ -423,7 +401,7 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for CallAdapterExecutor {
             [0u8; RV32_REGISTER_NUM_LIMBS]
         };
 
-        // 2. Read to_pc_reg (conditional)
+        // 1. Read to_pc_reg (conditional)
         let to_pc_bytes: [u8; RV32_REGISTER_NUM_LIMBS] = if has_pc_read {
             tracing_read(
                 memory,
@@ -456,7 +434,7 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for CallAdapterExecutor {
             new_fp,
         } = data;
 
-        // 3. Write save_fp (conditional on has_save) - relative to NEW frame
+        // 2. Write save_fp (conditional on has_save) - relative to NEW frame
         if record.has_save {
             let (t_prev, prev_data) = super::timed_write(
                 memory,
@@ -470,7 +448,7 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for CallAdapterExecutor {
             memory.increment_timestamp();
         }
 
-        // 4. Write save_pc (conditional on has_save) - relative to NEW frame
+        // 3. Write save_pc (conditional on has_save) - relative to NEW frame
         if record.has_save {
             let (t_prev, prev_data) = super::timed_write(
                 memory,
@@ -483,15 +461,6 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for CallAdapterExecutor {
         } else {
             memory.increment_timestamp();
         }
-
-        // 5. Write new FP to FP_AS
-        // SAFETY: FP_AS uses native32 cell type (F). Block size 4 matches v2's
-        // DEFAULT_BLOCK_SIZE; cells 1..4 are zero so the bus interaction stays
-        // canonical.
-        let new_block: [F; 4] = [F::from_u32(new_fp), F::ZERO, F::ZERO, F::ZERO];
-        let (t_prev, prev_data) = unsafe { memory.write::<F, 4>(FP_AS, 0, new_block) };
-        record.fp_write_aux.prev_timestamp = t_prev;
-        record.fp_write_aux.prev_data = prev_data.map(|x| x.as_canonical_u32());
     }
 }
 
@@ -522,27 +491,21 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for CallAdapterFiller {
         let adapter_row: &mut CallAdapterCols<F> = adapter_row.borrow_mut();
 
         // Cache record fields that will be overwritten when filling aux columns.
-        // The record and columns share the same buffer; filling fp_read_aux overwrites
+        // The record and columns share the same buffer; filling aux columns overwrites
         // record.has_save and record.has_pc_read.
         let has_save = record.has_save;
         let has_pc_read = record.has_pc_read;
         let fp = record.fp;
         let to_fp_operand = record.to_fp_operand;
+        // `from_state` column layout (pc, timestamp, extra_regs) no longer aligns with the record
+        // layout, so snapshot these before writing any `from_state` column.
+        let from_pc = record.from_pc;
+        let from_timestamp = record.from_timestamp;
 
-        // Total: 6 timestamp increments (indices 0..5)
-        let mut timestamp = record.from_timestamp + 5;
+        // Total: 4 timestamp increments (indices 0..3). fp is no longer read/written in memory.
+        let mut timestamp = record.from_timestamp + 3;
 
-        // 5. FP write (native32 cell type: prev_data is 4 field elements;
-        // cell 0 carries the FP, cells 1..4 are zero)
-        adapter_row.fp_write_aux.prev_data = record.fp_write_aux.prev_data.map(F::from_u32);
-        mem_helper.fill(
-            record.fp_write_aux.prev_timestamp,
-            timestamp,
-            adapter_row.fp_write_aux.as_mut(),
-        );
-        timestamp -= 1;
-
-        // 4. save_pc write
+        // 3. save_pc write
         if has_save {
             adapter_row
                 .save_pc_write_aux
@@ -557,7 +520,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for CallAdapterFiller {
         }
         timestamp -= 1;
 
-        // 3. save_fp write
+        // 2. save_fp write
         if has_save {
             adapter_row
                 .save_fp_write_aux
@@ -572,7 +535,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for CallAdapterFiller {
         }
         timestamp -= 1;
 
-        // 2. to_pc_reg read
+        // 1. to_pc_reg read
         if has_pc_read {
             mem_helper.fill(
                 record.to_pc_read_aux.prev_timestamp,
@@ -584,7 +547,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for CallAdapterFiller {
         }
         timestamp -= 1;
 
-        // 1. to_fp_reg read (conditional on has_fp_read)
+        // 0. to_fp_reg read (conditional on has_fp_read)
         let has_fp_read = !has_save;
         if has_fp_read {
             mem_helper.fill(
@@ -595,23 +558,15 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for CallAdapterFiller {
         } else {
             mem_helper.fill_zero(adapter_row.to_fp_read_aux.as_mut());
         }
-        timestamp -= 1;
-
-        // 0. FP read
-        mem_helper.fill(
-            record.fp_read_aux.prev_timestamp,
-            timestamp,
-            adapter_row.fp_read_aux.as_mut(),
-        );
 
         // Scalar fields
         adapter_row.to_pc_operand = F::from_u32(record.to_pc_operand);
         adapter_row.save_pc_ptr = F::from_u32(record.save_pc_ptr);
         adapter_row.save_fp_ptr = F::from_u32(record.save_fp_ptr);
         adapter_row.to_fp_operand = F::from_u32(to_fp_operand);
-        adapter_row.from_state.timestamp = F::from_u32(record.from_timestamp);
-        adapter_row.from_state.fp = F::from_u32(fp);
-        adapter_row.from_state.pc = F::from_u32(record.from_pc);
+        adapter_row.from_state.extra_regs[0] = F::from_u32(fp);
+        adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
+        adapter_row.from_state.pc = F::from_u32(from_pc);
 
         // Carry-chain limbs for CALL/CALL_INDIRECT (has_save)
         if has_save {

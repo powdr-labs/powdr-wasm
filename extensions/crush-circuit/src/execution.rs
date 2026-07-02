@@ -1,54 +1,12 @@
-//! Execution state with frame pointer (fp) support.
+//! Frame-pointer-aware register read/write helpers for crush execution.
+//!
+//! The frame pointer is no longer a separate wrapper type: it is carried in openvm's
+//! `ExecutionState` / `VmState` as `extra_regs[0]` (see `openvm_circuit::arch::EXTRA_EXEC_REGS`).
 use openvm_circuit::arch::ExecutionCtxTrait;
 use openvm_circuit::arch::VmExecState;
 use openvm_circuit::system::memory::online::GuestMemory;
-use openvm_circuit_primitives::AlignedBorrow;
 use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
 use openvm_stark_backend::p3_field::PrimeField32;
-use serde::{Deserialize, Serialize};
-use struct_reflection::StructReflection;
-use struct_reflection::StructReflectionHelper;
-
-use openvm_circuit::arch::ExecutionState as OpenVmExecutionState;
-
-/// Like `openvm_circuit::arch::ExecutionState`, but with `fp` added.
-#[repr(C)]
-#[derive(
-    Clone, Copy, Debug, PartialEq, Default, AlignedBorrow, Serialize, Deserialize, StructReflection,
-)]
-pub struct ExecutionState<T> {
-    pub pc: T,
-    pub fp: T,
-    pub timestamp: T,
-}
-
-/// Discards `fp` when converting to `OpenVmExecutionState`.
-impl<T> From<ExecutionState<T>> for OpenVmExecutionState<T> {
-    fn from(state: ExecutionState<T>) -> Self {
-        OpenVmExecutionState {
-            pc: state.pc,
-            timestamp: state.timestamp,
-        }
-    }
-}
-
-impl<T> ExecutionState<T> {
-    pub fn new(pc: impl Into<T>, fp: impl Into<T>, timestamp: impl Into<T>) -> Self {
-        Self {
-            pc: pc.into(),
-            fp: fp.into(),
-            timestamp: timestamp.into(),
-        }
-    }
-
-    pub fn map<U: Clone, F: Fn(T) -> U>(self, function: F) -> ExecutionState<U> {
-        ExecutionState {
-            pc: function(self.pc),
-            fp: function(self.fp),
-            timestamp: function(self.timestamp),
-        }
-    }
-}
 
 /// Reads `NUM_LIMBS` bytes by doing `NUM_REG_OPS` reads of `RV32_REGISTER_NUM_LIMBS` bytes.
 /// This matches the behavior enforced by the adapter constraints, which read register-sized

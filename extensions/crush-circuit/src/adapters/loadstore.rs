@@ -1,53 +1,53 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     marker::PhantomData,
-    sync::{Arc, Mutex},
 };
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller, VmAdapterAir,
-        VmAdapterInterface, get_record_from_slice,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
+        VmAdapterAir, VmAdapterInterface,
     },
     system::memory::{
-        MemoryAddress, MemoryAuxColsFactory,
         offline_checker::{
             MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
             MemoryWriteAuxCols,
         },
         online::TracingMemory,
+        MemoryAddress, MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::{
-    AlignedBytesBorrow,
     utils::{not, select},
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
+    AlignedBytesBorrow,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    DEFERRAL_AS as NATIVE_AS, LocalOpcode,
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_IMM_AS, RV32_MEMORY_AS, RV32_REGISTER_AS},
+    LocalOpcode, DEFERRAL_AS as NATIVE_AS,
 };
 use openvm_rv32im_circuit::adapters::LoadStoreInstruction;
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
-    ColumnsAir,
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+    ColumnsAir,
 };
 use struct_reflection::{StructReflection, StructReflectionHelper};
 
-use openvm_circuit::arch::{ExecutionBridge, ExecutionState as OvmExecutionState};
+use openvm_circuit::arch::{
+    ExecutionBridge, ExecutionState, ExecutionState as OvmExecutionState, EXTRA_EXEC_REGS,
+};
 
 use super::RV32_REGISTER_NUM_LIMBS;
 use super::{
-    RV32_CELL_BITS, fp_addr, fp_block, memory_read, memory_read_native, reg_addr, timed_write,
-    timed_write_native, tracing_read, tracing_read_fp,
+    memory_read, memory_read_native, reg_addr, timed_write, timed_write_native, tracing_read,
+    RV32_CELL_BITS,
 };
-use crate::execution::ExecutionState;
 
 pub struct Rv32LoadStoreAdapterAirInterface<AB: InteractionBuilder>(PhantomData<AB>);
 
@@ -64,10 +64,9 @@ impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv32LoadStoreAdapt
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct Rv32LoadStoreAdapterCols<T> {
-    pub from_state: ExecutionState<T>,
+    pub from_state: ExecutionState<T, EXTRA_EXEC_REGS>,
     pub rs1_ptr: T,
     pub rs1_data: [T; RV32_REGISTER_NUM_LIMBS],
-    pub fp_read_aux: MemoryReadAuxCols<T>,
     pub rs1_aux_cols: MemoryReadAuxCols<T>,
 
     /// Will write to rd when Load and read from rs2 when Store
@@ -148,20 +147,13 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
             .when(is_valid.clone() - write_count)
             .assert_zero(local_cols.rd_rs2_ptr);
 
-        // Read fp
-        self.memory_bridge
-            .read(
-                fp_addr::<AB::F>(),
-                fp_block::<AB::Expr>(local_cols.from_state.fp.into()),
-                timestamp_pp(),
-                &local_cols.fp_read_aux,
-            )
-            .eval(builder, is_valid.clone());
+        // fp is carried in the execution state (received on the execution bus), not read from
+        // memory. Register accesses below use `local_cols.from_state.extra_regs[0]` directly.
 
         // read rs1
         self.memory_bridge
             .read(
-                reg_addr(local_cols.rs1_ptr + local_cols.from_state.fp),
+                reg_addr(local_cols.rs1_ptr + local_cols.from_state.extra_regs[0]),
                 local_cols.rs1_data,
                 timestamp_pp(),
                 &local_cols.rs1_aux_cols,
@@ -223,7 +215,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
         let read_ptr = select::<AB::Expr>(
             is_load.clone(),
             mem_ptr.clone(),
-            local_cols.rd_rs2_ptr + local_cols.from_state.fp,
+            local_cols.rd_rs2_ptr + local_cols.from_state.extra_regs[0],
         ) - load_shift_amount;
 
         self.memory_bridge
@@ -247,7 +239,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
         // write_ptr is rd_rs2_ptr for loads and mem_ptr for stores
         let write_ptr = select::<AB::Expr>(
             is_load.clone(),
-            local_cols.rd_rs2_ptr + local_cols.from_state.fp,
+            local_cols.rd_rs2_ptr + local_cols.from_state.extra_regs[0],
             mem_ptr.clone(),
         ) - store_shift_amount;
 
@@ -279,6 +271,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
                 OvmExecutionState {
                     pc: to_pc,
                     timestamp: timestamp + AB::F::from_usize(timestamp_delta),
+                    extra_regs: [local_cols.from_state.extra_regs[0].into()],
                 },
             )
             .eval(builder, is_valid);
@@ -299,7 +292,6 @@ pub struct Rv32LoadStoreAdapterRecord {
 
     pub rs1_ptr: u32,
     pub rs1_val: u32,
-    pub fp_read_aux: MemoryReadAuxRecord,
     pub rs1_aux_record: MemoryReadAuxRecord,
 
     pub rd_rs2_ptr: u32,
@@ -318,38 +310,11 @@ pub struct Rv32LoadStoreAdapterRecord {
 #[derive(Clone)]
 pub struct Rv32LoadStoreAdapterExecutor {
     pointer_max_bits: usize,
-    has_fetched_fp: Arc<Mutex<bool>>,
 }
 
 impl Rv32LoadStoreAdapterExecutor {
     pub fn new(pointer_max_bits: usize) -> Self {
-        Self {
-            pointer_max_bits,
-            has_fetched_fp: Arc::new(Mutex::new(false)),
-        }
-    }
-
-    /// Hack: Fetch the frame pointer exactly once per instruction execution, BEFORE the first read.
-    fn maybe_fetch_fp<F: PrimeField32>(
-        &self,
-        memory: &mut TracingMemory,
-        record: &mut Rv32LoadStoreAdapterRecord,
-    ) {
-        let mut has_fetched_fp = self
-            .has_fetched_fp
-            .lock()
-            .expect("has_fetched_fp mutex poisoned");
-        if !*has_fetched_fp {
-            record.fp = tracing_read_fp::<F>(memory, &mut record.fp_read_aux.prev_timestamp);
-            *has_fetched_fp = true;
-        }
-    }
-
-    fn finalize_instruction(&self) {
-        *self
-            .has_fetched_fp
-            .lock()
-            .expect("has_fetched_fp mutex poisoned") = false;
+        Self { pointer_max_bits }
     }
 }
 
@@ -375,8 +340,14 @@ where
     type RecordMut<'a> = &'a mut Rv32LoadStoreAdapterRecord;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
+    fn start(
+        pc: u32,
+        extra_regs: [u32; EXTRA_EXEC_REGS],
+        memory: &TracingMemory,
+        record: &mut Self::RecordMut<'_>,
+    ) {
         record.from_pc = pc;
+        record.fp = extra_regs[0];
         record.from_timestamp = memory.timestamp;
     }
 
@@ -403,8 +374,6 @@ where
         let local_opcode = Rv32LoadStoreOpcode::from_usize(
             opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
         );
-
-        self.maybe_fetch_fp::<F>(memory, record);
 
         record.rs1_ptr = b.as_canonical_u32();
         record.rs1_val = u32::from_le_bytes(tracing_read(
@@ -525,8 +494,6 @@ where
             record.rd_rs2_ptr = u32::MAX;
             memory.increment_timestamp();
         };
-
-        self.finalize_instruction();
     }
 }
 
@@ -552,7 +519,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32LoadStoreAdapterFiller {
         if needs_write {
             mem_helper.fill(
                 record.write_prev_timestamp,
-                record.from_timestamp + 3,
+                record.from_timestamp + 2,
                 &mut adapter_row.write_base_aux,
             );
         } else {
@@ -576,7 +543,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32LoadStoreAdapterFiller {
 
         mem_helper.fill(
             record.read_data_aux.prev_timestamp,
-            record.from_timestamp + 2,
+            record.from_timestamp + 1,
             adapter_row.read_data_aux.as_mut(),
         );
         adapter_row.rd_rs2_ptr = if record.rd_rs2_ptr != u32::MAX {
@@ -587,21 +554,18 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32LoadStoreAdapterFiller {
 
         mem_helper.fill(
             record.rs1_aux_record.prev_timestamp,
-            record.from_timestamp + 1,
-            adapter_row.rs1_aux_cols.as_mut(),
-        );
-
-        mem_helper.fill(
-            record.fp_read_aux.prev_timestamp,
             record.from_timestamp,
-            adapter_row.fp_read_aux.as_mut(),
+            adapter_row.rs1_aux_cols.as_mut(),
         );
 
         adapter_row.rs1_data = record.rs1_val.to_le_bytes().map(F::from_u8);
         adapter_row.rs1_ptr = F::from_u32(record.rs1_ptr);
 
-        adapter_row.from_state.timestamp = F::from_u32(record.from_timestamp);
-        adapter_row.from_state.fp = F::from_u32(record.fp);
-        adapter_row.from_state.pc = F::from_u32(record.from_pc);
+        // Snapshot before writing `from_state`: its column layout (pc, timestamp, extra_regs) no
+        // longer aligns with the record, so a write would clobber a not-yet-read record field.
+        let (from_pc, fp, from_timestamp) = (record.from_pc, record.fp, record.from_timestamp);
+        adapter_row.from_state.extra_regs[0] = F::from_u32(fp);
+        adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
+        adapter_row.from_state.pc = F::from_u32(from_pc);
     }
 }

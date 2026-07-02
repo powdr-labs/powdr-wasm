@@ -12,23 +12,22 @@ use std::{
 
 use crate::{
     execution::{vm_read_multiple_ops, vm_write_multiple_ops},
-    memory_config::FpMemory,
     utils::sign_extend_u32,
 };
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_derive::PreflightExecutor;
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
-    LocalOpcode,
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_CELL_BITS, RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    LocalOpcode,
 };
 use openvm_rv32im_circuit::BaseAluExecutor as BaseAluExecutorInner;
 use openvm_rv32im_transpiler::BaseAluOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::adapters::{BaseAluAdapterExecutor, imm_to_bytes};
+use crate::adapters::{imm_to_bytes, BaseAluAdapterExecutor};
 
 /// Newtype wrapper to satisfy orphan rules for trait implementations.
 #[derive(Clone, PreflightExecutor)]
@@ -216,7 +215,7 @@ unsafe fn execute_e12_impl<
     const { assert!(NUM_LIMBS == 4 || NUM_LIMBS == 8) };
     const { assert!(NUM_REG_OPS * RV32_REGISTER_NUM_LIMBS == NUM_LIMBS) };
 
-    let fp = exec_state.memory.fp::<F>();
+    let fp = exec_state.extra_regs()[0];
     let rs1 = vm_read_multiple_ops::<NUM_LIMBS, NUM_REG_OPS, _, _>(
         exec_state,
         RV32_REGISTER_AS,

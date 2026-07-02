@@ -2,13 +2,13 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller, BasicAdapterInterface,
-        ImmInstruction, VmAdapterAir, get_record_from_slice,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
+        BasicAdapterInterface, ImmInstruction, VmAdapterAir,
     },
     system::memory::{
-        MemoryAuxColsFactory,
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord},
         online::TracingMemory,
+        MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
@@ -17,18 +17,16 @@ use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS,
 };
 use openvm_stark_backend::{
-    ColumnsAir,
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+    ColumnsAir,
 };
 use struct_reflection::{StructReflection, StructReflectionHelper};
 
-use openvm_circuit::arch::ExecutionBridge;
+use openvm_circuit::arch::{ExecutionBridge, ExecutionState, EXTRA_EXEC_REGS};
 
-use crate::execution::ExecutionState;
-
-use super::{RV32_REGISTER_NUM_LIMBS, fp_addr, fp_block, reg_addr, tracing_read, tracing_read_fp};
+use super::{reg_addr, tracing_read, RV32_REGISTER_NUM_LIMBS};
 
 /// Trace columns for the JUMP adapter.
 ///
@@ -38,10 +36,9 @@ use super::{RV32_REGISTER_NUM_LIMBS, fp_addr, fp_block, reg_addr, tracing_read, 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection)]
 pub struct JumpAdapterCols<T> {
-    pub from_state: ExecutionState<T>,
+    pub from_state: ExecutionState<T, EXTRA_EXEC_REGS>,
     /// The condition/offset register pointer (field b of instruction).
     pub rs_ptr: T,
-    pub fp_read_aux: MemoryReadAuxCols<T>,
     pub rs_read_aux: MemoryReadAuxCols<T>,
 }
 
@@ -86,21 +83,14 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for JumpAdapterAir {
             timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
-        // Read FP
-        self.memory_bridge
-            .read(
-                fp_addr::<AB::F>(),
-                fp_block::<AB::Expr>(local.from_state.fp.into()),
-                timestamp_pp(),
-                &local.fp_read_aux,
-            )
-            .eval(builder, ctx.instruction.is_valid.clone());
+        // fp is carried in the execution state (received on the execution bus), not read from
+        // memory. The register read below uses `local.from_state.extra_regs[0]` directly.
 
         // Always read the condition/offset register relative to FP.
         // For JUMP (b=0), this reads reg[fp+0]; the core chip ignores the value.
         self.memory_bridge
             .read(
-                reg_addr(local.rs_ptr + local.from_state.fp),
+                reg_addr(local.rs_ptr + local.from_state.extra_regs[0]),
                 ctx.reads[0].clone(),
                 timestamp_pp(),
                 &local.rs_read_aux,
@@ -140,7 +130,6 @@ pub struct JumpAdapterRecord {
     pub fp: u32,
     pub from_timestamp: u32,
     pub rs_ptr: u32,
-    pub fp_read_aux: MemoryReadAuxRecord,
     pub rs_read_aux: MemoryReadAuxRecord,
 }
 
@@ -155,8 +144,14 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for JumpAdapterExecutor {
     type RecordMut<'a> = &'a mut JumpAdapterRecord;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory, record: &mut &mut JumpAdapterRecord) {
+    fn start(
+        pc: u32,
+        extra_regs: [u32; EXTRA_EXEC_REGS],
+        memory: &TracingMemory,
+        record: &mut &mut JumpAdapterRecord,
+    ) {
         record.from_pc = pc;
+        record.fp = extra_regs[0];
         record.from_timestamp = memory.timestamp;
     }
 
@@ -168,10 +163,6 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for JumpAdapterExecutor {
         record: &mut &mut JumpAdapterRecord,
     ) -> Self::ReadData {
         let &Instruction { b, .. } = instruction;
-
-        // HACK: The frame pointer fetch must happen exactly once before the first register access.
-        // We can do it here unconditionally because Self::ReadData has length 1.
-        record.fp = tracing_read_fp::<F>(memory, &mut record.fp_read_aux.prev_timestamp);
 
         let b_val = b.as_canonical_u32();
         record.rs_ptr = b_val;
@@ -210,26 +201,19 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for JumpAdapterFiller {
         let record: &JumpAdapterRecord = unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut JumpAdapterCols<F> = adapter_row.borrow_mut();
 
-        // We must assign in reverse order.
-
-        // rs read (timestamp = from_timestamp + 1, after fp read)
-        let timestamp = record.from_timestamp + 1;
+        // rs read (timestamp = from_timestamp; fp is no longer read from memory)
         mem_helper.fill(
             record.rs_read_aux.prev_timestamp,
-            timestamp,
+            record.from_timestamp,
             adapter_row.rs_read_aux.as_mut(),
         );
 
-        // fp read (timestamp = from_timestamp)
-        mem_helper.fill(
-            record.fp_read_aux.prev_timestamp,
-            record.from_timestamp,
-            adapter_row.fp_read_aux.as_mut(),
-        );
-
         adapter_row.rs_ptr = F::from_u32(record.rs_ptr);
-        adapter_row.from_state.timestamp = F::from_u32(record.from_timestamp);
-        adapter_row.from_state.fp = F::from_u32(record.fp);
-        adapter_row.from_state.pc = F::from_u32(record.from_pc);
+        // Snapshot before writing `from_state`: its column layout (pc, timestamp, extra_regs) no
+        // longer aligns with the record, so a write would clobber a not-yet-read record field.
+        let (from_pc, fp, from_timestamp) = (record.from_pc, record.fp, record.from_timestamp);
+        adapter_row.from_state.extra_regs[0] = F::from_u32(fp);
+        adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
+        adapter_row.from_state.pc = F::from_u32(from_pc);
     }
 }
