@@ -6,15 +6,15 @@ use openvm_circuit::{
     utils::next_power_of_two_or_zero,
 };
 use openvm_circuit_primitives::{
-    Chip, bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
+    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
 };
-use openvm_cuda_backend::{GpuBackend, base::DeviceMatrix, prelude::F};
+use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
-    Rv32HintStoreCols, Rv32HintStoreLayout, Rv32HintStoreRecordMut, adapters::RV32_CELL_BITS,
-    cuda_abi::hintstore_cuda::tracegen,
+    adapters::RV32_CELL_BITS, cuda_abi::hintstore_cuda::tracegen, Rv32HintStoreCols,
+    Rv32HintStoreLayout, Rv32HintStoreRecordMut,
 };
 
 #[derive(new)]

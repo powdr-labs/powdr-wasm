@@ -2,38 +2,38 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller, VmAdapterAir,
-        VmAdapterInterface, get_record_from_slice,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
+        VmAdapterAir, VmAdapterInterface,
     },
     system::memory::{
-        MemoryAuxColsFactory,
         offline_checker::{
             MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
             MemoryWriteBytesAuxRecord,
         },
         online::TracingMemory,
+        MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
 };
+use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_crush_transpiler::CallOpcode;
-use openvm_instructions::{LocalOpcode, instruction::Instruction, riscv::RV32_REGISTER_AS};
+use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, LocalOpcode};
 use openvm_stark_backend::{
-    ColumnsAir,
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+    ColumnsAir,
 };
 use struct_reflection::{StructReflection, StructReflectionHelper};
 
-use openvm_circuit::arch::ExecutionBridge;
+use openvm_circuit::arch::{ExecutionBridge, ExecutionState, EXTRA_EXEC_REGS};
 
-use crate::{adapters::reg_addr, execution::ExecutionState};
+use crate::adapters::reg_addr;
 
-use super::{RV32_REGISTER_NUM_LIMBS, tracing_read};
+use super::{tracing_read, RV32_REGISTER_NUM_LIMBS};
 
 /// Call adapter columns.
 ///
@@ -46,7 +46,7 @@ use super::{RV32_REGISTER_NUM_LIMBS, tracing_read};
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection)]
 pub struct CallAdapterCols<T> {
-    pub from_state: ExecutionState<T>,
+    pub from_state: ExecutionState<T, EXTRA_EXEC_REGS>,
 
     /// Operand d: FP offset immediate (CALL/CALL_INDIRECT) or register pointer for absolute FP (RET)
     pub to_fp_operand: T,
@@ -166,13 +166,13 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for CallAdapterAir {
             .when(AB::Expr::ONE - is_valid.clone())
             .assert_zero(has_fp_read.clone());
 
-        // fp is carried in the execution state: `local.from_state.fp` is the incoming fp
+        // fp is carried in the execution state: `local.from_state.extra_regs[0]` is the incoming fp
         // (received on the execution bus), and the new fp is emitted in `to_state.fp` below.
 
         // 0. Read to_fp_reg (conditional on has_fp_read - only RET reads absolute FP from register)
         self.memory_bridge
             .read(
-                reg_addr(local.to_fp_operand + local.from_state.fp),
+                reg_addr(local.to_fp_operand + local.from_state.extra_regs[0]),
                 ctx.reads.fp_data.clone(),
                 timestamp_pp(),
                 &local.to_fp_read_aux,
@@ -182,7 +182,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for CallAdapterAir {
         // 2. Read to_pc_reg (conditional on has_pc_read)
         self.memory_bridge
             .read(
-                reg_addr(local.to_pc_operand + local.from_state.fp),
+                reg_addr(local.to_pc_operand + local.from_state.extra_regs[0]),
                 ctx.reads.pc_data.clone(),
                 timestamp_pp(),
                 &local.to_pc_read_aux,
@@ -218,7 +218,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for CallAdapterAir {
         builder
             .when(is_valid.clone())
             // TODO: Then it can be the same expression
-            .assert_eq(old_fp_composed, local.from_state.fp);
+            .assert_eq(old_fp_composed, local.from_state.extra_regs[0]);
 
         // Carry-chain constraints for fp + offset addition (conditioned on has_save)
         // Offset decomposition: offset_limbs[0] + offset_limbs[1] * 2^16 == to_fp_operand
@@ -289,11 +289,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for CallAdapterAir {
             + to_pc_from_reg * has_pc_read.clone();
 
         // The new frame pointer is emitted on the execution bus (not written to memory).
-        let to_state = ExecutionState::<AB::Expr>::new(
-            to_pc,
-            new_fp_composed,
-            timestamp + AB::F::from_usize(timestamp_delta),
-        );
+        let to_state = ExecutionState {
+            pc: to_pc,
+            timestamp: timestamp + AB::F::from_usize(timestamp_delta),
+            extra_regs: [new_fp_composed],
+        };
         self.execution_bridge
             .execute(
                 ctx.instruction.opcode,
@@ -350,9 +350,14 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for CallAdapterExecutor {
     type RecordMut<'a> = &'a mut CallAdapterRecord;
 
     #[inline(always)]
-    fn start(pc: u32, fp: u32, memory: &TracingMemory, record: &mut &mut CallAdapterRecord) {
+    fn start(
+        pc: u32,
+        extra_regs: [u32; EXTRA_EXEC_REGS],
+        memory: &TracingMemory,
+        record: &mut &mut CallAdapterRecord,
+    ) {
         record.from_pc = pc;
-        record.fp = fp;
+        record.fp = extra_regs[0];
         record.from_timestamp = memory.timestamp;
     }
 
@@ -492,6 +497,10 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for CallAdapterFiller {
         let has_pc_read = record.has_pc_read;
         let fp = record.fp;
         let to_fp_operand = record.to_fp_operand;
+        // `from_state` column layout (pc, timestamp, extra_regs) no longer aligns with the record
+        // layout, so snapshot these before writing any `from_state` column.
+        let from_pc = record.from_pc;
+        let from_timestamp = record.from_timestamp;
 
         // Total: 4 timestamp increments (indices 0..3). fp is no longer read/written in memory.
         let mut timestamp = record.from_timestamp + 3;
@@ -555,9 +564,9 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for CallAdapterFiller {
         adapter_row.save_pc_ptr = F::from_u32(record.save_pc_ptr);
         adapter_row.save_fp_ptr = F::from_u32(record.save_fp_ptr);
         adapter_row.to_fp_operand = F::from_u32(to_fp_operand);
-        adapter_row.from_state.timestamp = F::from_u32(record.from_timestamp);
-        adapter_row.from_state.fp = F::from_u32(fp);
-        adapter_row.from_state.pc = F::from_u32(record.from_pc);
+        adapter_row.from_state.extra_regs[0] = F::from_u32(fp);
+        adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
+        adapter_row.from_state.pc = F::from_u32(from_pc);
 
         // Carry-chain limbs for CALL/CALL_INDIRECT (has_save)
         if has_save {

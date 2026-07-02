@@ -4,8 +4,8 @@ use itertools::Itertools;
 use openvm_circuit::arch::*;
 use openvm_circuit::system::memory::offline_checker::MemoryWriteBytesAuxRecord;
 use openvm_circuit::system::memory::online::TracingMemory;
-use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
+use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -78,7 +78,7 @@ where
         record.imm = imm;
 
         // fp is carried in the VM execution state, not read from memory.
-        record.fp = *state.fp;
+        record.fp = state.extra_regs[0];
         tracing_write(
             state.memory,
             RV32_REGISTER_AS,
@@ -152,7 +152,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, Ctx: ExecutionCtxTrait, const NUM_LI
     pre_compute: &Const32PreCompute,
     exec_state: &mut VmExecState<F, openvm_circuit::system::memory::online::GuestMemory, Ctx>,
 ) {
-    let fp = exec_state.fp();
+    let fp = exec_state.extra_regs()[0];
 
     let imm_bytes: [u8; NUM_LIMBS] = std::array::from_fn(|i| (pre_compute.imm >> (8 * i)) as u8);
     exec_state.vm_write::<u8, NUM_LIMBS>(RV32_REGISTER_AS, fp + pre_compute.target_reg, &imm_bytes);
@@ -245,10 +245,12 @@ impl<F: PrimeField32, const NUM_LIMBS: usize> TraceFiller<F> for Const32Filler<N
         // rd_ptr
         cols.rd_ptr = F::from_u32(record.rd_ptr);
 
-        // from_state
-        cols.from_state.timestamp = F::from_u32(record.from_timestamp);
-        cols.from_state.fp = F::from_u32(record.fp);
-        cols.from_state.pc = F::from_u32(record.from_pc);
+        // from_state — snapshot first: its column layout (pc, timestamp, extra_regs) no longer
+        // aligns with the record, so a write would clobber a not-yet-read record field.
+        let (from_pc, fp, from_timestamp) = (record.from_pc, record.fp, record.from_timestamp);
+        cols.from_state.extra_regs[0] = F::from_u32(fp);
+        cols.from_state.timestamp = F::from_u32(from_timestamp);
+        cols.from_state.pc = F::from_u32(from_pc);
 
         // is_valid
         cols.is_valid = F::ONE;

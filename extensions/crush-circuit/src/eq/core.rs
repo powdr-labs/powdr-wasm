@@ -5,17 +5,17 @@ use std::{
 
 use openvm_circuit::{
     arch::*,
-    system::memory::{MemoryAuxColsFactory, online::TracingMemory},
+    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::utils::not;
 use openvm_circuit_primitives_derive::{AlignedBorrow, AlignedBytesBorrow};
 use openvm_crush_transpiler::EqOpcode;
-use openvm_instructions::{LocalOpcode, instruction::Instruction, program::DEFAULT_PC_STEP};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_stark_backend::{
-    BaseAirWithPublicValues, ColumnsAir,
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+    BaseAirWithPublicValues, ColumnsAir,
 };
 use struct_reflection::{StructReflection, StructReflectionHelper};
 use strum::IntoEnumIterator;
@@ -166,10 +166,10 @@ where
             WriteData: From<[[u8; NUM_LIMBS]; 1]>,
         >,
     for<'buf> RA: RecordArena<
-            'buf,
-            EmptyAdapterCoreLayout<F, A>,
-            (A::RecordMut<'buf>, &'buf mut EqCoreRecord<NUM_LIMBS>),
-        >,
+        'buf,
+        EmptyAdapterCoreLayout<F, A>,
+        (A::RecordMut<'buf>, &'buf mut EqCoreRecord<NUM_LIMBS>),
+    >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", EqOpcode::from_usize(opcode - self.offset))
@@ -183,7 +183,12 @@ where
         let Instruction { opcode, .. } = instruction;
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
-        A::start(*state.pc, *state.fp, state.memory, &mut adapter_record);
+        A::start(
+            *state.pc,
+            *state.extra_regs,
+            state.memory,
+            &mut adapter_record,
+        );
 
         let [rs1, rs2] = self
             .adapter

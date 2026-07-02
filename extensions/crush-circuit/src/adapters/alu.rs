@@ -2,22 +2,22 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller, BasicAdapterInterface,
-        MinimalInstruction, VmAdapterAir, get_record_from_slice,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
+        BasicAdapterInterface, MinimalInstruction, VmAdapterAir,
     },
     system::memory::{
-        MemoryAddress, MemoryAuxColsFactory,
         offline_checker::{
             MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
             MemoryWriteBytesAuxRecord,
         },
         online::TracingMemory,
+        MemoryAddress, MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::{
-    AlignedBytesBorrow,
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
+    AlignedBytesBorrow,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -26,20 +26,18 @@ use openvm_instructions::{
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
 };
 use openvm_stark_backend::{
-    ColumnsAir,
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+    ColumnsAir,
 };
 use struct_reflection::{StructReflection, StructReflectionHelper};
 
-use openvm_circuit::arch::ExecutionBridge;
-
-use crate::execution::ExecutionState;
+use openvm_circuit::arch::{ExecutionBridge, ExecutionState, EXTRA_EXEC_REGS};
 
 use super::{
-    RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, W32_REG_OPS, reg_addr, tracing_read, tracing_read_imm,
-    tracing_write,
+    reg_addr, tracing_read, tracing_read_imm, tracing_write, RV32_CELL_BITS,
+    RV32_REGISTER_NUM_LIMBS, W32_REG_OPS,
 };
 
 #[repr(C)]
@@ -49,7 +47,7 @@ pub struct BaseAluAdapterColsDifferentInputsOutputs<
     const NUM_READ_OPS: usize,
     const NUM_WRITE_OPS: usize,
 > {
-    pub from_state: ExecutionState<T>,
+    pub from_state: ExecutionState<T, EXTRA_EXEC_REGS>,
     pub rd_ptr: T,
     pub rs1_ptr: T,
     /// Pointer if rs2 was a read, immediate value otherwise
@@ -98,11 +96,11 @@ impl<F: Field, const NUM_LIMBS: usize, const NUM_READ_OPS: usize, const NUM_WRIT
 }
 
 impl<
-    AB: InteractionBuilder,
-    const NUM_LIMBS: usize,
-    const NUM_READ_OPS: usize,
-    const NUM_WRITE_OPS: usize,
-> VmAdapterAir<AB>
+        AB: InteractionBuilder,
+        const NUM_LIMBS: usize,
+        const NUM_READ_OPS: usize,
+        const NUM_WRITE_OPS: usize,
+    > VmAdapterAir<AB>
     for BaseAluAdapterAirDifferentInputsOutputs<NUM_LIMBS, NUM_READ_OPS, NUM_WRITE_OPS>
 {
     type Interface =
@@ -124,7 +122,7 @@ impl<
         };
 
         // fp is carried in the execution state (received on the execution bus), not read from
-        // memory. The register reads/writes below use `local.from_state.fp` directly.
+        // memory. The register reads/writes below use `local.from_state.extra_regs[0]` directly.
 
         // If rs2 is an immediate value, constrain that:
         // 1. It's a 16-bit two's complement integer (stored in rs2_limbs[0] and rs2_limbs[1])
@@ -154,7 +152,9 @@ impl<
                 std::array::from_fn(|i| ctx.reads[0][offset + i].clone());
             self.memory_bridge
                 .read(
-                    reg_addr(local.rs1_ptr + local.from_state.fp + AB::F::from_usize(offset)),
+                    reg_addr(
+                        local.rs1_ptr + local.from_state.extra_regs[0] + AB::F::from_usize(offset),
+                    ),
                     chunk,
                     timestamp_pp(),
                     &local.rs1_reads_aux[r],
@@ -176,7 +176,7 @@ impl<
                 .read(
                     MemoryAddress::new(
                         local.rs2_as,
-                        local.rs2 + local.from_state.fp + AB::F::from_usize(offset),
+                        local.rs2 + local.from_state.extra_regs[0] + AB::F::from_usize(offset),
                     ),
                     chunk,
                     timestamp_pp(),
@@ -192,7 +192,9 @@ impl<
                 std::array::from_fn(|i| ctx.writes[0][offset + i].clone());
             self.memory_bridge
                 .write(
-                    reg_addr(local.rd_ptr + local.from_state.fp + AB::F::from_usize(offset)),
+                    reg_addr(
+                        local.rd_ptr + local.from_state.extra_regs[0] + AB::F::from_usize(offset),
+                    ),
                     chunk,
                     timestamp_pp(),
                     &local.writes_aux[w],
@@ -262,8 +264,12 @@ pub struct BaseAluAdapterRecordDifferentInputsOutputs<
     pub writes_aux: [MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>; NUM_WRITE_OPS],
 }
 
-impl<F: PrimeField32, const NUM_LIMBS: usize, const NUM_READ_OPS: usize, const NUM_WRITE_OPS: usize>
-    AdapterTraceExecutor<F>
+impl<
+        F: PrimeField32,
+        const NUM_LIMBS: usize,
+        const NUM_READ_OPS: usize,
+        const NUM_WRITE_OPS: usize,
+    > AdapterTraceExecutor<F>
     for BaseAluAdapterExecutorDifferentInputsOutputs<NUM_LIMBS, NUM_READ_OPS, NUM_WRITE_OPS>
 {
     const WIDTH: usize =
@@ -276,12 +282,12 @@ impl<F: PrimeField32, const NUM_LIMBS: usize, const NUM_READ_OPS: usize, const N
     #[inline(always)]
     fn start(
         pc: u32,
-        fp: u32,
+        extra_regs: [u32; EXTRA_EXEC_REGS],
         memory: &TracingMemory,
         record: &mut &mut BaseAluAdapterRecordDifferentInputsOutputs<NUM_READ_OPS, NUM_WRITE_OPS>,
     ) {
         record.from_pc = pc;
-        record.fp = fp;
+        record.fp = extra_regs[0];
         record.from_timestamp = memory.timestamp;
     }
 
@@ -452,9 +458,13 @@ impl<F: PrimeField32, const NUM_READ_OPS: usize, const NUM_WRITE_OPS: usize> Ada
         adapter_row.rs2 = F::from_u32(record.rs2);
         adapter_row.rs1_ptr = F::from_u32(record.rs1_ptr);
         adapter_row.rd_ptr = F::from_u32(record.rd_ptr);
-        adapter_row.from_state.timestamp = F::from_u32(record.from_timestamp);
-        adapter_row.from_state.fp = F::from_u32(record.fp);
-        adapter_row.from_state.pc = F::from_u32(record.from_pc);
+        // Snapshot record values before writing `from_state` columns: the column layout
+        // (pc, timestamp, extra_regs) no longer aligns with the record layout, so writing one
+        // column would otherwise clobber a record field still borrowed from the shared buffer.
+        let (from_pc, fp, from_timestamp) = (record.from_pc, record.fp, record.from_timestamp);
+        adapter_row.from_state.extra_regs[0] = F::from_u32(fp);
+        adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
+        adapter_row.from_state.pc = F::from_u32(from_pc);
     }
 }
 

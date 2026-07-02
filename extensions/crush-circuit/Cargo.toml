@@ -11,7 +11,7 @@ openvm-cuda-backend = { workspace = true, optional = true }
 openvm-cuda-common = { workspace = true, optional = true }
 openvm-circuit-primitives = { workspace = true }
 openvm-circuit-primitives-derive = { workspace = true }
-openvm-circuit = { workspace = true }
+openvm-circuit = { workspace = true, features = ["fp"] }
 openvm-circuit-derive = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-sdk = { workspace = true }

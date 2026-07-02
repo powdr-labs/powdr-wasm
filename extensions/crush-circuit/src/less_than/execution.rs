@@ -15,17 +15,17 @@ use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_derive::PreflightExecutor;
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
-    LocalOpcode,
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_CELL_BITS, RV32_IMM_AS, RV32_REGISTER_AS},
+    LocalOpcode,
 };
 use openvm_rv32im_circuit::LessThanExecutor as LessThanExecutorInner;
 use openvm_rv32im_transpiler::LessThanOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::adapters::{
-    BaseAluAdapterExecutorDifferentInputsOutputs, RV32_REGISTER_NUM_LIMBS, imm_to_bytes,
+    imm_to_bytes, BaseAluAdapterExecutorDifferentInputsOutputs, RV32_REGISTER_NUM_LIMBS,
 };
 use crate::utils::to_u64;
 
@@ -194,7 +194,7 @@ unsafe fn execute_e12_impl<
     const { assert!(NUM_LIMBS == 4 || NUM_LIMBS == 8) };
     const { assert!(NUM_READ_OPS * RV32_REGISTER_NUM_LIMBS == NUM_LIMBS) };
 
-    let fp = exec_state.fp();
+    let fp = exec_state.extra_regs()[0];
     let rs1 = vm_read_multiple_ops::<NUM_LIMBS, NUM_READ_OPS, _, _>(
         exec_state,
         RV32_REGISTER_AS,

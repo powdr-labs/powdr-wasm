@@ -10,10 +10,10 @@ use openvm_crush_transpiler::{
     HintStoreOpcode::{HINT_BUFFER, HINT_STOREW},
 };
 use openvm_instructions::{
-    LocalOpcode,
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    LocalOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -161,7 +161,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HIN
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<u32, ExecutionError> {
     let pc = exec_state.pc();
-    let fp = exec_state.fp();
+    let fp = exec_state.extra_regs()[0];
     let mem_ptr_limbs = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, fp + pre_compute.b as u32);
     let mem_ptr = u32::from_le_bytes(mem_ptr_limbs);
 

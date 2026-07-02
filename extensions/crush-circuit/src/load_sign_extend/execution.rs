@@ -6,15 +6,15 @@ use std::{
 
 use openvm_circuit::{
     arch::*,
-    system::memory::{POINTER_MAX_BITS, online::GuestMemory},
+    system::memory::{online::GuestMemory, POINTER_MAX_BITS},
 };
 use openvm_circuit_derive::PreflightExecutor;
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
-    LocalOpcode,
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_CELL_BITS, RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    LocalOpcode,
 };
 use openvm_rv32im_circuit::LoadSignExtendExecutor as LoadSignExtendExecutorInner;
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
@@ -159,7 +159,7 @@ unsafe fn execute_e12_impl<
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let pc = exec_state.pc();
-    let fp = exec_state.fp();
+    let fp = exec_state.extra_regs()[0];
     let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
         exec_state.vm_read(RV32_REGISTER_AS, fp + pre_compute.b);
     let rs1_val = u32::from_le_bytes(rs1_bytes);

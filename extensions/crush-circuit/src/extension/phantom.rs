@@ -2,12 +2,12 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 use eyre::bail;
 use openvm_circuit::{
-    arch::{PhantomSubExecutor, Streams},
+    arch::{PhantomSubExecutor, Streams, EXTRA_EXEC_REGS},
     system::memory::online::GuestMemory,
 };
 use openvm_instructions::PhantomDiscriminant;
 use openvm_stark_backend::p3_field::{Field, PrimeField32};
-use rand::{Rng, rngs::StdRng};
+use rand::{rngs::StdRng, Rng};
 
 use crate::adapters::{memory_read, read_rv32_register};
 
@@ -29,7 +29,7 @@ impl<F: Field> PhantomSubExecutor<F> for HintInputSubEx {
         _: &GuestMemory,
         streams: &mut Streams<F>,
         _: &mut StdRng,
-        _fp: u32,
+        _extra_regs: [u32; EXTRA_EXEC_REGS],
         _: PhantomDiscriminant,
         _: u32,
         _: u32,
@@ -67,7 +67,7 @@ impl<F: PrimeField32> PhantomSubExecutor<F> for PrintStrSubEx {
         memory: &GuestMemory,
         _: &mut Streams<F>,
         _: &mut StdRng,
-        fp: u32,
+        [fp]: [u32; EXTRA_EXEC_REGS],
         _: PhantomDiscriminant,
         a: u32,
         b: u32,
@@ -94,7 +94,7 @@ impl<F: PrimeField32> PhantomSubExecutor<F> for HintRandomSubEx {
         memory: &GuestMemory,
         streams: &mut Streams<F>,
         rng: &mut StdRng,
-        fp: u32,
+        [fp]: [u32; EXTRA_EXEC_REGS],
         _: PhantomDiscriminant,
         a: u32,
         _: u32,
@@ -131,7 +131,7 @@ impl<F: PrimeField32> PhantomSubExecutor<F> for ClockTimeGetSubEx {
         _: &GuestMemory,
         streams: &mut Streams<F>,
         _: &mut StdRng,
-        _fp: u32,
+        _extra_regs: [u32; EXTRA_EXEC_REGS],
         _: PhantomDiscriminant,
         _: u32,
         _: u32,
@@ -165,7 +165,7 @@ impl<F: Field> PhantomSubExecutor<F> for TraceSyscallSubEx {
         _: &GuestMemory,
         _: &mut Streams<F>,
         _: &mut StdRng,
-        _fp: u32,
+        _extra_regs: [u32; EXTRA_EXEC_REGS],
         _: PhantomDiscriminant,
         _: u32,
         _: u32,

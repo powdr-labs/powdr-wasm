@@ -7,7 +7,7 @@
 //! - Preflight (VirtualMachine::execute_preflight)
 //! - Proof generation (VirtualMachine::prove)
 
-use crush_circuit::{CrushConfig, adapters::RV32_REGISTER_NUM_LIMBS};
+use crush_circuit::{adapters::RV32_REGISTER_NUM_LIMBS, CrushConfig};
 use openvm_circuit::{
     arch::{ExecutionError, VmExecutor, VmState},
     system::memory::online::GuestMemory,
@@ -15,13 +15,13 @@ use openvm_circuit::{
 use openvm_instructions::{
     exe::VmExe,
     instruction::Instruction,
-    program::{DEFAULT_PC_STEP, Program},
+    program::{Program, DEFAULT_PC_STEP},
     riscv::RV32_REGISTER_AS,
 };
 use openvm_sdk::StdIn;
 
 use super::helpers;
-use crate::proving::{ALL_BACKENDS, Backend};
+use crate::proving::{Backend, ALL_BACKENDS};
 use crush_translation::instruction_builder::*;
 
 type F = openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -78,9 +78,9 @@ fn read_ram(memory: &GuestMemory, addr: u32) -> u32 {
     u32::from_le_bytes(bytes)
 }
 
-/// Read FP from the VM execution state (no longer stored in memory).
+/// Read FP from the VM execution state (carried as `extra_regs[0]`, no longer in memory).
 fn read_fp(state: &VmState<F>) -> u32 {
-    state.fp()
+    state.extra_regs()[0]
 }
 
 /// Build a VmExe from a test specification (program and PC only).
@@ -123,7 +123,7 @@ fn build_initial_state(spec: &TestSpec, exe: &VmExe<F>, vm_config: &CrushConfig)
 
     // Set initial FP
     // Again, the raw value stored in the state is the FP multiplied by RV32_REGISTER_NUM_LIMBS.
-    state.set_fp(spec.start_fp * RV32_REGISTER_NUM_LIMBS as u32);
+    state.set_extra_regs([spec.start_fp * RV32_REGISTER_NUM_LIMBS as u32]);
 
     state
 }
