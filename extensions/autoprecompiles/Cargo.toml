@@ -10,6 +10,7 @@ cuda = ["powdr-openvm/cuda", "crush-circuit/cuda"]
 tco = []
 
 [dependencies]
+powdr-autoprecompiles.workspace = true
 powdr-openvm.workspace = true
 # only used for the symbol table, not actually riscv specific
 powdr-riscv-elf.workspace = true
@@ -30,4 +31,3 @@ crush-translation.workspace = true
 
 [dev-dependencies]
 powdr-openvm = { workspace = true, features = ["test-utils"] }
-powdr-autoprecompiles.workspace = true

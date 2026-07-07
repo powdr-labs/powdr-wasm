@@ -45,6 +45,7 @@ use openvm_instructions::{
     riscv,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
+use powdr_autoprecompiles::DropHint as ApcDropHint;
 use wasmparser::{MemArg, Operator as Op, ValType};
 
 /// This is our convention for null function references.
@@ -73,7 +74,8 @@ pub struct LinkedProgram<F: PrimeField32> {
     /// Register-liveness hints indexed by word-PC: entry `pc / NUM_LIMBS`
     /// holds the hints attached to the instruction at byte PC `pc`. The
     /// leading slot (for the linker's reserved nop at PC 0) is always empty.
-    drop_hints: Vec<Vec<ExecDropHint>>,
+    /// Already converted to the APC vocabulary consumed by powdr.
+    drop_hints: Vec<Vec<ApcDropHint>>,
     /// Number of input/output words for each exported function, indexed by
     /// function index.
     exported_func_io_words: HashMap<u32, (usize, usize)>,
@@ -111,6 +113,11 @@ impl<F: PrimeField32 + openvm_stark_backend::p3_field::InjectiveMonomial<7>> Lin
         // We assume that the loop above removes a single `nop` introduced by the linker.
         assert_eq!(linked_instructions.len(), start_offset - 1);
         assert_eq!(drop_hints.len(), start_offset);
+
+        let drop_hints = drop_hints
+            .into_iter()
+            .map(|hints| hints.into_iter().map(exec_hint_to_apc_hint).collect())
+            .collect();
 
         let memory_image = std::mem::take(&mut module.initial_memory)
             .into_iter()
@@ -184,7 +191,7 @@ impl<F: PrimeField32 + openvm_stark_backend::p3_field::InjectiveMonomial<7>> Lin
     /// Register-liveness hints indexed by word-PC: `drop_hints()[pc / NUM_LIMBS]`
     /// holds the hints attached to the instruction at byte PC `pc`. The leading
     /// slot belongs to the linker's reserved nop at PC 0 and is always empty.
-    pub fn drop_hints(&self) -> &[Vec<ExecDropHint>] {
+    pub fn drop_hints(&self) -> &[Vec<ApcDropHint>] {
         &self.drop_hints
     }
 
@@ -398,6 +405,18 @@ impl<F> OpenVMSettings<F> {
     pub fn with_unaligned_memory(mut self) -> Self {
         self.support_unaligned_memory = true;
         self
+    }
+}
+
+/// Translates a linker-resolved liveness hint into the equivalent APC-level
+/// hint consumed by powdr's autoprecompile generation. The variants map 1:1:
+/// crush register indices are FP-relative words, which is exactly what the
+/// `Rel*` variants express.
+fn exec_hint_to_apc_hint(hint: ExecDropHint) -> ApcDropHint {
+    match hint {
+        ExecDropHint::DropBefore(reg) => ApcDropHint::RelDropBefore(reg),
+        ExecDropHint::DropBeforeFrom(reg) => ApcDropHint::RelDropBeforeFrom(reg),
+        ExecDropHint::DropAfter(reg) => ApcDropHint::RelDropAfter(reg),
     }
 }
 
