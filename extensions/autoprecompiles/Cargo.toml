@@ -31,3 +31,6 @@ crush-translation.workspace = true
 [dev-dependencies]
 powdr-openvm = { workspace = true, features = ["test-utils"] }
 powdr-autoprecompiles.workspace = true
+powdr-number.workspace = true
+itertools.workspace = true
+pretty_assertions = "1"

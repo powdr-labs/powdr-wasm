@@ -133,6 +133,70 @@ fn cross_width_64_to_32() {
     );
 }
 
+// ==================== Memory copy / fill loops ====================
+// Inner loops from musl memmove (memory.copy) and memset (memory.fill),
+// compiled to WOMIR from the C builtins in integration/builtin_src/.
+
+#[test]
+fn copy_byte() {
+    // Forward byte-by-byte copy loop body (musl memmove)
+    // C: for (; n; n--) *d++ = *s++;
+    assert_machine_output(
+        vec![
+            ib::loadbu(3, 0, 0),       // r3 = zero_extend(MEM8[r0])
+            ib::storeb(3, 1, 0),       // MEM8[r1] = r3
+            ib::add_imm(0, 0, 1_i16),  // r0++ (src advance)
+            ib::add_imm(1, 1, 1_i16),  // r1++ (dst advance)
+            ib::add_imm(2, 2, -1_i16), // r2-- (byte count)
+        ],
+        "copy_byte",
+    );
+}
+
+#[test]
+fn copy_word() {
+    // Forward word-aligned copy loop body (musl memmove)
+    // C: for (; n>=WS; n-=WS, d+=WS, s+=WS) *(WT *)d = *(WT *)s;
+    assert_machine_output(
+        vec![
+            ib::loadw(3, 0, 0),        // r3 = MEM32[r0]
+            ib::storew(3, 1, 0),       // MEM32[r1] = r3
+            ib::add_imm(0, 0, 4_i16),  // r0 += 4 (src advance)
+            ib::add_imm(1, 1, 4_i16),  // r1 += 4 (dst advance)
+            ib::add_imm(2, 2, -4_i16), // r2 -= 4 (byte count)
+        ],
+        "copy_word",
+    );
+}
+
+#[test]
+fn fill_32bytes() {
+    // 32-byte fill inner loop body (musl memset)
+    // Fills 32 bytes per iteration using 8 word stores (4 × u64 = 8 × u32).
+    // Uses intermediate ADD_IMMs to compute store addresses, matching the
+    // actual WOMIR compilation of the memory_fill builtin.
+    // C: for (; n >= 32; n-=32, s+=32) { *(u64*)(s+0) = c64; ... *(u64*)(s+24) = c64; }
+    assert_machine_output(
+        vec![
+            ib::storew(5, 0, 0),        // MEM32[r0+0] = r5 (c32)
+            ib::storew(6, 0, 4),        // MEM32[r0+4] = r6 (c32)
+            ib::add_imm(2, 0, 24_i16),  // r2 = r0 + 24
+            ib::storew(5, 2, 0),        // MEM32[r0+24] = r5
+            ib::storew(6, 2, 4),        // MEM32[r0+28] = r6
+            ib::add_imm(2, 0, 16_i16),  // r2 = r0 + 16
+            ib::storew(5, 2, 0),        // MEM32[r0+16] = r5
+            ib::storew(6, 2, 4),        // MEM32[r0+20] = r6
+            ib::add_imm(2, 0, 8_i16),   // r2 = r0 + 8
+            ib::storew(5, 2, 0),        // MEM32[r0+8] = r5
+            ib::storew(6, 2, 4),        // MEM32[r0+12] = r6
+            ib::add_imm(0, 0, 32_i16),  // r0 += 32 (advance pointer)
+            ib::add_imm(1, 1, -32_i16), // r1 -= 32 (decrement remaining)
+        ],
+        "fill_32bytes",
+    );
+}
+
+
 // ==================== I64Load patterns ====================
 
 #[test]
