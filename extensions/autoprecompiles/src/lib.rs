@@ -14,14 +14,20 @@ use openvm_crush_transpiler::{
     Eq64Opcode, EqOpcode, JumpOpcode, LessThan64Opcode, LessThanOpcode, LoadStoreOpcode,
     Mul64Opcode, MulOpcode, Shift64Opcode, ShiftOpcode,
 };
-use openvm_instructions::{LocalOpcode, VmOpcode, instruction::Instruction};
+use openvm_instructions::{
+    LocalOpcode, VmOpcode,
+    instruction::Instruction,
+    riscv::{RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+};
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine, p3_baby_bear::BabyBear,
 };
+use powdr_autoprecompiles::DropHint;
 use powdr_openvm::BabyBearSC;
 #[cfg(feature = "cuda")]
 use powdr_openvm::GpuBabyBearPoseidon2CpuEngine;
+use powdr_openvm::drop_hint_lowering::DropHintConfig;
 #[cfg(feature = "cuda")]
 use powdr_openvm::isa::OriginalGpuChipComplex;
 use powdr_openvm::isa::{OpenVmISA, OriginalCpuChipComplex};
@@ -111,6 +117,34 @@ impl OpenVmISA for CrushISA {
             .labels()
             .into_keys()
             .collect()
+    }
+
+    fn get_drop_hints<'a>(
+        original_program: &'a OriginalCompiledProgram<'_, Self>,
+    ) -> &'a [Vec<DropHint>] {
+        // The linked program's hints are indexed by word-PC and include a
+        // leading empty slot for the linker's reserved nop at PC 0, which
+        // `program_with_entry_point` strips from the exe (its `pc_base` is one
+        // pc step). Skipping that slot aligns entry `i` with the instruction
+        // at `pc_base + i * DEFAULT_PC_STEP`, as required by this hook.
+        &original_program.linked_program.drop_hints()[1..]
+    }
+
+    fn drop_hint_config() -> Option<DropHintConfig> {
+        Some(DropHintConfig {
+            // Hint register indices are FP-relative words; the instruction
+            // builders encode register operands as `index * NUM_LIMBS`, so a
+            // hint's slot address is `fp + index * NUM_LIMBS`.
+            register_address_space: RV32_REGISTER_AS,
+            stride: RV32_REGISTER_NUM_LIMBS as u64,
+            fp_address_space: crush_circuit::memory_config::FP_AS,
+            fp_address: 0,
+        })
+    }
+
+    fn read_fp_untraced(memory: &openvm_circuit::system::memory::online::GuestMemory) -> u32 {
+        use crush_circuit::memory_config::FpMemory;
+        memory.fp::<BabyBear>()
     }
 
     fn create_dummy_airs<E: VmCircuitExtension<BabyBearSC>>(

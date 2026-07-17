@@ -14,4 +14,5 @@ openvm-rv32im-transpiler = { workspace = true }
 openvm-stark-backend = { workspace = true }
 openvm-crush-transpiler = { workspace = true }
 crush-circuit = { workspace = true }
+powdr-autoprecompiles = { workspace = true }
 wasmparser = { workspace = true }

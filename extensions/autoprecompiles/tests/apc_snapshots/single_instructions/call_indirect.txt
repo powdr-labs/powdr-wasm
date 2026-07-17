@@ -67,3 +67,6 @@ mult=is_valid, args=[15360 * save_pc_write_aux__base__prev_timestamp_0 + 15360 *
 // Algebraic constraints:
 (30720 * new_fp_limbs__0_0 - (30720 * old_fp_data__0_0 + 7864320 * old_fp_data__1_0 + 3686400 * is_valid)) * (30720 * new_fp_limbs__0_0 - (30720 * old_fp_data__0_0 + 7864320 * old_fp_data__1_0 + 3686401)) = 0
 is_valid * (is_valid - 1) = 0
+
+// Derived columns:
+is_valid (new) = 1

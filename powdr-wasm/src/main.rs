@@ -14,7 +14,6 @@ use itertools::Itertools;
 use metrics_tracing_context::{MetricsLayer, TracingContextLayer};
 use metrics_util::{debugging::DebuggingRecorder, layers::Layer};
 use openvm_circuit::arch::VmState;
-use openvm_instructions::exe::VmExe;
 use openvm_sdk::StdIn;
 use openvm_stark_sdk::bench::serialize_metric_snapshot;
 use powdr_openvm::{
@@ -65,6 +64,11 @@ struct PowdrArgs {
     /// Ignore APCs executed less times than the cutoff
     #[arg(long)]
     apc_exec_count_cutoff: Option<u32>,
+    /// Do not use the guest's drop (liveness) hints during APC generation.
+    /// The hints are still part of the translated program; this only gates
+    /// their consumption (and is part of the APC cache key).
+    #[arg(long, default_value_t = false)]
+    disable_drop_hints: bool,
 }
 
 impl PowdrArgs {
@@ -73,8 +77,9 @@ impl PowdrArgs {
         if let Some(ref apc_candidates_dir) = self.apc_candidates_dir {
             generate = generate.with_apc_candidates_dir(apc_candidates_dir);
         }
-        generate =
-            generate.with_superblocks(1, self.apc_max_instructions, self.apc_exec_count_cutoff);
+        generate = generate
+            .with_superblocks(1, self.apc_max_instructions, self.apc_exec_count_cutoff)
+            .with_drop_hints(!self.disable_drop_hints);
         (generate, SelectConfig::new(self.apc_count, 0))
     }
 }
@@ -365,7 +370,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             input,
             unaligned_memory,
         } => {
-            let exe = load_wasm_exe(&program, &function, unaligned_memory);
+            let exe =
+                load_wasm_module(&program, unaligned_memory).program_with_entry_point(&function);
             let stdin = make_stdin(&input);
             let vm_config = CrushConfig::default();
 
@@ -461,10 +467,6 @@ fn load_wasm_module_with_settings(
     let wasm_bytes = std::fs::read(program).expect("Failed to read WASM file");
     let (module, functions) = load_wasm_with_settings(&wasm_bytes, settings);
     LinkedProgram::new(module, functions)
-}
-
-fn load_wasm_exe(program: &str, function: &str, unaligned_memory: bool) -> VmExe<F> {
-    load_wasm_module(program, unaligned_memory).program_with_entry_point(function)
 }
 
 fn load_wasm_original_program(
