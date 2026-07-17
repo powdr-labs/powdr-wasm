@@ -246,3 +246,6 @@ r_zero_0 * (r__0_0 + r__1_0 + r__2_0 + r__3_0) = 0
 zero_divisor_1 * (c__0_1 + c__1_1 + c__2_1 + c__3_1) = 0
 r_zero_1 * (r__0_1 + r__1_1 + r__2_1 + r__3_1) = 0
 is_valid * (is_valid - 1) = 0
+
+// Derived columns:
+is_valid (new) = 1

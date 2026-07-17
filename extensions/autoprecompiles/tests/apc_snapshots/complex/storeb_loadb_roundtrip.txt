@@ -112,3 +112,6 @@ data_most_sig_bit_1 * (data_most_sig_bit_1 - 1) = 0
 shift_most_sig_bit_1 * (shift_most_sig_bit_1 - 1) = 0
 flags__0_0 * (flags__0_0 + flags__1_0 + flags__2_0 + flags__3_0 - 2) + 2 * flags__1_0 * (flags__0_0 + flags__1_0 + flags__2_0 + flags__3_0 - 2) + 3 * flags__2_0 * (flags__0_0 + flags__1_0 + flags__2_0 + flags__3_0 - 2) - flags__2_0 * (flags__2_0 - 1) = 0
 is_valid * (is_valid - 1) = 0
+
+// Derived columns:
+is_valid (new) = 1

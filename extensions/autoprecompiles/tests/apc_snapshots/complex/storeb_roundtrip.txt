@@ -221,3 +221,6 @@ flags__0_1 * (flags__0_1 + flags__1_1 + flags__2_1 + flags__3_1 - 2) + 2 * flags
 flags__1_2 * flags__2_2 + 2 * flags__0_2 * flags__2_2 + 2 * flags__1_2 * flags__3_2 + 3 * flags__2_2 * flags__3_2 = 0
 flags__1_3 * flags__2_3 + 2 * flags__0_3 * flags__2_3 + 2 * flags__1_3 * flags__3_3 + 3 * flags__2_3 * flags__3_3 = 0
 is_valid * (is_valid - 1) = 0
+
+// Derived columns:
+is_valid (new) = 1

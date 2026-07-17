@@ -84,3 +84,6 @@ write_data__3_1 - ((flags__0_1 * flags__1_1 + flags__0_1 * flags__3_1 + flags__1
 flags__1_1 * (flags__1_1 - 1) + flags__2_1 * (flags__2_1 - 1) + 4 * flags__0_1 * flags__1_1 + 4 * flags__0_1 * flags__2_1 + 5 * flags__0_1 * flags__3_1 + 5 * flags__1_1 * flags__2_1 + 5 * flags__1_1 * flags__3_1 + 5 * flags__2_1 * flags__3_1 - (1006632960 * flags__3_1 * (flags__3_1 - 1) + flags__0_1 * (flags__0_1 + flags__1_1 + flags__2_1 + flags__3_1 - 2) + flags__1_1 * (flags__0_1 + flags__1_1 + flags__2_1 + flags__3_1 - 2) + flags__2_1 * (flags__0_1 + flags__1_1 + flags__2_1 + flags__3_1 - 2) + 3 * flags__3_1 * (flags__0_1 + flags__1_1 + flags__2_1 + flags__3_1 - 2) + 5 * is_valid) = 0
 flags__0_1 * (flags__0_1 + flags__1_1 + flags__2_1 + flags__3_1 - 2) + 2 * flags__1_1 * (flags__0_1 + flags__1_1 + flags__2_1 + flags__3_1 - 2) + 3 * flags__2_1 * (flags__0_1 + flags__1_1 + flags__2_1 + flags__3_1 - 2) - flags__2_1 * (flags__2_1 - 1) = 0
 is_valid * (is_valid - 1) = 0
+
+// Derived columns:
+is_valid (new) = 1

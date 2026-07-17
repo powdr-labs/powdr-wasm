@@ -213,3 +213,6 @@ flags__1_3 * (flags__1_3 - 1) + flags__2_3 * (flags__2_3 - 1) + 5 * flags__1_3 *
 flags__1_2 * flags__2_2 = 0
 flags__1_3 * flags__2_3 = 0
 is_valid * (is_valid - 1) = 0
+
+// Derived columns:
+is_valid (new) = 1
