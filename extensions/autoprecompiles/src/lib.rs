@@ -142,6 +142,11 @@ impl OpenVmISA for CrushISA {
         })
     }
 
+    fn read_fp_untraced(memory: &openvm_circuit::system::memory::online::GuestMemory) -> u32 {
+        use crush_circuit::memory_config::FpMemory;
+        memory.fp::<BabyBear>()
+    }
+
     fn create_dummy_airs<E: VmCircuitExtension<BabyBearSC>>(
         config: &Self::Config,
         shared_chips: E,
