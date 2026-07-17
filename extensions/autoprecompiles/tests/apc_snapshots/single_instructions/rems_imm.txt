@@ -118,3 +118,6 @@ lt_marker__0_0 * (r_prime__0_0 + lt_diff_0 - 7) = 0
 (q_sign_0 - b_sign_0) * (q__0_0 + q__1_0 + q__2_0 + q__3_0 + q_sign_0) = 0
 r_zero_0 * (r__0_0 + r__1_0 + r__2_0 + r__3_0) = 0
 is_valid * (is_valid - 1) = 0
+
+// Derived columns:
+is_valid (new) = 1

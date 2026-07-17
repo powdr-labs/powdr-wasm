@@ -42,3 +42,7 @@ cond_is_zero_0 * (cond_is_zero_0 - 1) = 0
 cond_is_zero_0 * (rs_val__0_0 + rs_val__1_0 + rs_val__2_0 + rs_val__3_0) = 0
 free_var_27 * (rs_val__0_0 + rs_val__1_0 + rs_val__2_0 + rs_val__3_0) + cond_is_zero_0 - is_valid = 0
 is_valid * (is_valid - 1) = 0
+
+// Derived columns:
+free_var_27 (new) = QuotientOrZero(1 - cond_is_zero_0, rs_val__0_0 + rs_val__1_0 + rs_val__2_0 + rs_val__3_0)
+is_valid (new) = 1

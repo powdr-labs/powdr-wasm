@@ -105,3 +105,6 @@ mult=is_valid, args=[a__7_0, 14400 * b__0_0 * c__2_0 + 14400 * b__1_0 * c__1_0 +
 
 // Algebraic constraints:
 is_valid * (is_valid - 1) = 0
+
+// Derived columns:
+is_valid (new) = 1
