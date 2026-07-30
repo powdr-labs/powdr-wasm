@@ -646,6 +646,45 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
                 )));
                 directives
             }
+            // Keccak256 precompile. The guest drives the sponge itself (padding and the
+            // absorb loop are plain guest code), calling these two opcodes per block.
+            ("env", "__native_keccakf") => {
+                // fn(buffer: *mut u8) — 200-byte state, permuted in place.
+                assert!(outputs.is_empty());
+                let mem_start = c
+                    .module()
+                    .linear_memory_start()
+                    .expect("no memory allocated");
+                let buffer_ptr = inputs[0].as_register().unwrap().start as usize;
+                let mut directives = vec![];
+                let effective_buffer =
+                    rebase_wasm_ptr::<F>(c, &mut directives, buffer_ptr, mem_start);
+                directives.push(Directive::Instruction(ib::keccakf(effective_buffer)));
+                directives
+            }
+            ("env", "__native_xorin") => {
+                // fn(buffer: *mut u8, input: *const u8, len: usize)
+                assert!(outputs.is_empty());
+                let mem_start = c
+                    .module()
+                    .linear_memory_start()
+                    .expect("no memory allocated");
+                let buffer_ptr = inputs[0].as_register().unwrap().start as usize;
+                let input_ptr = inputs[1].as_register().unwrap().start as usize;
+                let len_reg = inputs[2].as_register().unwrap().start as usize;
+                let mut directives = vec![];
+                // `len` is a byte count, not a pointer, so it is not rebased.
+                let effective_buffer =
+                    rebase_wasm_ptr::<F>(c, &mut directives, buffer_ptr, mem_start);
+                let effective_input =
+                    rebase_wasm_ptr::<F>(c, &mut directives, input_ptr, mem_start);
+                directives.push(Directive::Instruction(ib::xorin(
+                    effective_buffer,
+                    effective_input,
+                    len_reg,
+                )));
+                directives
+            }
             ("env", "abort") => {
                 vec![Directive::Instruction(ib::abort())]
             }
@@ -961,6 +1000,38 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
             })
             .unwrap_or_else(|| translate_complex_ins(c, module, op, inputs, output, unaligned))
     }
+}
+
+/// Translate a WASM linear-memory pointer held in `ptr_reg` into an absolute VM
+/// address by adding the linear memory base.
+///
+/// Returns the register holding the absolute address, appending any instructions
+/// needed to `directives`. When the base is zero the input register is returned
+/// unchanged. Otherwise the result goes into a fresh temporary, because `ptr_reg`
+/// may be a live WASM local that must not be clobbered.
+fn rebase_wasm_ptr<F: PrimeField32>(
+    c: &mut Ctx<'_, '_>,
+    directives: &mut Vec<Directive<F>>,
+    ptr_reg: usize,
+    mem_start: u32,
+) -> usize {
+    if mem_start == 0 {
+        return ptr_reg;
+    }
+    let tmp = c.allocate_tmp_type::<OpenVMSettings<F>>(ValType::I32).start as usize;
+    if let Ok(imm) = AluImm::try_from(mem_start) {
+        directives.push(Directive::Instruction(ib::add_imm(tmp, ptr_reg, imm)));
+    } else {
+        // mem_start too large for an immediate — materialize it, then add.
+        let tmp2 = c.allocate_tmp_type::<OpenVMSettings<F>>(ValType::I32).start as usize;
+        directives.push(Directive::Instruction(ib::const_32_imm(
+            tmp2,
+            mem_start as u16,
+            (mem_start >> 16) as u16,
+        )));
+        directives.push(Directive::Instruction(ib::add(tmp, ptr_reg, tmp2)));
+    }
+    tmp
 }
 
 impl<F: PrimeField32> Directive<F> {

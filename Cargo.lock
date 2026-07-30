@@ -1055,6 +1055,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "crush-guest-keccak"
+version = "0.0.1"
+dependencies = [
+ "tiny-keccak",
+]
+
+[[package]]
 name = "crush-translation"
 version = "0.0.1"
 dependencies = [
