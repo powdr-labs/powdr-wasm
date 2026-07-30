@@ -21,7 +21,11 @@ use openvm_instructions::{
 use openvm_rv32im_circuit::adapters::{read_rv32_register, tracing_read, tracing_write};
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::keccak256::xorin::{XorinVmExecutor, XorinVmFiller, columns::XorinVmCols};
+use crate::{
+    adapters::tracing_read_fp,
+    keccak256::xorin::{XorinVmExecutor, XorinVmFiller, columns::XorinVmCols},
+    memory_config::FpMemory,
+};
 
 #[derive(Clone, Copy)]
 pub struct XorinVmMetadata {}
@@ -39,6 +43,9 @@ pub(crate) type XorinVmRecordLayout = MultiRowLayout<XorinVmMetadata>;
 pub struct XorinVmRecordHeader {
     pub from_pc: u32,
     pub timestamp: u32,
+    /// Frame pointer, read from `FP_AS` before the register reads.
+    pub fp: u32,
+    /// Register operands as encoded in the instruction, before the frame pointer is added.
     pub rd_ptr: u32,
     pub rs1_ptr: u32,
     pub rs2_ptr: u32,
@@ -47,6 +54,7 @@ pub struct XorinVmRecordHeader {
     pub len: u32,
     pub buffer_limbs: [u8; 136],
     pub input_limbs: [u8; 136],
+    pub fp_aux: MemoryReadAuxRecord,
     pub register_aux_cols: [MemoryReadAuxRecord; 3],
     pub input_read_aux_cols: [MemoryReadAuxRecord; 34],
     pub buffer_read_aux_cols: [MemoryReadAuxRecord; 34],
@@ -100,9 +108,12 @@ where
     ) -> Result<(), ExecutionError> {
         let &Instruction { a, b, c, .. } = instruction;
 
-        // Reading the length first without tracing to allocate a record of correct size
+        // Reading the length first without tracing to allocate a record of correct size.
+        // The frame pointer is peeked untraced here for the same reason; the traced read
+        // that the AIR constrains happens below, after the record is allocated.
         let guest_mem = state.memory.data();
-        let len = read_rv32_register(guest_mem, c.as_canonical_u32()) as usize;
+        let fp = guest_mem.fp::<F>();
+        let len = read_rv32_register(guest_mem, fp + c.as_canonical_u32()) as usize;
         // Safety: length has to be multiple of 4
         // This is enforced by how the guest program calls the xorin opcode
         // Xorin opcode is only called through the keccak update guest program
@@ -120,28 +131,35 @@ where
 
         record.inner.from_pc = *state.pc;
         record.inner.timestamp = state.memory.timestamp();
+        record.inner.fp = fp;
         record.inner.rd_ptr = a.as_canonical_u32();
         record.inner.rs1_ptr = b.as_canonical_u32();
         record.inner.rs2_ptr = c.as_canonical_u32();
 
+        // The FP read comes first, so it takes the instruction's starting timestamp.
+        // This must not sit inside a debug_assert: it advances the timestamp and records
+        // the aux entry the AIR constrains, so it has to run in release builds too.
+        let traced_fp = tracing_read_fp::<F>(state.memory, &mut record.inner.fp_aux.prev_timestamp);
+        debug_assert_eq!(traced_fp, fp);
+
         record.inner.buffer = u32::from_le_bytes(tracing_read(
             state.memory,
             RV32_REGISTER_AS,
-            record.inner.rd_ptr,
+            fp + record.inner.rd_ptr,
             &mut record.inner.register_aux_cols[0].prev_timestamp,
         ));
 
         record.inner.input = u32::from_le_bytes(tracing_read(
             state.memory,
             RV32_REGISTER_AS,
-            record.inner.rs1_ptr,
+            fp + record.inner.rs1_ptr,
             &mut record.inner.register_aux_cols[1].prev_timestamp,
         ));
 
         record.inner.len = u32::from_le_bytes(tracing_read(
             state.memory,
             RV32_REGISTER_AS,
-            record.inner.rs2_ptr,
+            fp + record.inner.rs2_ptr,
             &mut record.inner.register_aux_cols[2].prev_timestamp,
         ));
 
@@ -219,6 +237,7 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         let trace_row: &mut XorinVmCols<F> = row_slice.borrow_mut();
 
         trace_row.instruction.pc = F::from_u32(record.from_pc);
+        trace_row.instruction.fp = F::from_u32(record.fp);
         trace_row.instruction.is_enabled = F::ONE;
         trace_row.instruction.buffer_reg_ptr = F::from_u32(record.rd_ptr);
         trace_row.instruction.input_reg_ptr = F::from_u32(record.rs1_ptr);
@@ -259,9 +278,18 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             trace_row.sponge.is_padding_bytes[i as usize] = F::ONE;
         }
 
+        // Timestamp order must match the AIR: FP read, then the 3 register reads,
+        // then the per-word input read / buffer read / buffer write.
         let mut timestamp = record.timestamp;
         let record_len: usize = record.len as usize;
         let num_reads: usize = record_len.div_ceil(4);
+
+        mem_helper.fill(
+            record.fp_aux.prev_timestamp,
+            timestamp,
+            trace_row.mem_oc.fp_aux.as_mut(),
+        );
+        timestamp += 1;
 
         for t in 0..3 {
             mem_helper.fill(

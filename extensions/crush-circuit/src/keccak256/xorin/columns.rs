@@ -18,7 +18,10 @@ pub struct XorinVmCols<T> {
 #[allow(clippy::too_many_arguments)]
 pub struct XorinInstructionCols<T> {
     pub pc: T,
+    /// Frame pointer, read from `FP_AS`. Register addresses are relative to it.
+    pub fp: T,
     pub is_enabled: T,
+    /// Register operands as encoded in the instruction, before the frame pointer is added.
     pub buffer_reg_ptr: T,
     pub input_reg_ptr: T,
     pub len_reg_ptr: T,
@@ -46,6 +49,8 @@ pub struct XorinSpongeCols<T> {
 #[repr(C)]
 #[derive(Clone, Debug, AlignedBorrow, StructReflection)]
 pub struct XorinMemoryCols<T> {
+    /// Auxiliary columns for timestamp checking for the read of `fp` from `FP_AS`.
+    pub fp_aux: MemoryReadAuxCols<T>,
     pub register_aux_cols: [MemoryReadAuxCols<T>; 3],
     pub input_bytes_read_aux_cols: [MemoryReadAuxCols<T>; KECCAK_RATE_BYTES / KECCAK_WORD_SIZE],
     pub buffer_bytes_read_aux_cols: [MemoryReadAuxCols<T>; KECCAK_RATE_BYTES / KECCAK_WORD_SIZE],

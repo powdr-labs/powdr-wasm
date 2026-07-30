@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use itertools::izip;
 use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionState},
+    arch::ExecutionBridge,
     system::memory::{
         MemoryAddress,
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -21,7 +21,11 @@ use openvm_stark_backend::{
     p3_matrix::Matrix,
 };
 
-use crate::keccak256::xorin::columns::{NUM_XORIN_VM_COLS, XorinVmCols};
+use crate::{
+    adapters::{fp_addr, fp_block, reg_addr},
+    execution::ExecutionState,
+    keccak256::xorin::columns::{NUM_XORIN_VM_COLS, XorinVmCols},
+};
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct XorinVmAir {
@@ -57,7 +61,8 @@ impl<AB: InteractionBuilder> Air<AB> for XorinVmAir {
 
         let mem = &local.mem_oc;
 
-        let start_read_timestamp = self.eval_instruction(builder, local, &mem.register_aux_cols);
+        let start_read_timestamp =
+            self.eval_instruction(builder, local, &mem.fp_aux, &mem.register_aux_cols);
 
         let start_write_timestamp = self.constrain_input_read(
             builder,
@@ -79,12 +84,13 @@ impl<AB: InteractionBuilder> Air<AB> for XorinVmAir {
 }
 
 impl XorinVmAir {
-    // Increases timestamp by 3
+    // Increases timestamp by 4: the FP read plus 3 register reads.
     #[inline]
     pub fn eval_instruction<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         local: &XorinVmCols<AB::Var>,
+        fp_aux: &MemoryReadAuxCols<AB::Var>,
         register_aux: &[MemoryReadAuxCols<AB::Var>; 3],
     ) -> AB::Expr {
         // returns start_read_timestamp
@@ -98,7 +104,8 @@ impl XorinVmAir {
             instruction.len_reg_ptr,
         ];
 
-        let mut timestamp_change = AB::Expr::from_u32(3);
+        // One FP read plus 3 register reads.
+        let mut timestamp_change = AB::Expr::from_u32(4);
         let mut not_padding_sum = AB::Expr::ZERO;
 
         for is_padding in local.sponge.is_padding_bytes {
@@ -128,30 +135,38 @@ impl XorinVmAir {
                     AB::Expr::from_u32(RV32_REGISTER_AS),
                     AB::Expr::from_u32(RV32_MEMORY_AS),
                 ],
-                ExecutionState::new(instruction.pc, instruction.start_timestamp),
+                ExecutionState::new(instruction.pc, instruction.fp, instruction.start_timestamp)
+                    .into(),
                 timestamp_change,
             )
             .eval(builder, is_enabled);
 
         let mut timestamp: AB::Expr = instruction.start_timestamp.into();
 
+        // ======== Read `fp` from FP_AS =========
+        let fp = instruction.fp;
+        self.memory_bridge
+            .read(
+                fp_addr::<AB::F>(),
+                fp_block::<AB::Expr>(fp.into()),
+                timestamp.clone(),
+                fp_aux,
+            )
+            .eval(builder, is_enabled);
+        timestamp += AB::Expr::ONE;
+
         let buffer_ptr_limbs = instruction.buffer_ptr_limbs.map(Into::into);
         let input_ptr_limbs = instruction.input_ptr_limbs.map(Into::into);
         let len_limbs = instruction.len_limbs.map(Into::into);
 
-        // Increases timestamp by 3
+        // Increases timestamp by 3. Register addresses are frame-pointer relative.
         for (ptr, value, aux) in izip!(
             [buffer_reg_ptr, input_reg_ptr, len_reg_ptr],
             [buffer_ptr_limbs, input_ptr_limbs, len_limbs],
             register_aux
         ) {
             self.memory_bridge
-                .read(
-                    MemoryAddress::new(AB::Expr::from_u32(RV32_REGISTER_AS), ptr),
-                    value,
-                    timestamp.clone(),
-                    aux,
-                )
+                .read(reg_addr(ptr + fp), value, timestamp.clone(), aux)
                 .eval(builder, is_enabled);
 
             timestamp += AB::Expr::ONE;

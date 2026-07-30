@@ -17,7 +17,7 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::XorinVmExecutor;
-use crate::keccak256::KECCAK_WORD_SIZE;
+use crate::{keccak256::KECCAK_WORD_SIZE, memory_config::FpMemory};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -157,9 +157,11 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     pre_compute: &XorinPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let buffer = exec_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32);
-    let input = exec_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
-    let length = exec_state.vm_read(RV32_REGISTER_AS, pre_compute.c as u32);
+    // Register addresses are frame-pointer relative.
+    let fp = exec_state.memory.fp::<F>();
+    let buffer = exec_state.vm_read(RV32_REGISTER_AS, fp + pre_compute.a as u32);
+    let input = exec_state.vm_read(RV32_REGISTER_AS, fp + pre_compute.b as u32);
+    let length = exec_state.vm_read(RV32_REGISTER_AS, fp + pre_compute.c as u32);
     let buffer_u32 = u32::from_le_bytes(buffer);
     let input_u32 = u32::from_le_bytes(input);
     let length_u32 = u32::from_le_bytes(length);

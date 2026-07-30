@@ -18,7 +18,10 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use p3_keccak_air::NUM_ROUNDS;
 
 use super::{KeccakfExecutor, NUM_OP_ROWS_PER_INS};
-use crate::keccak256::{KECCAK_WIDTH_BYTES, KECCAK_WORD_SIZE, keccakf_op::keccakf_postimage_bytes};
+use crate::{
+    keccak256::{KECCAK_WIDTH_BYTES, KECCAK_WORD_SIZE, keccakf_op::keccakf_postimage_bytes},
+    memory_config::FpMemory,
+};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -154,7 +157,9 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     pre_compute: &KeccakfPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let rd_ptr = pre_compute.a as u32;
+    // Register addresses are frame-pointer relative.
+    let fp = exec_state.memory.fp::<F>();
+    let rd_ptr = fp + pre_compute.a as u32;
     let buffer_ptr_limbs: [u8; 4] = exec_state.vm_read(RV32_REGISTER_AS, rd_ptr);
     let buffer_ptr = u32::from_le_bytes(buffer_ptr_limbs);
 

@@ -23,6 +23,8 @@ use openvm_instructions::{
     riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
 };
 use openvm_rv32im_circuit::adapters::{timed_write, tracing_read};
+
+use crate::adapters::tracing_read_fp;
 use openvm_stark_backend::{
     StarkProtocolConfig, Val,
     p3_field::PrimeField32,
@@ -79,8 +81,12 @@ pub(crate) type KeccakfRecordLayout = MultiRowLayout<KeccakfMetadata>;
 pub struct KeccakfRecord {
     pub pc: u32,
     pub timestamp: u32,
+    /// Frame pointer, read from `FP_AS` before the register read.
+    pub fp: u32,
+    /// `rd` as encoded in the instruction, before the frame pointer is added.
     pub rd_ptr: u32,
     pub buffer_ptr: u32,
+    pub fp_aux: MemoryReadAuxRecord,
     pub rd_aux: MemoryReadAuxRecord,
     pub buffer_word_aux: [MemoryReadAuxRecord; KECCAK_WIDTH_WORDS],
     pub preimage_buffer_bytes: [u8; KECCAK_WIDTH_BYTES],
@@ -137,10 +143,13 @@ where
         record.pc = *state.pc;
         record.timestamp = state.memory.timestamp();
         record.rd_ptr = rd_ptr;
+        // The FP read comes first, so it takes the instruction's starting timestamp.
+        let fp = tracing_read_fp::<F>(state.memory, &mut record.fp_aux.prev_timestamp);
+        record.fp = fp;
         let buffer_ptr = u32::from_le_bytes(tracing_read(
             state.memory,
             RV32_REGISTER_AS,
-            rd_ptr,
+            fp + rd_ptr,
             &mut record.rd_aux.prev_timestamp,
         ));
         record.buffer_ptr = buffer_ptr;
@@ -212,6 +221,7 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfOpChip<F> {
                 let local: &mut KeccakfOpCols<F> = row.borrow_mut();
 
                 local.pc = F::from_u32(record.pc);
+                local.fp = F::from_u32(record.fp);
                 local.is_valid = F::ONE;
                 local.timestamp = F::from_u32(record.timestamp);
                 local.rd_ptr = F::from_u32(record.rd_ptr);
@@ -224,10 +234,18 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfOpChip<F> {
                     *dst = F::from_u8(byte);
                 }
 
+                // Timestamp order must match the AIR: FP read, then the `rd` read,
+                // then one write per buffer word.
                 let mut timestamp = record.timestamp;
                 mem_helper.fill(
+                    record.fp_aux.prev_timestamp,
+                    timestamp,
+                    local.fp_aux.as_mut(),
+                );
+                timestamp += 1;
+                mem_helper.fill(
                     record.rd_aux.prev_timestamp,
-                    record.timestamp,
+                    timestamp,
                     local.rd_aux.as_mut(),
                 );
                 timestamp += 1;

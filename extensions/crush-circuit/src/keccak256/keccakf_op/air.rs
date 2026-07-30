@@ -2,7 +2,7 @@ use std::{borrow::Borrow, iter};
 
 use itertools::izip;
 use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionState},
+    arch::ExecutionBridge,
     system::memory::{
         MemoryAddress,
         offline_checker::{MemoryBridge, MemoryWriteAuxCols},
@@ -22,9 +22,13 @@ use openvm_stark_backend::{
     p3_matrix::Matrix,
 };
 
-use crate::keccak256::{
-    KECCAK_WORD_SIZE,
-    keccakf_op::columns::{KeccakfOpCols, NUM_KECCAKF_OP_COLS},
+use crate::{
+    adapters::{fp_addr, fp_block, reg_addr},
+    execution::ExecutionState,
+    keccak256::{
+        KECCAK_WORD_SIZE,
+        keccakf_op::columns::{KeccakfOpCols, NUM_KECCAKF_OP_COLS},
+    },
 };
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
@@ -70,12 +74,23 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
             timestamp_delta += 1;
             start_timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
-        // ======== Read `rd` =========
+        // ======== Read `fp` from FP_AS =========
+        let fp = local.fp;
+        self.memory_bridge
+            .read(
+                fp_addr::<AB::F>(),
+                fp_block::<AB::Expr>(fp.into()),
+                timestamp_pp(),
+                &local.fp_aux,
+            )
+            .eval(builder, is_valid);
+
+        // ======== Read `rd`, FP-relative =========
         let rd_ptr = local.rd_ptr;
         let buffer_ptr_limbs = local.buffer_ptr_limbs;
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::F::from_u32(RV32_REGISTER_AS), rd_ptr),
+                reg_addr(rd_ptr + fp),
                 buffer_ptr_limbs,
                 timestamp_pp(),
                 &local.rd_aux,
@@ -159,7 +174,7 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
                     AB::Expr::from_u32(RV32_REGISTER_AS),
                     AB::Expr::from_u32(RV32_MEMORY_AS),
                 ],
-                ExecutionState::new(local.pc, local.timestamp),
+                ExecutionState::new(local.pc, local.fp, local.timestamp).into(),
                 AB::F::from_usize(timestamp_delta),
             )
             .eval(builder, is_valid);

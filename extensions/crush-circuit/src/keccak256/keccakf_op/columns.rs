@@ -10,15 +10,18 @@ use crate::keccak256::{KECCAK_WIDTH_BYTES, KECCAK_WIDTH_WORDS};
 pub struct KeccakfOpCols<T> {
     /// Program counter
     pub pc: T,
+    /// Frame pointer, read from `FP_AS`. Register addresses are relative to it.
+    pub fp: T,
     /// True on the row handling execution for an instruction.
     pub is_valid: T,
     /// The starting timestamp for execution in this row.
     /// A single row will do multiple memory accesses.
     pub timestamp: T,
-    /// Pointer to address space 1 `rd` register.
+    /// Pointer to address space 1 `rd` register, as encoded in the instruction
+    /// (i.e. before the frame pointer is added).
     /// The `rd` register holds the value of `buffer_ptr`.
     pub rd_ptr: T,
-    /// `buffer_ptr <- [rd_ptr:4]_1`.
+    /// `buffer_ptr <- [fp + rd_ptr:4]_1`.
     /// Limbs of the pointer to address space 2 `buffer`.
     pub buffer_ptr_limbs: [T; RV32_REGISTER_NUM_LIMBS],
     /// The preimage state, to be permuted in the `keccakf` operation.
@@ -29,7 +32,9 @@ pub struct KeccakfOpCols<T> {
     /// `preimage`. However due to the interactions necessary for range checks, currently we
     /// determined it is better to minimum number of rows while using more main columns.
     pub postimage: [T; KECCAK_WIDTH_BYTES],
-    /// Auxiliary columns for timestamp checking for the read of `[rd_ptr:4]_1`.
+    /// Auxiliary columns for timestamp checking for the read of `fp` from `FP_AS`.
+    pub fp_aux: MemoryReadAuxCols<T>,
+    /// Auxiliary columns for timestamp checking for the read of `[fp + rd_ptr:4]_1`.
     pub rd_aux: MemoryReadAuxCols<T>,
     /// Auxiliary columns for timestamp checking of the writes to `buffer`. The writes are done one
     /// word at a time, and each write requires a separate previous timestamp.
