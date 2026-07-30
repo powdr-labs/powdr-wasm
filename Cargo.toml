@@ -75,6 +75,10 @@ rustc-hash = "2.0.0"
 cfg-if = "1.0.0"
 test-case = "3.3.1"
 itertools = "0.14"
+# Must match the p3-* versions openvm-stark-backend resolves to, or the keccak
+# chips would link a second, incompatible copy of p3-air.
+p3-keccak-air = "0.4.1"
+tiny-keccak = { version = "2.0.2", features = ["keccak"] }
 
 rrs-lib = "0.1.0"
 tracing = "0.1.40"

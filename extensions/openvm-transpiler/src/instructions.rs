@@ -282,3 +282,51 @@ pub enum Phantom {
     /// Fill hint stream with 8 bytes of incrementing clock timestamp.
     ClockTimeGet,
 }
+
+// =================================================================================================
+// Keccak256 opcodes
+// =================================================================================================
+
+/// Applies the keccak-f permutation in place to the 200-byte state buffer pointed to by `rd`.
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    LocalOpcode,
+    Serialize,
+    Deserialize,
+)]
+#[opcode_offset = 0x1310]
+#[repr(usize)]
+pub enum KeccakfOpcode {
+    KECCAKF,
+}
+
+/// XORs `rs2` input bytes at `rs1` into the sponge buffer at `rd`.
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    LocalOpcode,
+    Serialize,
+    Deserialize,
+)]
+#[opcode_offset = 0x1311]
+#[repr(usize)]
+pub enum XorinOpcode {
+    XORIN,
+}
