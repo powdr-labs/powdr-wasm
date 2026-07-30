@@ -1,0 +1,15 @@
+[workspace]
+[package]
+name = "keccak_precompile"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+crush-guest-io = { path = "../../guest-io" }
+crush-guest-keccak = { path = "../../guest-libs/rust/keccak" }
+
+[profile.release]
+panic = "abort"
+
+[profile.dev]
+panic = "abort"
