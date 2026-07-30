@@ -4688,6 +4688,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 1.0.69",
+ "tiny-keccak",
  "tracing",
  "tracing-forest",
  "tracing-subscriber",
