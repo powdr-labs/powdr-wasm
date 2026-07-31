@@ -3,6 +3,7 @@
 #![cfg_attr(feature = "tco", allow(internal_features))]
 #![cfg_attr(feature = "tco", feature(core_intrinsics))]
 use crate::memory_config::memory_config_with_fp;
+use crate::sha2::{Sha2, Sha2CpuProverExt, Sha2Executor};
 use openvm_circuit::{
     arch::{
         AirInventory, ChipInventoryError, InitFileGenerator, MatrixRecordArena, SystemConfig,
@@ -84,6 +85,10 @@ pub struct CrushConfig {
     pub system: SystemConfig,
     #[extension]
     pub base: Crush,
+    /// Optional SHA-2 extension (`SHA256` + `SHA512`). Must stay the last extension
+    /// field: the autoprecompile dummy chip complex relies on its AIRs being last.
+    #[extension(executor = "Sha2Executor")]
+    pub sha2: Option<Sha2>,
 }
 
 // This seems trivial but it's tricky to put into powdr-openvm because of some From implementation issues.
@@ -106,6 +111,7 @@ impl Default for CrushConfig {
         Self {
             system,
             base: Default::default(),
+            sha2: None,
         }
     }
 }
@@ -116,7 +122,14 @@ impl CrushConfig {
         Self {
             system,
             base: Default::default(),
+            sha2: None,
         }
+    }
+
+    /// Enable the SHA-2 precompiles (`SHA256` + `SHA512`).
+    pub fn with_sha2(mut self) -> Self {
+        self.sha2 = Some(Sha2);
+        self
     }
 
     pub fn with_public_values_and_segment_len(public_values: usize, segment_len: usize) -> Self {
@@ -126,6 +139,7 @@ impl CrushConfig {
         Self {
             system,
             base: Default::default(),
+            sha2: None,
         }
     }
 }
@@ -163,6 +177,9 @@ where
             VmBuilder::<E>::create_chip_complex(&SystemCpuBuilder, &config.system, circuit)?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&CrushCpuProverExt, &config.base, inventory)?;
+        if let Some(sha2) = &config.sha2 {
+            VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, sha2, inventory)?;
+        }
         Ok(chip_complex)
     }
 }
@@ -194,6 +211,14 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for CrushGpuBuilder {
         >,
         ChipInventoryError,
     > {
+        // The SHA-2 chips are CPU-only (the bitwise lookup and block hasher chips have no
+        // GPU prover extension). Fail loudly rather than return a chip complex whose chips
+        // do not match the AIR inventory.
+        assert!(
+            config.sha2.is_none(),
+            "the SHA-2 extension is not supported on the CUDA backend"
+        );
+
         let mut chip_complex = VmBuilder::<BabyBearPoseidon2GpuEngine>::create_chip_complex(
             &SystemGpuBuilder,
             &config.system,
