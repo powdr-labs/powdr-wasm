@@ -49,6 +49,8 @@ pub use shift::*;
 mod hintstore;
 pub use hintstore::*;
 
+pub mod sha2;
+
 mod extension;
 pub use extension::*;
 
