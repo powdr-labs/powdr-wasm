@@ -646,6 +646,33 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
                 )));
                 directives
             }
+            // SHA-2 precompile. The guest drives the block loop and padding; this is one
+            // compression per call.
+            ("env", "__native_sha256_compress") => {
+                // fn(state: *const u8, input: *const u8, output: *mut u8)
+                assert!(outputs.is_empty());
+                let mem_start = c
+                    .module()
+                    .linear_memory_start()
+                    .expect("no memory allocated");
+                let state_ptr = inputs[0].as_register().unwrap().start as usize;
+                let input_ptr = inputs[1].as_register().unwrap().start as usize;
+                let output_ptr = inputs[2].as_register().unwrap().start as usize;
+                let mut directives = vec![];
+                let effective_state =
+                    rebase_wasm_ptr::<F>(c, &mut directives, state_ptr, mem_start);
+                let effective_input =
+                    rebase_wasm_ptr::<F>(c, &mut directives, input_ptr, mem_start);
+                let effective_output =
+                    rebase_wasm_ptr::<F>(c, &mut directives, output_ptr, mem_start);
+                // Instruction operand order is (dst, state, input).
+                directives.push(Directive::Instruction(ib::sha256_compress(
+                    effective_output,
+                    effective_state,
+                    effective_input,
+                )));
+                directives
+            }
             ("env", "abort") => {
                 vec![Directive::Instruction(ib::abort())]
             }
@@ -961,6 +988,38 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
             })
             .unwrap_or_else(|| translate_complex_ins(c, module, op, inputs, output, unaligned))
     }
+}
+
+/// Translate a WASM linear-memory pointer held in `ptr_reg` into an absolute VM
+/// address by adding the linear memory base.
+///
+/// Returns the register holding the absolute address, appending any instructions
+/// needed to `directives`. When the base is zero the input register is returned
+/// unchanged. Otherwise the result goes into a fresh temporary, because `ptr_reg`
+/// may be a live WASM local that must not be clobbered.
+fn rebase_wasm_ptr<F: PrimeField32>(
+    c: &mut Ctx<'_, '_>,
+    directives: &mut Vec<Directive<F>>,
+    ptr_reg: usize,
+    mem_start: u32,
+) -> usize {
+    if mem_start == 0 {
+        return ptr_reg;
+    }
+    let tmp = c.allocate_tmp_type::<OpenVMSettings<F>>(ValType::I32).start as usize;
+    if let Ok(imm) = AluImm::try_from(mem_start) {
+        directives.push(Directive::Instruction(ib::add_imm(tmp, ptr_reg, imm)));
+    } else {
+        // mem_start too large for an immediate -- materialize it, then add.
+        let tmp2 = c.allocate_tmp_type::<OpenVMSettings<F>>(ValType::I32).start as usize;
+        directives.push(Directive::Instruction(ib::const_32_imm(
+            tmp2,
+            mem_start as u16,
+            (mem_start >> 16) as u16,
+        )));
+        directives.push(Directive::Instruction(ib::add(tmp, ptr_reg, tmp2)));
+    }
+    tmp
 }
 
 impl<F: PrimeField32> Directive<F> {

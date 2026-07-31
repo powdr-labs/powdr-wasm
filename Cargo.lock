@@ -1056,6 +1056,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "crush-guest-sha2"
+version = "0.0.1"
+dependencies = [
+ "sha2",
+]
+
+[[package]]
 name = "crush-translation"
 version = "0.0.1"
 dependencies = [
@@ -4681,6 +4688,7 @@ dependencies = [
  "rmp-serde",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror 1.0.69",
  "tracing",
  "tracing-forest",

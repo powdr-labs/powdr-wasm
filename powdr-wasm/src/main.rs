@@ -105,6 +105,9 @@ enum Commands {
         /// Support unaligned memory accesses (needed for e.g. Go-compiled WASM)
         #[arg(long, default_value_t = false)]
         unaligned_memory: bool,
+        /// Enable SHA-2 precompile extension (SHA256 + SHA512)
+        #[arg(long, default_value_t = false)]
+        sha2: bool,
     },
     /// Compile a WASM program: WASM loading, PGO, APC generation, and keygen.
     /// Outputs a compiled artifact directory that can be used by `prove` or `prove-riscv`.
@@ -125,6 +128,9 @@ enum Commands {
         /// Support unaligned memory accesses (needed for e.g. Go-compiled WASM)
         #[arg(long, default_value_t = false)]
         unaligned_memory: bool,
+        /// Enable SHA-2 precompile extension (SHA256 + SHA512)
+        #[arg(long, default_value_t = false)]
+        sha2: bool,
     },
     /// Compile a RISC-V program: Rust compilation, PGO, APC generation, and keygen.
     /// Outputs a compiled artifact directory that can be used by `prove-riscv`.
@@ -171,11 +177,19 @@ enum Commands {
         /// Support unaligned memory accesses (needed for e.g. Go-compiled WASM)
         #[arg(long, default_value_t = false)]
         unaligned_memory: bool,
+        /// Enable SHA-2 precompile extension (SHA256 + SHA512)
+        #[arg(long, default_value_t = false)]
+        sha2: bool,
     },
     /// Generate and cache proving keys to a directory (for use with `prove --cache-dir`)
     Keygen {
         /// Directory to write cached proving keys to
         cache_dir: PathBuf,
+        /// Enable SHA-2 precompile extension. Must match the `prove --sha2` run that
+        /// consumes these keys; a key generated without it cannot prove a program that
+        /// uses the precompile.
+        #[arg(long, default_value_t = false)]
+        sha2: bool,
     },
     /// Mock-proves execution of a function from the WASM program with the given arguments
     /// (constraint verification only, no cryptographic proof)
@@ -191,6 +205,9 @@ enum Commands {
         /// Support unaligned memory accesses (needed for e.g. Go-compiled WASM)
         #[arg(long, default_value_t = false)]
         unaligned_memory: bool,
+        /// Enable SHA-2 precompile extension (SHA256 + SHA512)
+        #[arg(long, default_value_t = false)]
+        sha2: bool,
     },
     /// Proves execution of a function from the RISC-V program with the given arguments.
     /// Even though not the main goal of this crate, this is useful for benchmarking against
@@ -244,13 +261,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             input,
             metrics,
             unaligned_memory,
+            sha2,
         } => {
             // Create and execute program
             let mut linked_program = load_wasm_module(&program, unaligned_memory);
             let stdin = make_stdin(&input);
 
             let run = || -> Result<()> {
-                let output = linked_program.execute(CrushConfig::default(), &function, stdin)?;
+                let config = if sha2 {
+                    CrushConfig::default().with_sha2()
+                } else {
+                    CrushConfig::default()
+                };
+                let output = linked_program.execute(config, &function, stdin)?;
                 println!("output: {output:?}");
                 Ok(())
             };
@@ -271,9 +294,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             powdr,
             output_dir,
             unaligned_memory,
+            sha2,
         } => {
+            let config = if sha2 {
+                CrushConfig::default().with_sha2()
+            } else {
+                CrushConfig::default()
+            };
             let original_program =
-                load_wasm_original_program(&program, &function, unaligned_memory);
+                load_wasm_original_program(&program, &function, unaligned_memory, config);
             let stdin = make_stdin(&input);
             let (generate, select) = powdr.build_powdr_config();
             compile::compile_crush_to_disk(
@@ -316,6 +345,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             cache_dir,
             compiled_dir,
             unaligned_memory,
+            sha2,
         } => {
             let stdin = make_stdin(&input);
 
@@ -328,8 +358,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         program.expect("program is required when --compiled-dir is not provided");
                     let function =
                         function.expect("function is required when --compiled-dir is not provided");
+                    let config = if sha2 {
+                        CrushConfig::default().with_sha2()
+                    } else {
+                        CrushConfig::default()
+                    };
                     let original_program =
-                        load_wasm_original_program(&program, &function, unaligned_memory);
+                        load_wasm_original_program(&program, &function, unaligned_memory, config);
                     let (generate, select) = powdr.build_powdr_config();
                     proving::prove(
                         original_program,
@@ -355,8 +390,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 prove()?;
             }
         }
-        Commands::Keygen { cache_dir } => {
-            proving::keygen_to_disk(&cache_dir)?;
+        Commands::Keygen { cache_dir, sha2 } => {
+            let config = if sha2 {
+                CrushConfig::default().with_sha2()
+            } else {
+                CrushConfig::default()
+            };
+            proving::keygen_to_disk(&cache_dir, config)?;
             println!("Keys written to {}", cache_dir.display());
         }
         Commands::MockProve {
@@ -364,10 +404,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             function,
             input,
             unaligned_memory,
+            sha2,
         } => {
             let exe = load_wasm_exe(&program, &function, unaligned_memory);
             let stdin = make_stdin(&input);
-            let vm_config = CrushConfig::default();
+            let vm_config = if sha2 {
+                CrushConfig::default().with_sha2()
+            } else {
+                CrushConfig::default()
+            };
 
             let initial_state = VmState::initial(
                 &vm_config.system,
@@ -378,12 +423,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             #[cfg(feature = "cuda")]
             {
-                proving::mock_prove_gpu(&exe, initial_state).map_err(|e| eyre::eyre!("{e}"))?;
+                proving::mock_prove_gpu(vm_config, &exe, initial_state)
+                    .map_err(|e| eyre::eyre!("{e}"))?;
                 println!("GPU mock proof verified successfully.");
             }
             #[cfg(not(feature = "cuda"))]
             {
-                proving::mock_prove(&exe, initial_state).map_err(|e| eyre::eyre!("{e}"))?;
+                proving::mock_prove(vm_config, &exe, initial_state)
+                    .map_err(|e| eyre::eyre!("{e}"))?;
                 println!("Mock proof verified successfully.");
             }
         }
@@ -471,10 +518,11 @@ fn load_wasm_original_program(
     program: impl AsRef<Path>,
     function: &str,
     unaligned_memory: bool,
+    config: CrushConfig,
 ) -> OriginalCompiledProgram<'static, autoprecompiles::CrushISA> {
     let linked_program = load_wasm_module(program, unaligned_memory);
     let exe = Arc::new(linked_program.program_with_entry_point(function));
-    let vm_config = OriginalVmConfig::new(CrushConfig::default());
+    let vm_config = OriginalVmConfig::new(config);
 
     OriginalCompiledProgram {
         exe,

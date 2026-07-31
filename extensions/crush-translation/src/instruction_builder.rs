@@ -1,6 +1,6 @@
 use openvm_crush_transpiler::{
     BaseAlu64Opcode, BaseAluOpcode, CallOpcode, ConstOpcodes, Eq64Opcode, EqOpcode,
-    HintStoreOpcode, JumpOpcode, LessThan64Opcode, LessThanOpcode, MulOpcode, Phantom,
+    HintStoreOpcode, JumpOpcode, LessThan64Opcode, LessThanOpcode, MulOpcode, Phantom, Sha2Opcode,
     Shift64Opcode, ShiftOpcode,
 };
 use openvm_instructions::{LocalOpcode, SystemOpcode, VmOpcode, instruction::Instruction, riscv};
@@ -958,6 +958,40 @@ pub fn hint_buffer<F: PrimeField32>(num_words_reg: usize, mem_ptr_reg: usize) ->
         (riscv::RV32_REGISTER_NUM_LIMBS * num_words_reg) as isize,
         (riscv::RV32_REGISTER_NUM_LIMBS * mem_ptr_reg) as isize,
         0,
+        riscv::RV32_REGISTER_AS as isize,
+        riscv::RV32_MEMORY_AS as isize,
+    )
+}
+
+/// SHA256: one SHA-256 compression. Reads the 32-byte previous state at `state_reg`
+/// and the 64-byte message block at `input_reg`, writes the 32-byte new state to
+/// `dst_reg`. All three pointers must be 4-byte aligned.
+pub fn sha256_compress<F: PrimeField32>(
+    dst_reg: usize,
+    state_reg: usize,
+    input_reg: usize,
+) -> Instruction<F> {
+    Instruction::from_isize(
+        Sha2Opcode::SHA256.global_opcode(),
+        (riscv::RV32_REGISTER_NUM_LIMBS * dst_reg) as isize,
+        (riscv::RV32_REGISTER_NUM_LIMBS * state_reg) as isize,
+        (riscv::RV32_REGISTER_NUM_LIMBS * input_reg) as isize,
+        riscv::RV32_REGISTER_AS as isize,
+        riscv::RV32_MEMORY_AS as isize,
+    )
+}
+
+/// SHA512: as [`sha256_compress`], but with a 64-byte state and a 128-byte block.
+pub fn sha512_compress<F: PrimeField32>(
+    dst_reg: usize,
+    state_reg: usize,
+    input_reg: usize,
+) -> Instruction<F> {
+    Instruction::from_isize(
+        Sha2Opcode::SHA512.global_opcode(),
+        (riscv::RV32_REGISTER_NUM_LIMBS * dst_reg) as isize,
+        (riscv::RV32_REGISTER_NUM_LIMBS * state_reg) as isize,
+        (riscv::RV32_REGISTER_NUM_LIMBS * input_reg) as isize,
         riscv::RV32_REGISTER_AS as isize,
         riscv::RV32_MEMORY_AS as isize,
     )
