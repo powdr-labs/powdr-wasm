@@ -151,6 +151,7 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
         *cols.instruction.is_enabled = F::ONE;
         cols.instruction.from_state.timestamp = F::from_u32(vm_record.timestamp);
         cols.instruction.from_state.pc = F::from_u32(vm_record.from_pc);
+        cols.instruction.from_state.fp = F::from_u32(vm_record.fp);
         *cols.instruction.dst_reg_ptr = F::from_u32(vm_record.dst_reg_ptr);
         *cols.instruction.state_reg_ptr = F::from_u32(vm_record.state_reg_ptr);
         *cols.instruction.input_reg_ptr = F::from_u32(vm_record.input_reg_ptr);
@@ -173,8 +174,15 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
                 .request_range(pair[0] as u32 * shift, pair[1] as u32 * shift);
         }
 
-        // fill in the register reads aux
+        // fill in the FP read and the register reads aux. Timestamp order must match the
+        // AIR: FP read, then the register reads, then the block/state reads and the writes.
         let mut timestamp = vm_record.timestamp;
+        mem_helper.fill(
+            vm_record.fp_read_aux.prev_timestamp,
+            timestamp,
+            cols.mem.fp_aux.as_mut(),
+        );
+        timestamp += 1;
         for (cols, vm_record) in cols
             .mem
             .register_aux

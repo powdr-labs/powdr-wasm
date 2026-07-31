@@ -23,6 +23,7 @@ use openvm_stark_backend::{
 };
 
 use super::config::Sha2MainChipConfig;
+use crate::adapters::{fp_addr, fp_block, reg_addr};
 use crate::sha2::{MessageType, SHA2_READ_SIZE, SHA2_WRITE_SIZE, Sha2ColsRef};
 
 #[derive(Clone, Debug)]
@@ -192,6 +193,20 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         local: &Sha2ColsRef<AB::Var>,
         timestamp_pp: &mut impl FnMut() -> AB::Expr,
     ) {
+        // ======== Read `fp` from FP_AS =========
+        // Comes first so it takes the instruction's starting timestamp, and because the
+        // register addresses below are relative to it.
+        let fp = local.instruction.from_state.fp;
+        self.memory_bridge
+            .read::<_, _, 4>(
+                fp_addr::<AB::F>(),
+                fp_block::<AB::Expr>(fp.into()),
+                timestamp_pp(),
+                local.mem.fp_aux,
+            )
+            .eval(builder, *local.instruction.is_enabled);
+
+        // ======== Read the register operands, FP-relative =========
         for (&ptr, val, aux) in izip!(
             [
                 local.instruction.dst_reg_ptr,
@@ -207,7 +222,7 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         ) {
             self.memory_bridge
                 .read::<_, _, SHA2_READ_SIZE>(
-                    MemoryAddress::new(AB::Expr::from_u32(RV32_REGISTER_AS), ptr),
+                    reg_addr::<AB::Expr>(ptr + fp),
                     val.to_vec().try_into().unwrap_or_else(|_| panic!()), // can't unwrap because AB::Var doesn't impl Debug
                     timestamp_pp(),
                     aux,
@@ -241,7 +256,7 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                     AB::Expr::from_u32(RV32_REGISTER_AS),
                     AB::Expr::from_u32(RV32_MEMORY_AS),
                 ],
-                *local.instruction.from_state,
+                (*local.instruction.from_state).into(),
                 AB::F::from_usize(C::TIMESTAMP_DELTA),
             )
             .eval(builder, *local.instruction.is_enabled);

@@ -1,7 +1,9 @@
 use openvm_crush_transpiler::Sha2Opcode;
 use openvm_sha2_air::{Sha256Config, Sha384Config, Sha512Config};
 
-use crate::sha2::{SHA2_READ_SIZE, SHA2_REGISTER_READS, SHA2_WRITE_SIZE, Sha2ColsRef};
+use crate::sha2::{
+    SHA2_FP_READS, SHA2_READ_SIZE, SHA2_REGISTER_READS, SHA2_WRITE_SIZE, Sha2ColsRef,
+};
 
 pub trait Sha2MainChipConfig: Send + Sync + Clone {
     // --- Required ---
@@ -17,8 +19,11 @@ pub trait Sha2MainChipConfig: Send + Sync + Clone {
     const STATE_READS: usize = Self::STATE_BYTES / SHA2_READ_SIZE;
     const STATE_WRITES: usize = Self::STATE_BYTES / SHA2_WRITE_SIZE;
 
-    const TIMESTAMP_DELTA: usize =
-        Self::BLOCK_READS + Self::STATE_READS + Self::STATE_WRITES + SHA2_REGISTER_READS;
+    const TIMESTAMP_DELTA: usize = Self::BLOCK_READS
+        + Self::STATE_READS
+        + Self::STATE_WRITES
+        + SHA2_REGISTER_READS
+        + SHA2_FP_READS;
 
     const MAIN_CHIP_WIDTH: usize = Sha2ColsRef::<u8>::width::<Self>();
 }

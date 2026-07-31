@@ -11,6 +11,7 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{SHA2_READ_SIZE, Sha2Config, Sha2VmExecutor};
+use crate::memory_config::FpMemory;
 use crate::sha2::SHA2_WRITE_SIZE;
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -107,9 +108,11 @@ unsafe fn execute_e12_impl<
     pre_compute: &Sha2PreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> u32 {
-    let dst = exec_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32);
-    let state = exec_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
-    let input = exec_state.vm_read(RV32_REGISTER_AS, pre_compute.c as u32);
+    // Register addresses are frame-pointer relative.
+    let fp = exec_state.memory.fp::<F>();
+    let dst = exec_state.vm_read(RV32_REGISTER_AS, fp + pre_compute.a as u32);
+    let state = exec_state.vm_read(RV32_REGISTER_AS, fp + pre_compute.b as u32);
+    let input = exec_state.vm_read(RV32_REGISTER_AS, fp + pre_compute.c as u32);
     let dst_u32 = u32::from_le_bytes(dst);
     let state_u32 = u32::from_le_bytes(state);
     let input_u32 = u32::from_le_bytes(input);

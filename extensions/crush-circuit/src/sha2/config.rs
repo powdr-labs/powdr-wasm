@@ -12,6 +12,8 @@ use sha2::{
 use crate::sha2::{Sha2BlockHasherVmConfig, Sha2MainChipConfig};
 
 pub const SHA2_REGISTER_READS: usize = 3;
+/// Crush reads the frame pointer from FP_AS before the register reads.
+pub const SHA2_FP_READS: usize = 1;
 pub const SHA2_READ_SIZE: usize = 4;
 pub const SHA2_WRITE_SIZE: usize = 4;
 

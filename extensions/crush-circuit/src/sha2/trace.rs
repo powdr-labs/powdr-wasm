@@ -22,6 +22,8 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
 };
 use openvm_rv32im_circuit::adapters::{tracing_read, tracing_write};
+
+use crate::adapters::tracing_read_fp;
 use openvm_sha2_air::{Sha2Variant, Sha256Config, Sha384Config, Sha512Config};
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -55,6 +57,9 @@ pub struct Sha2RecordHeader {
     pub variant: Sha2Variant,
     pub from_pc: u32,
     pub timestamp: u32,
+    /// Frame pointer, read from `FP_AS` before the register reads.
+    pub fp: u32,
+    /// Register operands as encoded in the instruction, before the frame pointer is added.
     pub dst_reg_ptr: u32,
     pub state_reg_ptr: u32,
     pub input_reg_ptr: u32,
@@ -62,6 +67,8 @@ pub struct Sha2RecordHeader {
     pub state_ptr: u32,
     pub input_ptr: u32,
 
+    /// Auxiliary record for the read of `fp` from `FP_AS`.
+    pub fp_read_aux: MemoryReadAuxRecord,
     pub register_reads_aux: [MemoryReadAuxRecord; SHA2_REGISTER_READS],
 }
 
@@ -247,22 +254,26 @@ where
         record.inner.state_reg_ptr = b.as_canonical_u32();
         record.inner.input_reg_ptr = c.as_canonical_u32();
 
+        // The FP read comes first, so it takes the instruction's starting timestamp.
+        let fp = tracing_read_fp::<F>(state.memory, &mut record.inner.fp_read_aux.prev_timestamp);
+        record.inner.fp = fp;
+
         record.inner.dst_ptr = u32::from_le_bytes(tracing_read::<SHA2_READ_SIZE>(
             state.memory,
             RV32_REGISTER_AS,
-            record.inner.dst_reg_ptr,
+            fp + record.inner.dst_reg_ptr,
             &mut record.inner.register_reads_aux[0].prev_timestamp,
         ));
         record.inner.state_ptr = u32::from_le_bytes(tracing_read::<SHA2_READ_SIZE>(
             state.memory,
             RV32_REGISTER_AS,
-            record.inner.state_reg_ptr,
+            fp + record.inner.state_reg_ptr,
             &mut record.inner.register_reads_aux[1].prev_timestamp,
         ));
         record.inner.input_ptr = u32::from_le_bytes(tracing_read::<SHA2_READ_SIZE>(
             state.memory,
             RV32_REGISTER_AS,
-            record.inner.input_reg_ptr,
+            fp + record.inner.input_reg_ptr,
             &mut record.inner.register_reads_aux[2].prev_timestamp,
         ));
 

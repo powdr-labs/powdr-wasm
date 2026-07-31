@@ -1,10 +1,8 @@
-use openvm_circuit::{
-    arch::ExecutionState,
-    system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
-};
+use openvm_circuit::system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols};
 use openvm_circuit_primitives::ColsRef;
 use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
 
+use crate::execution::ExecutionState;
 use crate::sha2::{SHA2_REGISTER_READS, SHA2_WRITE_SIZE, Sha2MainChipConfig};
 
 #[repr(C)]
@@ -39,18 +37,19 @@ pub struct Sha2InstructionCols<T> {
     pub is_enabled: T,
     #[aligned_borrow]
     pub from_state: ExecutionState<T>,
-    /// Pointer to address space 1 `dst` register
+    /// Pointer to address space 1 `dst` register, as encoded in the instruction
+    /// (i.e. before the frame pointer is added).
     pub dst_reg_ptr: T,
     /// Pointer to address space 1 `state` register
     pub state_reg_ptr: T,
     /// Pointer to address space 1 `input` register
     pub input_reg_ptr: T,
     // Register values
-    /// dst_ptr_limbs <- \[dst_reg_ptr:4\]_1
+    /// dst_ptr_limbs <- \[fp + dst_reg_ptr:4\]_1
     pub dst_ptr_limbs: [T; RV32_REGISTER_NUM_LIMBS],
-    /// state_ptr_limbs <- \[state_reg_ptr:4\]_1
+    /// state_ptr_limbs <- \[fp + state_reg_ptr:4\]_1
     pub state_ptr_limbs: [T; RV32_REGISTER_NUM_LIMBS],
-    /// input_ptr_limbs <- \[input_reg_ptr:4\]_1
+    /// input_ptr_limbs <- \[fp + input_reg_ptr:4\]_1
     pub input_ptr_limbs: [T; RV32_REGISTER_NUM_LIMBS],
 }
 
@@ -63,6 +62,9 @@ pub struct Sha2MemoryCols<
     const STATE_READS: usize,
     const STATE_WRITES: usize,
 > {
+    /// Auxiliary columns for timestamp checking for the read of `fp` from `FP_AS`.
+    #[aligned_borrow]
+    pub fp_aux: MemoryReadAuxCols<T>,
     #[aligned_borrow]
     pub register_aux: [MemoryReadAuxCols<T>; SHA2_REGISTER_READS],
     #[aligned_borrow]
