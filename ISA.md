@@ -387,6 +387,49 @@ Read multiple words from the hint stream and write to consecutive memory address
 
 ---
 
+## SHA-2 Instructions
+
+Optional, enabled by `CrushConfig::with_sha2()` (`--sha2` on the CLI). Ported from
+OpenVM's `openvm-sha2-circuit` v2.0.0-beta.2 and modified to read registers relative to
+the FP. The SHA-2 sub-AIR itself is depended on from `openvm-sha2-air`, not forked.
+
+Each opcode performs exactly one compression, not a whole hash: padding and the block
+loop live in the guest (see `guest-libs/rust/sha2`). Each opcode is paired with a
+block-hasher periphery AIR that it talks to over a bus.
+
+Both are excluded from `CrushISA::allowed_opcodes`, so they never appear inside an
+autoprecompile.
+
+#### SHA256
+
+Opcode from `Sha2Opcode`, offset `0x1312`.
+
+| Field | Value |
+|-------|-------|
+| a | `RV32_REGISTER_NUM_LIMBS * dst_reg` (register holding the output state address) |
+| b | `RV32_REGISTER_NUM_LIMBS * state_reg` (register holding the previous state address) |
+| c | `RV32_REGISTER_NUM_LIMBS * input_reg` (register holding the message block address) |
+| d | `RV32_REGISTER_AS` |
+| e | `RV32_MEMORY_AS` |
+
+**Precondition:** all three pointers 4-byte aligned. `state` and `dst` address 32 bytes
+(8 little-endian u32 words), `input` addresses one 64-byte message block. `dst` may alias
+`state`.
+
+**Semantics:** Read FP, then read `dst`, `state` and `input` from registers `[FP + a]`,
+`[FP + b]`, `[FP + c]`. Apply one SHA-256 compression to the state at `MEM[state]` with
+the block at `MEM[input]`, writing the new state to `MEM[dst]`.
+
+#### SHA512
+
+Opcode from `Sha2Opcode`, offset `0x1313`. Same encoding and semantics as `SHA256`, with
+a 64-byte state (8 little-endian u64 words) and a 128-byte message block.
+
+There is no SHA-384 opcode: its compression function is identical to SHA-512's, differing
+only in the initial state, which is guest-side.
+
+---
+
 ## System Instructions
 
 These use OpenVM's built-in `SystemOpcode` rather than crush-specific opcodes.
@@ -417,6 +460,7 @@ These use OpenVM's built-in `SystemOpcode` rather than crush-specific opcodes.
 | `JumpOpcode` | 0x123B | JUMP, SKIP, JUMP_IF, JUMP_IF_ZERO |
 | `HintStoreOpcode` | 0x1260 | HINT_STOREW, HINT_BUFFER |
 | `ConstOpcodes` | 0x127A | CONST32 |
+| `Sha2Opcode` | 0x1312 | SHA256, SHA512 (optional) |
 | `BaseAlu64Opcode` | 0x2200 | ADD, SUB, XOR, OR, AND |
 | `Shift64Opcode` | 0x2205 | SLL, SRL, SRA |
 | `LessThan64Opcode` | 0x2208 | SLT, SLTU |
