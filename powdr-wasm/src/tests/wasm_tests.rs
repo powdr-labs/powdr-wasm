@@ -239,6 +239,33 @@ fn run_and_prove_single_wasm_test(
     run_wasm_test_function(&mut module, function, args, expected, true, byte_inputs)
 }
 
+/// Like [`run_and_prove_single_wasm_test`], but with an explicit VM config (e.g. one
+/// with the keccak extension enabled).
+fn run_and_prove_single_wasm_test_with_config(
+    module_path: &str,
+    function: &str,
+    args: &[u32],
+    expected: &[u32],
+    byte_inputs: &[&[u8]],
+    vm_config: CrushConfig,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut module = load_wasm_module(module_path, false);
+    let output = run_wasm_test_function_raw_with_config(
+        &mut module,
+        function,
+        args,
+        expected.len(),
+        true,
+        byte_inputs,
+        vm_config,
+    )?;
+    assert_eq!(
+        output, expected,
+        "Test failed for {function}({args:?}): expected {expected:?}, got {output:?}"
+    );
+    Ok(())
+}
+
 /// Run a WASM program through execution with output verification.
 /// When `prove` is true, also runs metered execution, preflight, and mock
 /// proof (all stages). Supports multi-segment programs.
@@ -590,6 +617,31 @@ fn test_n_first_sums() {
         &[42, 0],
         &[903, 0],
         &[],
+    )
+    .unwrap()
+}
+
+/// Partial-length XORIN reached through the wasm import translation.
+///
+/// Deliberately the only .wat keccak case wired into `cargo test`. The other two
+/// exports (`xorin_full_block` and `keccakf.wasm`'s `keccakf_zero_state`) would
+/// duplicate `test_keccak_precompile_crush_1`, which already drives both
+/// translation arms, both chips, XORIN at a full 136-byte block, and keccak-f
+/// correctness via the known digest byte.
+///
+/// A partial block is not reachable from any guest -- the Rust sponge always
+/// submits a full rate block -- and `isolated_tests::test_xorin_partial_block`
+/// covers `len = 12` only by building the instruction directly, bypassing
+/// translation. This closes that one gap.
+#[test]
+fn test_xorin_partial_block_wasm() {
+    run_and_prove_single_wasm_test_with_config(
+        "../sample-programs/xorin.wasm",
+        "xorin_partial_block",
+        &[],
+        &[0],
+        &[],
+        CrushConfig::default().with_keccak(),
     )
     .unwrap()
 }
