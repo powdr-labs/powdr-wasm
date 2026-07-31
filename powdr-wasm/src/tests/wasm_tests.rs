@@ -600,7 +600,8 @@ fn test_n_first_sums() {
 /// The isolated instruction tests cover the compression itself at three FP bases, but
 /// build the instruction directly; this is the only test that goes through
 /// crush-translation's `__native_sha256_compress` arm and the real guest block loop.
-fn sha2_precompile_crush(iterations: u32, expected_first_byte: u32) {
+/// `variant`: 0 = SHA-256, 1 = SHA-512.
+fn sha2_precompile_crush(variant: u32, iterations: u32, expected_first_byte: u32) {
     let path = format!(
         "{}/../sample-programs/sha2_precompile",
         env!("CARGO_MANIFEST_DIR")
@@ -611,7 +612,7 @@ fn sha2_precompile_crush(iterations: u32, expected_first_byte: u32) {
     run_wasm_test_function_raw_with_config(
         &mut module,
         "main",
-        &[0, 0, iterations, expected_first_byte],
+        &[0, 0, variant, iterations, expected_first_byte],
         0,
         true,
         &[],
@@ -621,15 +622,27 @@ fn sha2_precompile_crush(iterations: u32, expected_first_byte: u32) {
 }
 
 #[test]
-fn test_sha2_precompile_crush_1() {
+fn test_sha256_precompile_crush_1() {
     // sha256([0; 32]) starts with 0x66 = 102
-    sha2_precompile_crush(1, 102);
+    sha2_precompile_crush(0, 1, 102);
 }
 
 #[test]
-fn test_sha2_precompile_crush_2() {
+fn test_sha256_precompile_crush_2() {
     // sha256^2([0; 32]) starts with 0x2b = 43
-    sha2_precompile_crush(2, 43);
+    sha2_precompile_crush(0, 2, 43);
+}
+
+#[test]
+fn test_sha512_precompile_crush_1() {
+    // sha512([0; 64]) starts with 0x7b = 123
+    sha2_precompile_crush(1, 1, 123);
+}
+
+#[test]
+fn test_sha512_precompile_crush_2() {
+    // sha512^2([0; 64]) starts with 0xf5 = 245
+    sha2_precompile_crush(1, 2, 245);
 }
 
 #[test]

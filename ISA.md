@@ -394,7 +394,8 @@ OpenVM's `openvm-sha2-circuit` v2.0.0-beta.2 and modified to read registers rela
 the FP. The SHA-2 sub-AIR itself is depended on from `openvm-sha2-air`, not forked.
 
 Each opcode performs exactly one compression, not a whole hash: padding and the block
-loop live in the guest (see `guest-libs/rust/sha2`). Each opcode is paired with a
+loop live in the guest (see `guest-libs/rust/sha2`, which provides both digests). Each
+opcode is paired with a
 block-hasher periphery AIR that it talks to over a bus.
 
 Both are excluded from `CrushISA::allowed_opcodes`, so they never appear inside an
@@ -423,10 +424,12 @@ the block at `MEM[input]`, writing the new state to `MEM[dst]`.
 #### SHA512
 
 Opcode from `Sha2Opcode`, offset `0x1313`. Same encoding and semantics as `SHA256`, with
-a 64-byte state (8 little-endian u64 words) and a 128-byte message block.
+a 64-byte state (8 little-endian u64 words) and a 128-byte message block. Reached from a
+guest via the `__native_sha512_compress` import.
 
 There is no SHA-384 opcode: its compression function is identical to SHA-512's, differing
-only in the initial state, which is guest-side.
+only in the initial state and a truncated digest, both of which are guest-side. A SHA-384
+driver would reuse the `SHA512` opcode.
 
 ---
 
