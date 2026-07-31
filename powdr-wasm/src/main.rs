@@ -185,6 +185,11 @@ enum Commands {
     Keygen {
         /// Directory to write cached proving keys to
         cache_dir: PathBuf,
+        /// Enable keccak256 precompile extension. Must match the `prove --keccak`
+        /// run that consumes these keys; a key generated without it cannot prove a
+        /// program that uses the precompile.
+        #[arg(long, default_value_t = false)]
+        keccak: bool,
     },
     /// Mock-proves execution of a function from the WASM program with the given arguments
     /// (constraint verification only, no cryptographic proof)
@@ -385,8 +390,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 prove()?;
             }
         }
-        Commands::Keygen { cache_dir } => {
-            proving::keygen_to_disk(&cache_dir)?;
+        Commands::Keygen { cache_dir, keccak } => {
+            let config = if keccak {
+                CrushConfig::default().with_keccak()
+            } else {
+                CrushConfig::default()
+            };
+            proving::keygen_to_disk(&cache_dir, config)?;
             println!("Keys written to {}", cache_dir.display());
         }
         Commands::MockProve {

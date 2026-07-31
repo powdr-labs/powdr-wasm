@@ -126,8 +126,12 @@ pub(crate) const APP_PK_FILE: &str = "app_pk.bin";
 pub(crate) const AGG_PK_FILE: &str = "agg_pk.bin";
 pub(crate) const COMPILED_PROGRAM_FILE: &str = "compiled_program.bin";
 
-fn default_app_config_without_apcs() -> AppConfig<SpecializedConfig<CrushISA>> {
-    let vm_config = CrushConfig::default();
+/// App config for `vm_config` with no autoprecompiles.
+///
+/// Takes the config rather than defaulting it: with keccak enabled the AIR set and
+/// the executor inventory both differ, so a default-built config would be missing
+/// the keccak executors.
+fn app_config_without_apcs(vm_config: CrushConfig) -> AppConfig<SpecializedConfig<CrushISA>> {
     let app_config = powdr_openvm::SpecializedConfig::<CrushISA>::new(
         OriginalVmConfig::new(vm_config),
         vec![],
@@ -139,10 +143,16 @@ fn default_app_config_without_apcs() -> AppConfig<SpecializedConfig<CrushISA>> {
 }
 
 /// Generate app and aggregation proving keys and write them to `cache_dir`.
-pub fn keygen_to_disk(cache_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+///
+/// `vm_config` must match what the eventual `prove --cache-dir` run uses; a key
+/// generated without keccak cannot prove a program that uses it.
+pub fn keygen_to_disk(
+    cache_dir: &Path,
+    vm_config: CrushConfig,
+) -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(cache_dir)?;
 
-    let app_config = default_app_config_without_apcs();
+    let app_config = app_config_without_apcs(vm_config);
     let sdk = CrushSdk::new_without_transpiler(app_config, AggregationSystemParams::default())?;
 
     tracing::info!("Generating app proving key...");
@@ -160,7 +170,11 @@ pub fn keygen_to_disk(cache_dir: &Path) -> Result<(), Box<dyn std::error::Error>
     Ok(())
 }
 
-fn build_sdk(cache_dir: Option<&Path>) -> Result<CrushSdk, Box<dyn std::error::Error>> {
+/// Build an SDK, either from cached proving keys or from `fresh_config`.
+fn build_sdk(
+    cache_dir: Option<&Path>,
+    fresh_config: AppConfig<SpecializedConfig<CrushISA>>,
+) -> Result<CrushSdk, Box<dyn std::error::Error>> {
     let mut builder = CrushSdk::builder();
 
     // Each proving layer has a single source of truth: either a cached proving
@@ -182,7 +196,7 @@ fn build_sdk(cache_dir: Option<&Path>) -> Result<CrushSdk, Box<dyn std::error::E
             have_agg_pk = true;
         }
     } else {
-        builder = builder.app_config(default_app_config_without_apcs());
+        builder = builder.app_config(fresh_config);
     }
 
     if !have_agg_pk {
@@ -208,7 +222,9 @@ pub fn prove(
     let app_fri_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
     let app_config = AppConfig::new(compiled.vm_config.clone(), app_fri_params);
     let sdk = if apc_count == 0 {
-        build_sdk(cache_dir)?
+        // The compiled config carries whatever extensions were requested (e.g.
+        // --keccak), so it is what a freshly-built SDK must be keyed on.
+        build_sdk(cache_dir, app_config.clone())?
     } else {
         CrushSdk::new_without_transpiler(app_config, AggregationSystemParams::default())?
     };
