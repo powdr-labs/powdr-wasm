@@ -25,11 +25,11 @@ unsafe extern "C" {
     ///
     /// Both pointers must be 4-byte aligned, and `len` must be a multiple of 4 and
     /// at most [`KECCAK_RATE`].
-    unsafe fn __native_xorin(buffer: *mut u8, input: *const u8, len: usize);
+    unsafe fn __xorin(buffer: *mut u8, input: *const u8, len: usize);
 
     /// Apply the keccak-f[1600] permutation in place to the 200-byte state at
     /// `buffer`, which must be 4-byte aligned.
-    unsafe fn __native_keccakf(buffer: *mut u8);
+    unsafe fn __keccakf(buffer: *mut u8);
 }
 
 /// Software stand-ins for the precompiles, so the sponge below can be exercised off
@@ -39,13 +39,13 @@ unsafe extern "C" {
 mod host {
     use super::KECCAK_WIDTH_BYTES;
 
-    pub(super) unsafe fn __native_xorin(buffer: *mut u8, input: *const u8, len: usize) {
+    pub(super) unsafe fn __xorin(buffer: *mut u8, input: *const u8, len: usize) {
         for i in 0..len {
             unsafe { *buffer.add(i) ^= *input.add(i) };
         }
     }
 
-    pub(super) unsafe fn __native_keccakf(buffer: *mut u8) {
+    pub(super) unsafe fn __keccakf(buffer: *mut u8) {
         let mut lanes = [0u64; KECCAK_WIDTH_BYTES / 8];
         for (i, lane) in lanes.iter_mut().enumerate() {
             let mut bytes = [0u8; 8];
@@ -64,7 +64,7 @@ mod host {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-use host::{__native_keccakf, __native_xorin};
+use host::{__keccakf, __xorin};
 
 /// The keccak state, 4-byte aligned so the precompiles can access it word-wise.
 #[repr(align(4))]
@@ -100,12 +100,12 @@ impl Keccak256 {
     /// of 4 and both pointers are aligned by construction.
     fn absorb_block(&mut self) {
         unsafe {
-            __native_xorin(
+            __xorin(
                 self.state.0.as_mut_ptr(),
                 self.block.0.as_ptr(),
                 KECCAK_RATE,
             );
-            __native_keccakf(self.state.0.as_mut_ptr());
+            __keccakf(self.state.0.as_mut_ptr());
         }
     }
 

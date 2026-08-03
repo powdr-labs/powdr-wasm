@@ -9,7 +9,7 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupBus, utils::not};
-use openvm_crush_transpiler::XorinOpcode;
+use openvm_crush_transpiler::KeccakOpcodes;
 use openvm_instructions::riscv::{
     RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
 };
@@ -127,7 +127,7 @@ impl XorinVmAir {
 
         self.execution_bridge
             .execute_and_increment_pc(
-                AB::Expr::from_usize(XorinOpcode::XORIN as usize + self.offset),
+                AB::Expr::from_usize(KeccakOpcodes::XORIN as usize + self.offset),
                 [
                     buffer_reg_ptr.into(),
                     input_reg_ptr.into(),

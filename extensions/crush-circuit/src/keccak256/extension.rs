@@ -18,13 +18,12 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     SharedBitwiseOperationLookupChip,
 };
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
-use openvm_crush_transpiler::{KeccakfOpcode, XorinOpcode};
+use openvm_crush_transpiler::KeccakOpcodes;
 use openvm_instructions::LocalOpcode;
 use openvm_stark_backend::{
     StarkEngine, StarkProtocolConfig, Val, interaction::PermutationCheckBus, p3_field::PrimeField32,
 };
 use serde::{Deserialize, Serialize};
-use strum::IntoEnumIterator;
 
 use crate::keccak256::{
     keccakf_op::{KeccakfExecutor, KeccakfOpAir, KeccakfOpChip},
@@ -61,17 +60,13 @@ impl<F> VmExecutionExtension<F> for Keccak256 {
     ) -> Result<(), ExecutorInventoryError> {
         let pointer_max_bits = inventory.pointer_max_bits();
 
-        let xorin_executor = XorinVmExecutor::new(XorinOpcode::CLASS_OFFSET, pointer_max_bits);
-        inventory.add_executor(
-            xorin_executor,
-            XorinOpcode::iter().map(|x| x.global_opcode()),
-        )?;
+        // Registered per variant rather than via `iter()`: the two opcodes now share one
+        // enum, so iterating it would bind both to the same executor.
+        let xorin_executor = XorinVmExecutor::new(KeccakOpcodes::CLASS_OFFSET, pointer_max_bits);
+        inventory.add_executor(xorin_executor, [KeccakOpcodes::XORIN.global_opcode()])?;
 
-        let keccak_executor = KeccakfExecutor::new(KeccakfOpcode::CLASS_OFFSET, pointer_max_bits);
-        inventory.add_executor(
-            keccak_executor,
-            KeccakfOpcode::iter().map(|x| x.global_opcode()),
-        )?;
+        let keccak_executor = KeccakfExecutor::new(KeccakOpcodes::CLASS_OFFSET, pointer_max_bits);
+        inventory.add_executor(keccak_executor, [KeccakOpcodes::KECCAKF.global_opcode()])?;
 
         Ok(())
     }
@@ -105,7 +100,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Keccak256 {
             memory_bridge,
             bitwise_lu,
             pointer_max_bits,
-            XorinOpcode::CLASS_OFFSET,
+            KeccakOpcodes::CLASS_OFFSET,
         );
         inventory.add_air(xorin_air);
 
@@ -119,7 +114,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Keccak256 {
             bitwise_lu,
             keccakf_state_bus,
             pointer_max_bits,
-            KeccakfOpcode::CLASS_OFFSET,
+            KeccakOpcodes::CLASS_OFFSET,
         );
         inventory.add_air(op_air);
 

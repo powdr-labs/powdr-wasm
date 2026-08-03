@@ -1,6 +1,6 @@
 ;; Minimal end-to-end check of the XORIN precompile.
 ;;
-;; XORs an input block into a sponge buffer via the `env.__native_xorin` import
+;; XORs an input block into a sponge buffer via the `env.__xorin` import
 ;; and verifies the result, trapping on mismatch. Uses uniform fill bytes so the
 ;; expected value is a constant and no lookup table is needed:
 ;;
@@ -22,8 +22,8 @@
 ;; Run:    cargo run -r -- run --keccak sample-programs/xorin.wasm xorin_full_block
 ;;         cargo run -r -- run --keccak sample-programs/xorin.wasm xorin_partial_block
 
-(import "env" "__native_xorin"
-    (func $native_xorin (param i32) (param i32) (param i32)))
+(import "env" "__xorin"
+    (func $xorin (param i32) (param i32) (param i32)))
 
 (memory 1)
 
@@ -77,7 +77,7 @@
     (call $fill (global.get $buffer) (global.get $buf_fill) (global.get $rate))
     (call $fill (global.get $input) (global.get $in_fill) (global.get $rate))
 
-    (call $native_xorin (global.get $buffer) (global.get $input) (local.get $len))
+    (call $xorin (global.get $buffer) (global.get $input) (local.get $len))
 
     ;; absorbed prefix: 0xa5 ^ 0x3c
     (call $expect_fill (global.get $buffer) (i32.const 0x99) (local.get $len))

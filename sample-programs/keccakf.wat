@@ -1,7 +1,7 @@
 ;; Minimal end-to-end check of the KECCAKF precompile.
 ;;
 ;; Applies one keccak-f[1600] permutation to the all-zero state via the
-;; `env.__native_keccakf` import, then compares all 200 result bytes against the
+;; `env.__keccakf` import, then compares all 200 result bytes against the
 ;; known Keccak-f[1600] output for a zero input state, trapping on any mismatch.
 ;; The first lane, 0xf1258f7940e1dde7, is the standard XKCP test vector.
 ;;
@@ -10,7 +10,7 @@
 ;; Build:  wat2wasm sample-programs/keccakf.wat -o sample-programs/keccakf.wasm
 ;; Run:    cargo run -r -- run --keccak sample-programs/keccakf.wasm keccakf_zero_state
 
-(import "env" "__native_keccakf" (func $native_keccakf (param i32)))
+(import "env" "__keccakf" (func $keccakf (param i32)))
 
 (memory 1)
 
@@ -36,7 +36,7 @@
     (local $i i32)
 
     ;; Permute the zero state in place.
-    (call $native_keccakf (global.get $state))
+    (call $keccakf (global.get $state))
 
     ;; Compare all 200 bytes against the expected output.
     block $done

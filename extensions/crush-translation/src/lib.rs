@@ -648,7 +648,7 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
             }
             // Keccak256 precompile. The guest drives the sponge itself (padding and the
             // absorb loop are plain guest code), calling these two opcodes per block.
-            ("env", "__native_keccakf") => {
+            ("env", "__keccakf") => {
                 // fn(buffer: *mut u8) — 200-byte state, permuted in place.
                 assert!(outputs.is_empty());
                 let mem_start = c
@@ -662,7 +662,7 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
                 directives.push(Directive::Instruction(ib::keccakf(effective_buffer)));
                 directives
             }
-            ("env", "__native_xorin") => {
+            ("env", "__xorin") => {
                 // fn(buffer: *mut u8, input: *const u8, len: usize)
                 assert!(outputs.is_empty());
                 let mem_start = c

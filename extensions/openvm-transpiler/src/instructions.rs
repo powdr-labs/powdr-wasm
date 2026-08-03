@@ -287,7 +287,8 @@ pub enum Phantom {
 // Keccak256 opcodes
 // =================================================================================================
 
-/// Applies the keccak-f permutation in place to the 200-byte state buffer pointed to by `rd`.
+/// The keccak256 precompile opcodes. Each is one primitive, not a whole hash: padding and
+/// the absorb loop live in the guest.
 #[derive(
     Copy,
     Clone,
@@ -305,28 +306,9 @@ pub enum Phantom {
 )]
 #[opcode_offset = 0x1310]
 #[repr(usize)]
-pub enum KeccakfOpcode {
+pub enum KeccakOpcodes {
+    /// Applies the keccak-f permutation in place to the 200-byte state buffer at `rd`.
     KECCAKF,
-}
-
-/// XORs `rs2` input bytes at `rs1` into the sponge buffer at `rd`.
-#[derive(
-    Copy,
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    EnumCount,
-    EnumIter,
-    FromRepr,
-    LocalOpcode,
-    Serialize,
-    Deserialize,
-)]
-#[opcode_offset = 0x1311]
-#[repr(usize)]
-pub enum XorinOpcode {
+    /// XORs `rs2` input bytes at `rs1` into the sponge buffer at `rd`.
     XORIN,
 }

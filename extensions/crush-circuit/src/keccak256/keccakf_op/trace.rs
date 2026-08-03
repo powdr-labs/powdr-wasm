@@ -16,7 +16,7 @@ use openvm_circuit_primitives::{
     AlignedBytesBorrow, Chip, bitwise_op_lookup::SharedBitwiseOperationLookupChip,
 };
 use openvm_cpu_backend::CpuBackend;
-use openvm_crush_transpiler::KeccakfOpcode;
+use openvm_crush_transpiler::KeccakOpcodes;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -127,7 +127,7 @@ where
     for<'buf> RA: RecordArena<'buf, KeccakfRecordLayout, &'buf mut KeccakfRecord>,
 {
     fn get_opcode_name(&self, _: usize) -> String {
-        format!("{:?}", KeccakfOpcode::KECCAKF)
+        format!("{:?}", KeccakOpcodes::KECCAKF)
     }
 
     fn execute(

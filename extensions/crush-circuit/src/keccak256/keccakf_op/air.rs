@@ -9,7 +9,7 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
-use openvm_crush_transpiler::KeccakfOpcode;
+use openvm_crush_transpiler::KeccakOpcodes;
 use openvm_instructions::riscv::{
     RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
 };
@@ -166,7 +166,7 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
         // ======== Execution bus =========
         self.execution_bridge
             .execute_and_increment_pc(
-                AB::Expr::from_usize(KeccakfOpcode::KECCAKF as usize + self.offset),
+                AB::Expr::from_usize(KeccakOpcodes::KECCAKF as usize + self.offset),
                 [
                     rd_ptr.into(),
                     AB::Expr::ZERO,

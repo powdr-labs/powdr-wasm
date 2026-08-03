@@ -1,7 +1,7 @@
 use openvm_crush_transpiler::{
     BaseAlu64Opcode, BaseAluOpcode, CallOpcode, ConstOpcodes, Eq64Opcode, EqOpcode,
-    HintStoreOpcode, JumpOpcode, KeccakfOpcode, LessThan64Opcode, LessThanOpcode, MulOpcode,
-    Phantom, Shift64Opcode, ShiftOpcode, XorinOpcode,
+    HintStoreOpcode, JumpOpcode, KeccakOpcodes, LessThan64Opcode, LessThanOpcode, MulOpcode,
+    Phantom, Shift64Opcode, ShiftOpcode,
 };
 use openvm_instructions::{LocalOpcode, SystemOpcode, VmOpcode, instruction::Instruction, riscv};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -967,7 +967,7 @@ pub fn hint_buffer<F: PrimeField32>(num_words_reg: usize, mem_ptr_reg: usize) ->
 /// pointed to by `buffer_ptr_reg`.
 pub fn keccakf<F: PrimeField32>(buffer_ptr_reg: usize) -> Instruction<F> {
     Instruction::from_isize(
-        KeccakfOpcode::KECCAKF.global_opcode(),
+        KeccakOpcodes::KECCAKF.global_opcode(),
         (riscv::RV32_REGISTER_NUM_LIMBS * buffer_ptr_reg) as isize,
         0,
         0,
@@ -984,7 +984,7 @@ pub fn xorin<F: PrimeField32>(
     len_reg: usize,
 ) -> Instruction<F> {
     Instruction::from_isize(
-        XorinOpcode::XORIN.global_opcode(),
+        KeccakOpcodes::XORIN.global_opcode(),
         (riscv::RV32_REGISTER_NUM_LIMBS * buffer_reg) as isize,
         (riscv::RV32_REGISTER_NUM_LIMBS * input_reg) as isize,
         (riscv::RV32_REGISTER_NUM_LIMBS * len_reg) as isize,

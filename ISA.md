@@ -403,7 +403,7 @@ autoprecompile.
 
 #### KECCAKF
 
-Opcode from `KeccakfOpcode`, offset `0x1310`.
+Opcode `KeccakOpcodes::KECCAKF`, offset `0x1310`.
 
 | Field | Value |
 |-------|-------|
@@ -420,7 +420,7 @@ keccak-f[1600] permutation in place to the 200 bytes at `MEM[buffer_ptr]`.
 
 #### XORIN
 
-Opcode from `XorinOpcode`, offset `0x1311`.
+Opcode `KeccakOpcodes::XORIN`, offset `0x1311`.
 
 | Field | Value |
 |-------|-------|
@@ -470,8 +470,7 @@ These use OpenVM's built-in `SystemOpcode` rather than crush-specific opcodes.
 | `JumpOpcode` | 0x123B | JUMP, SKIP, JUMP_IF, JUMP_IF_ZERO |
 | `HintStoreOpcode` | 0x1260 | HINT_STOREW, HINT_BUFFER |
 | `ConstOpcodes` | 0x127A | CONST32 |
-| `KeccakfOpcode` | 0x1310 | KECCAKF (optional) |
-| `XorinOpcode` | 0x1311 | XORIN (optional) |
+| `KeccakOpcodes` | 0x1310 | KECCAKF, XORIN (optional) |
 | `BaseAlu64Opcode` | 0x2200 | ADD, SUB, XOR, OR, AND |
 | `Shift64Opcode` | 0x2205 | SLL, SRL, SRA |
 | `LessThan64Opcode` | 0x2208 | SLT, SLTU |

@@ -12,7 +12,7 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
-use openvm_crush_transpiler::XorinOpcode;
+use openvm_crush_transpiler::KeccakOpcodes;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -98,7 +98,7 @@ where
     for<'buf> RA: RecordArena<'buf, XorinVmRecordLayout, XorinVmRecordMut<'buf>>,
 {
     fn get_opcode_name(&self, _: usize) -> String {
-        format!("{:?}", XorinOpcode::XORIN)
+        format!("{:?}", KeccakOpcodes::XORIN)
     }
 
     fn execute(
