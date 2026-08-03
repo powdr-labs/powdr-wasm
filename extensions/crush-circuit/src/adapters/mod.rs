@@ -319,3 +319,13 @@ pub fn tracing_read_fp<F: PrimeField32>(
 pub fn tmp_convert_to_u8s<F: PrimeField32, const N: usize>(data: [F; N]) -> [u8; N] {
     data.map(|x| x.as_canonical_u32() as u8)
 }
+
+// Adapters forked from `openvm-rv32-adapters` so the register reads are frame-pointer
+// relative. The heap reads/writes they perform are unchanged; only the register
+// addressing differs, which is why the core chips above them are reused as-is.
+pub mod eq_mod;
+pub mod vec_heap;
+pub mod vec_heap_branch;
+pub use eq_mod::*;
+pub use vec_heap::*;
+pub use vec_heap_branch::*;
