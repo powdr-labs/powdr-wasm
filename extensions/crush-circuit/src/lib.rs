@@ -2,6 +2,7 @@
 #![cfg_attr(feature = "tco", feature(explicit_tail_calls))]
 #![cfg_attr(feature = "tco", allow(internal_features))]
 #![cfg_attr(feature = "tco", feature(core_intrinsics))]
+use crate::keccak256::{Keccak256, Keccak256CpuProverExt, Keccak256Executor};
 use crate::memory_config::memory_config_with_fp;
 use openvm_circuit::{
     arch::{
@@ -49,6 +50,8 @@ pub use shift::*;
 mod hintstore;
 pub use hintstore::*;
 
+pub mod keccak256;
+
 mod extension;
 pub use extension::*;
 
@@ -82,6 +85,12 @@ pub struct CrushConfig {
     pub system: SystemConfig,
     #[extension]
     pub base: Crush,
+    /// Optional keccak256 extension (`KECCAKF` + `XORIN`). Must stay the last
+    /// extension field: `keccakf_op`'s metered executor derives the periphery AIR
+    /// index from the insertion order, and the autoprecompile dummy chip complex
+    /// relies on keccak's AIRs being last.
+    #[extension(executor = "Keccak256Executor")]
+    pub keccak: Option<Keccak256>,
 }
 
 // This seems trivial but it's tricky to put into powdr-openvm because of some From implementation issues.
@@ -104,6 +113,7 @@ impl Default for CrushConfig {
         Self {
             system,
             base: Default::default(),
+            keccak: None,
         }
     }
 }
@@ -114,6 +124,7 @@ impl CrushConfig {
         Self {
             system,
             base: Default::default(),
+            keccak: None,
         }
     }
 
@@ -124,7 +135,14 @@ impl CrushConfig {
         Self {
             system,
             base: Default::default(),
+            keccak: None,
         }
+    }
+
+    /// Enable the keccak256 precompile (`KECCAKF` + `XORIN`).
+    pub fn with_keccak(mut self) -> Self {
+        self.keccak = Some(Keccak256);
+        self
     }
 }
 
@@ -161,6 +179,9 @@ where
             VmBuilder::<E>::create_chip_complex(&SystemCpuBuilder, &config.system, circuit)?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&CrushCpuProverExt, &config.base, inventory)?;
+        if let Some(keccak) = &config.keccak {
+            VmProverExtension::<E, _, _>::extend_prover(&Keccak256CpuProverExt, keccak, inventory)?;
+        }
         Ok(chip_complex)
     }
 }
@@ -192,6 +213,14 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for CrushGpuBuilder {
         >,
         ChipInventoryError,
     > {
+        // The keccak256 chips are CPU-only (the bitwise lookup and keccak-f periphery
+        // chips have no GPU prover extension). Fail loudly rather than return a chip
+        // complex whose chips do not match the AIR inventory.
+        assert!(
+            config.keccak.is_none(),
+            "the keccak256 extension is not supported on the CUDA backend"
+        );
+
         let mut chip_complex = VmBuilder::<BabyBearPoseidon2GpuEngine>::create_chip_complex(
             &SystemGpuBuilder,
             &config.system,

@@ -1033,6 +1033,7 @@ dependencies = [
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "openvm-transpiler",
+ "p3-keccak-air",
  "powdr-autoprecompiles",
  "powdr-number",
  "powdr-openvm",
@@ -1042,6 +1043,7 @@ dependencies = [
  "struct-reflection",
  "strum 0.26.3",
  "test-case",
+ "tiny-keccak",
 ]
 
 [[package]]
@@ -1050,6 +1052,13 @@ version = "0.0.1"
 dependencies = [
  "postcard",
  "serde",
+]
+
+[[package]]
+name = "crush-guest-keccak"
+version = "0.0.1"
+dependencies = [
+ "tiny-keccak",
 ]
 
 [[package]]
@@ -4679,6 +4688,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 1.0.69",
+ "tiny-keccak",
  "tracing",
  "tracing-forest",
  "tracing-subscriber",

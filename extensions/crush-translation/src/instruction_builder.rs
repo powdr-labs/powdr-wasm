@@ -1,7 +1,7 @@
 use openvm_crush_transpiler::{
     BaseAlu64Opcode, BaseAluOpcode, CallOpcode, ConstOpcodes, Eq64Opcode, EqOpcode,
-    HintStoreOpcode, JumpOpcode, LessThan64Opcode, LessThanOpcode, MulOpcode, Phantom,
-    Shift64Opcode, ShiftOpcode,
+    HintStoreOpcode, JumpOpcode, KeccakOpcodes, LessThan64Opcode, LessThanOpcode, MulOpcode,
+    Phantom, Shift64Opcode, ShiftOpcode,
 };
 use openvm_instructions::{LocalOpcode, SystemOpcode, VmOpcode, instruction::Instruction, riscv};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -958,6 +958,36 @@ pub fn hint_buffer<F: PrimeField32>(num_words_reg: usize, mem_ptr_reg: usize) ->
         (riscv::RV32_REGISTER_NUM_LIMBS * num_words_reg) as isize,
         (riscv::RV32_REGISTER_NUM_LIMBS * mem_ptr_reg) as isize,
         0,
+        riscv::RV32_REGISTER_AS as isize,
+        riscv::RV32_MEMORY_AS as isize,
+    )
+}
+
+/// KECCAKF: apply the keccak-f permutation in place to the 200-byte state buffer
+/// pointed to by `buffer_ptr_reg`.
+pub fn keccakf<F: PrimeField32>(buffer_ptr_reg: usize) -> Instruction<F> {
+    Instruction::from_isize(
+        KeccakOpcodes::KECCAKF.global_opcode(),
+        (riscv::RV32_REGISTER_NUM_LIMBS * buffer_ptr_reg) as isize,
+        0,
+        0,
+        riscv::RV32_REGISTER_AS as isize,
+        riscv::RV32_MEMORY_AS as isize,
+    )
+}
+
+/// XORIN: XOR `len_reg` bytes from the buffer at `input_reg` into the sponge buffer
+/// at `buffer_reg`. `len_reg` must hold a multiple of 4 and at most the keccak rate.
+pub fn xorin<F: PrimeField32>(
+    buffer_reg: usize,
+    input_reg: usize,
+    len_reg: usize,
+) -> Instruction<F> {
+    Instruction::from_isize(
+        KeccakOpcodes::XORIN.global_opcode(),
+        (riscv::RV32_REGISTER_NUM_LIMBS * buffer_reg) as isize,
+        (riscv::RV32_REGISTER_NUM_LIMBS * input_reg) as isize,
+        (riscv::RV32_REGISTER_NUM_LIMBS * len_reg) as isize,
         riscv::RV32_REGISTER_AS as isize,
         riscv::RV32_MEMORY_AS as isize,
     )

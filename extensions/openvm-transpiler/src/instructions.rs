@@ -282,3 +282,33 @@ pub enum Phantom {
     /// Fill hint stream with 8 bytes of incrementing clock timestamp.
     ClockTimeGet,
 }
+
+// =================================================================================================
+// Keccak256 opcodes
+// =================================================================================================
+
+/// The keccak256 precompile opcodes. Each is one primitive, not a whole hash: padding and
+/// the absorb loop live in the guest.
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    LocalOpcode,
+    Serialize,
+    Deserialize,
+)]
+#[opcode_offset = 0x1310]
+#[repr(usize)]
+pub enum KeccakOpcodes {
+    /// Applies the keccak-f permutation in place to the 200-byte state buffer at `rd`.
+    KECCAKF,
+    /// XORs `rs2` input bytes at `rs1` into the sponge buffer at `rd`.
+    XORIN,
+}

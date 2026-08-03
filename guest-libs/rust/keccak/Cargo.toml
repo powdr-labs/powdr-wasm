@@ -1,0 +1,12 @@
+[package]
+name = "crush-guest-keccak"
+description = "keccak256 for crush guests, using the KECCAKF and XORIN precompiles"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Off target there are no precompiles to call, so the sponge falls back to a software
+# keccak-f. This keeps the guest build (wasm32) dependency-free while letting the
+# padding and absorb logic be unit tested on the host.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tiny-keccak = { workspace = true }

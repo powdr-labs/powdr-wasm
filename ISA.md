@@ -387,6 +387,59 @@ Read multiple words from the hint stream and write to consecutive memory address
 
 ---
 
+## Keccak256 Instructions
+
+Optional, enabled by `CrushConfig::with_keccak()` (`--keccak` on the CLI). Ported from
+OpenVM's `openvm-keccak256-circuit` v2.0.0-beta.2 and modified to read registers relative
+to the FP.
+
+These are two primitives, not a whole hash: padding and the absorb loop live in the guest
+(see `guest-libs/rust/keccak`), which calls `XORIN` and `KECCAKF` once per rate block. The
+permutation itself is proved by a periphery AIR that the `KECCAKF` chip talks to over a
+direct bus, so it is shared across all invocations.
+
+Both are excluded from `CrushISA::allowed_opcodes`, so they never appear inside an
+autoprecompile.
+
+#### KECCAKF
+
+Opcode `KeccakOpcodes::KECCAKF`, offset `0x1310`.
+
+| Field | Value |
+|-------|-------|
+| a | `RV32_REGISTER_NUM_LIMBS * buffer_ptr_reg` (register holding the state address) |
+| b | 0 |
+| c | 0 |
+| d | `RV32_REGISTER_AS` |
+| e | `RV32_MEMORY_AS` |
+
+**Precondition:** `buffer_ptr` must be 4-byte aligned and address 200 readable/writable bytes.
+
+**Semantics:** Read FP, then read `buffer_ptr` from register `[FP + a]`. Apply the
+keccak-f[1600] permutation in place to the 200 bytes at `MEM[buffer_ptr]`.
+
+#### XORIN
+
+Opcode `KeccakOpcodes::XORIN`, offset `0x1311`.
+
+| Field | Value |
+|-------|-------|
+| a | `RV32_REGISTER_NUM_LIMBS * buffer_reg` (register holding the sponge address) |
+| b | `RV32_REGISTER_NUM_LIMBS * input_reg` (register holding the input address) |
+| c | `RV32_REGISTER_NUM_LIMBS * len_reg` (register holding the byte count) |
+| d | `RV32_REGISTER_AS` |
+| e | `RV32_MEMORY_AS` |
+
+**Precondition:** both pointers 4-byte aligned; `len` a multiple of 4 and at most 136
+(the keccak rate). A non-multiple of 4 is debug-asserted in tracegen and unsatisfiable
+in the AIR, which constrains `4 * (non-padding words) == len`.
+
+**Semantics:** Read FP, then read `buffer`, `input` and `len` from registers `[FP + a]`,
+`[FP + b]`, `[FP + c]`. XOR `len` bytes at `MEM[input]` into `MEM[buffer]`. Bytes beyond
+`len` within the rate block are untouched.
+
+---
+
 ## System Instructions
 
 These use OpenVM's built-in `SystemOpcode` rather than crush-specific opcodes.
@@ -417,6 +470,7 @@ These use OpenVM's built-in `SystemOpcode` rather than crush-specific opcodes.
 | `JumpOpcode` | 0x123B | JUMP, SKIP, JUMP_IF, JUMP_IF_ZERO |
 | `HintStoreOpcode` | 0x1260 | HINT_STOREW, HINT_BUFFER |
 | `ConstOpcodes` | 0x127A | CONST32 |
+| `KeccakOpcodes` | 0x1310 | KECCAKF, XORIN (optional) |
 | `BaseAlu64Opcode` | 0x2200 | ADD, SUB, XOR, OR, AND |
 | `Shift64Opcode` | 0x2205 | SLL, SRL, SRA |
 | `LessThan64Opcode` | 0x2208 | SLT, SLTU |

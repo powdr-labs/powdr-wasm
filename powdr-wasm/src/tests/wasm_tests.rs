@@ -239,6 +239,33 @@ fn run_and_prove_single_wasm_test(
     run_wasm_test_function(&mut module, function, args, expected, true, byte_inputs)
 }
 
+/// Like [`run_and_prove_single_wasm_test`], but with an explicit VM config (e.g. one
+/// with the keccak extension enabled).
+fn run_and_prove_single_wasm_test_with_config(
+    module_path: &str,
+    function: &str,
+    args: &[u32],
+    expected: &[u32],
+    byte_inputs: &[&[u8]],
+    vm_config: CrushConfig,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut module = load_wasm_module(module_path, false);
+    let output = run_wasm_test_function_raw_with_config(
+        &mut module,
+        function,
+        args,
+        expected.len(),
+        true,
+        byte_inputs,
+        vm_config,
+    )?;
+    assert_eq!(
+        output, expected,
+        "Test failed for {function}({args:?}): expected {expected:?}, got {output:?}"
+    );
+    Ok(())
+}
+
 /// Run a WASM program through execution with output verification.
 /// When `prove` is true, also runs metered execution, preflight, and mock
 /// proof (all stages). Supports multi-segment programs.
@@ -271,12 +298,31 @@ fn run_wasm_test_function_raw(
     prove: bool,
     byte_inputs: &[&[u8]],
 ) -> Result<Vec<u32>, Box<dyn std::error::Error>> {
+    run_wasm_test_function_raw_with_config(
+        module,
+        function,
+        args,
+        output_words,
+        prove,
+        byte_inputs,
+        CrushConfig::default(),
+    )
+}
+
+fn run_wasm_test_function_raw_with_config(
+    module: &mut LinkedProgram<F>,
+    function: &str,
+    args: &[u32],
+    output_words: usize,
+    prove: bool,
+    byte_inputs: &[&[u8]],
+    vm_config: CrushConfig,
+) -> Result<Vec<u32>, Box<dyn std::error::Error>> {
     setup_tracing_with_log_level(Level::WARN);
     println!("Running WASM test with {function}({args:?}): output_words={output_words}");
 
     // Capture the exe before module.execute() mutates memory_image.
     let exe = module.program_with_entry_point(function);
-    let vm_config = CrushConfig::default();
 
     let make_stdin = || {
         let mut stdin = StdIn::default();
@@ -315,7 +361,8 @@ fn run_wasm_test_function_raw(
 
     // Metered execution
     println!("  Metered execution");
-    let (segments, _) = helpers::test_metered_execution(&exe, initial_state.clone())?;
+    let (segments, _) =
+        helpers::test_metered_execution(vm_config.clone(), &exe, initial_state.clone())?;
     let total_insns: u64 = segments.iter().map(|s| s.num_insns).sum();
     println!(
         "    {} segment(s), {} total instructions",
@@ -325,17 +372,17 @@ fn run_wasm_test_function_raw(
 
     // Preflight
     println!("  Preflight");
-    helpers::test_preflight(&exe, initial_state.clone())?;
+    helpers::test_preflight(vm_config.clone(), &exe, initial_state.clone())?;
 
     // Mock proof (CPU)
     println!("  Mock proof (CPU)");
-    mock_prove(&exe, initial_state.clone())?;
+    mock_prove(vm_config.clone(), &exe, initial_state.clone())?;
 
     // Mock proof (GPU)
     #[cfg(feature = "cuda")]
     {
         println!("  Mock proof (GPU)");
-        crate::proving::mock_prove_gpu(&exe, initial_state)?;
+        crate::proving::mock_prove_gpu(vm_config, &exe, initial_state)?;
     }
 
     Ok(output)
@@ -574,6 +621,31 @@ fn test_n_first_sums() {
     .unwrap()
 }
 
+/// Partial-length XORIN reached through the wasm import translation.
+///
+/// Deliberately the only .wat keccak case wired into `cargo test`. The other two
+/// exports (`xorin_full_block` and `keccakf.wasm`'s `keccakf_zero_state`) would
+/// duplicate `test_keccak_precompile_crush_1`, which already drives both
+/// translation arms, both chips, XORIN at a full 136-byte block, and keccak-f
+/// correctness via the known digest byte.
+///
+/// A partial block is not reachable from any guest -- the Rust sponge always
+/// submits a full rate block -- and `isolated_tests::test_xorin_partial_block`
+/// covers `len = 12` only by building the instruction directly, bypassing
+/// translation. This closes that one gap.
+#[test]
+fn test_xorin_partial_block_wasm() {
+    run_and_prove_single_wasm_test_with_config(
+        "../sample-programs/xorin.wasm",
+        "xorin_partial_block",
+        &[],
+        &[0],
+        &[],
+        CrushConfig::default().with_keccak(),
+    )
+    .unwrap()
+}
+
 #[test]
 fn test_call_indirect_wasm() {
     run_and_prove_single_wasm_test(
@@ -646,7 +718,8 @@ fn test_keeper_wasi() {
     let mut stdin = StdIn::default();
     stdin.write_bytes(&payload);
     let initial_state = VmState::initial(&vm_config.system, &exe.init_memory, exe.pc_start, stdin);
-    let (segments, _) = helpers::test_metered_execution(&exe, initial_state).unwrap();
+    let (segments, _) =
+        helpers::test_metered_execution(CrushConfig::default(), &exe, initial_state).unwrap();
     let total_insns: u64 = segments.iter().map(|s| s.num_insns).sum();
     println!(
         "  keeper_wasi: {} segment(s), {} total instructions",
@@ -676,7 +749,8 @@ fn test_keeper_decode_only() {
     let mut stdin = StdIn::default();
     stdin.write_bytes(&payload);
     let initial_state = VmState::initial(&vm_config.system, &exe.init_memory, exe.pc_start, stdin);
-    let (segments, _) = helpers::test_metered_execution(&exe, initial_state).unwrap();
+    let (segments, _) =
+        helpers::test_metered_execution(CrushConfig::default(), &exe, initial_state).unwrap();
     let total_insns: u64 = segments.iter().map(|s| s.num_insns).sum();
     println!(
         "  keeper_decode_only: {} segment(s), {} total instructions",
@@ -696,6 +770,26 @@ fn keccak_rust_crush(iterations: u32, expected_first_byte: u32) {
     )
 }
 
+fn keccak_precompile_crush(iterations: u32, expected_first_byte: u32) {
+    let path = format!(
+        "{}/../sample-programs/keccak_precompile",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    build_wasm(&PathBuf::from(&path));
+    let wasm_path = format!("{path}/target/wasm32-unknown-unknown/release/keccak_precompile.wasm");
+    let mut module = load_wasm_module(&wasm_path, false);
+    run_wasm_test_function_raw_with_config(
+        &mut module,
+        "main",
+        &[0, 0, iterations, expected_first_byte],
+        0,
+        true,
+        &[],
+        CrushConfig::default().with_keccak(),
+    )
+    .unwrap();
+}
+
 #[test]
 fn test_keccak_rust_crush_1() {
     // keccak([0; 32]) = [0x29, ...], 0x29 = 41
@@ -712,6 +806,16 @@ fn test_keccak_rust_crush_2() {
 fn test_keccak_rust_crush_3() {
     // keccak^3([0; 32]) = [0x35, ...], 0x35 = 53
     keccak_rust_crush(3, 53);
+}
+
+#[test]
+fn test_keccak_precompile_crush_1() {
+    keccak_precompile_crush(1, 41);
+}
+
+#[test]
+fn test_keccak_precompile_crush_2() {
+    keccak_precompile_crush(2, 81);
 }
 
 #[test]

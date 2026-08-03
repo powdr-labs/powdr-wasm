@@ -61,6 +61,19 @@ pub struct TestSpec {
 
     /// Optional stdin data for hint tests.
     pub stdin: StdIn,
+
+    /// Enable the keccak256 extension. Only the KECCAKF/XORIN tests need it; leaving
+    /// it off elsewhere keeps every other test on the default AIR set.
+    pub keccak: bool,
+}
+
+/// The VM config a spec runs under.
+fn vm_config_for(spec: &TestSpec) -> CrushConfig {
+    if spec.keccak {
+        CrushConfig::default().with_keccak()
+    } else {
+        CrushConfig::default()
+    }
 }
 
 /// Read a register value from memory.
@@ -177,7 +190,7 @@ fn verify_state(
 /// Raw execution using InterpretedInstance::execute_from_state.
 pub fn test_execution(spec: &TestSpec) -> Result<(), Box<dyn std::error::Error>> {
     let exe = build_exe(spec);
-    let vm_config = CrushConfig::default();
+    let vm_config = vm_config_for(spec);
     let vm = VmExecutor::new(vm_config.clone()).unwrap();
     let instance = vm.instance(&exe).unwrap();
 
@@ -190,9 +203,12 @@ pub fn test_execution(spec: &TestSpec) -> Result<(), Box<dyn std::error::Error>>
 /// Metered execution using InterpretedInstance::execute_metered_from_state.
 pub fn test_metered_execution(spec: &TestSpec) -> Result<(), Box<dyn std::error::Error>> {
     let exe = build_exe(spec);
-    let vm_config = CrushConfig::default();
-    let (segments, final_state) =
-        helpers::test_metered_execution(&exe, build_initial_state(spec, &exe, &vm_config))?;
+    let vm_config = vm_config_for(spec);
+    let (segments, final_state) = helpers::test_metered_execution(
+        vm_config.clone(),
+        &exe,
+        build_initial_state(spec, &exe, &vm_config),
+    )?;
 
     assert_eq!(segments.len(), 1, "expected a single segment");
     verify_state(spec, &final_state)
@@ -201,8 +217,12 @@ pub fn test_metered_execution(spec: &TestSpec) -> Result<(), Box<dyn std::error:
 /// Preflight using VirtualMachine::execute_preflight.
 pub fn test_preflight(spec: &TestSpec) -> Result<(), Box<dyn std::error::Error>> {
     let exe = build_exe(spec);
-    let vm_config = CrushConfig::default();
-    let final_state = helpers::test_preflight(&exe, build_initial_state(spec, &exe, &vm_config))?;
+    let vm_config = vm_config_for(spec);
+    let final_state = helpers::test_preflight(
+        vm_config.clone(),
+        &exe,
+        build_initial_state(spec, &exe, &vm_config),
+    )?;
 
     verify_state(spec, &final_state)
 }
@@ -213,12 +233,12 @@ pub fn test_preflight(spec: &TestSpec) -> Result<(), Box<dyn std::error::Error>>
 /// Runs on the specified backends (CPU, GPU, or both) and verifies the final state.
 pub fn test_prove(spec: &TestSpec, backends: &[Backend]) -> Result<(), Box<dyn std::error::Error>> {
     let exe = build_exe(spec);
-    let vm_config = CrushConfig::default();
+    let vm_config = vm_config_for(spec);
     let init_state = build_initial_state(spec, &exe, &vm_config);
 
     for &backend in backends {
         let final_state = backend
-            .mock_prove(&exe, init_state.clone())
+            .mock_prove(vm_config.clone(), &exe, init_state.clone())
             .map_err(|e| format!("{} mock_prove: {e}", backend.name()))?;
         verify_state(spec, &final_state)
             .map_err(|e| format!("{} verify_state: {e}", backend.name()))?;
@@ -3756,6 +3776,153 @@ mod tests {
         test_spec_for_all_register_bases(spec)
     }
 
+    // ==================== Keccak256 Tests ====================
+    // KECCAKF and XORIN. Running each spec at all three FP bases is the point: it
+    // exercises the FP read and the FP-relative register addressing, including the
+    // range check on the top pointer limb at a 3-byte base.
+
+    const KECCAK_WIDTH_BYTES: usize = 200;
+    const KECCAK_RATE_BYTES: usize = 136;
+
+    /// Spread `bytes` over word-aligned RAM entries starting at `addr`.
+    fn ram_words(addr: u32, bytes: &[u8]) -> Vec<(u32, u32)> {
+        assert!(addr.is_multiple_of(4), "buffer must be word aligned");
+        assert!(bytes.len().is_multiple_of(4));
+        bytes
+            .chunks_exact(4)
+            .enumerate()
+            .map(|(i, w)| {
+                (
+                    addr + 4 * i as u32,
+                    u32::from_le_bytes(w.try_into().unwrap()),
+                )
+            })
+            .collect()
+    }
+
+    /// Reference keccak-f over a little-endian byte view of the state.
+    fn keccak_f_bytes(state: &[u8; KECCAK_WIDTH_BYTES]) -> [u8; KECCAK_WIDTH_BYTES] {
+        let mut lanes = [0u64; KECCAK_WIDTH_BYTES / 8];
+        for (lane, chunk) in lanes.iter_mut().zip(state.chunks_exact(8)) {
+            *lane = u64::from_le_bytes(chunk.try_into().unwrap());
+        }
+        tiny_keccak::keccakf(&mut lanes);
+        let mut out = [0u8; KECCAK_WIDTH_BYTES];
+        for (chunk, lane) in out.chunks_exact_mut(8).zip(&lanes) {
+            chunk.copy_from_slice(&lane.to_le_bytes());
+        }
+        out
+    }
+
+    #[test]
+    fn test_keccakf() {
+        setup_tracing_with_log_level(Level::WARN);
+
+        // reg[fp+0] points at a 200-byte state buffer, permuted in place.
+        const BUF: u32 = 1000;
+        let preimage: [u8; KECCAK_WIDTH_BYTES] = core::array::from_fn(|i| (i * 7 + 1) as u8);
+        let postimage = keccak_f_bytes(&preimage);
+
+        let spec = TestSpec {
+            program: vec![keccakf(0)],
+            start_fp: 10,
+            start_registers: vec![(10, BUF)],
+            start_ram: ram_words(BUF, &preimage),
+            expected_ram: ram_words(BUF, &postimage),
+            keccak: true,
+            ..Default::default()
+        };
+
+        test_spec_for_all_register_bases(spec)
+    }
+
+    /// Permuting the all-zero state: catches a preimage/postimage mix-up that a
+    /// pattern-filled state might not, since the input is symmetric.
+    #[test]
+    fn test_keccakf_zero_state() {
+        setup_tracing_with_log_level(Level::WARN);
+
+        const BUF: u32 = 2048;
+        let preimage = [0u8; KECCAK_WIDTH_BYTES];
+        let postimage = keccak_f_bytes(&preimage);
+
+        let spec = TestSpec {
+            program: vec![keccakf(0)],
+            start_fp: 10,
+            start_registers: vec![(10, BUF)],
+            start_ram: ram_words(BUF, &preimage),
+            expected_ram: ram_words(BUF, &postimage),
+            keccak: true,
+            ..Default::default()
+        };
+
+        test_spec_for_all_register_bases(spec)
+    }
+
+    /// XORIN over a full rate block: every one of the 34 words is absorbed.
+    #[test]
+    fn test_xorin_full_block() {
+        setup_tracing_with_log_level(Level::WARN);
+
+        const BUF: u32 = 1000;
+        const INPUT: u32 = 2000;
+        let buffer: [u8; KECCAK_RATE_BYTES] = core::array::from_fn(|i| (i * 3 + 5) as u8);
+        let input: [u8; KECCAK_RATE_BYTES] = core::array::from_fn(|i| (i * 11 + 2) as u8);
+        let xored: [u8; KECCAK_RATE_BYTES] = core::array::from_fn(|i| buffer[i] ^ input[i]);
+
+        let mut start_ram = ram_words(BUF, &buffer);
+        start_ram.extend(ram_words(INPUT, &input));
+
+        // reg[fp+0] = buffer ptr, reg[fp+1] = input ptr, reg[fp+2] = len
+        let spec = TestSpec {
+            program: vec![xorin(0, 1, 2)],
+            start_fp: 10,
+            start_registers: vec![(10, BUF), (11, INPUT), (12, KECCAK_RATE_BYTES as u32)],
+            start_ram,
+            expected_ram: ram_words(BUF, &xored),
+            keccak: true,
+            ..Default::default()
+        };
+
+        test_spec_for_all_register_bases(spec)
+    }
+
+    /// XORIN over a partial block: the tail words must be treated as padding and
+    /// left untouched, which is what `is_padding_bytes` is for.
+    #[test]
+    fn test_xorin_partial_block() {
+        setup_tracing_with_log_level(Level::WARN);
+
+        const BUF: u32 = 1000;
+        const INPUT: u32 = 2000;
+        const LEN: usize = 12;
+        let buffer: [u8; KECCAK_RATE_BYTES] = core::array::from_fn(|i| (i * 3 + 5) as u8);
+        let input: [u8; KECCAK_RATE_BYTES] = core::array::from_fn(|i| (i * 11 + 2) as u8);
+        // Only the first LEN bytes are absorbed; the rest of the buffer is unchanged.
+        let expected: [u8; KECCAK_RATE_BYTES] = core::array::from_fn(|i| {
+            if i < LEN {
+                buffer[i] ^ input[i]
+            } else {
+                buffer[i]
+            }
+        });
+
+        let mut start_ram = ram_words(BUF, &buffer);
+        start_ram.extend(ram_words(INPUT, &input));
+
+        let spec = TestSpec {
+            program: vec![xorin(0, 1, 2)],
+            start_fp: 10,
+            start_registers: vec![(10, BUF), (11, INPUT), (12, LEN as u32)],
+            start_ram,
+            expected_ram: ram_words(BUF, &expected),
+            keccak: true,
+            ..Default::default()
+        };
+
+        test_spec_for_all_register_bases(spec)
+    }
+
     // ==================== Non-TestSpec Tests ====================
     // These tests require special infrastructure (error handling)
     // that doesn't fit the TestSpec framework.
@@ -3769,8 +3936,7 @@ mod tests {
         let instructions: Vec<Instruction<F>> = vec![trap(42), halt()];
         let program = Program::from_instructions(&instructions);
         let exe = VmExe::new(program);
-        let vm_config = CrushConfig::default();
-        let vm = VmExecutor::new(vm_config).unwrap();
+        let vm = VmExecutor::new(CrushConfig::default()).unwrap();
         let instance = vm.instance(&exe).unwrap();
         match instance.execute(StdIn::default(), None) {
             Err(ExecutionError::FailedWithExitCode(code)) => {
