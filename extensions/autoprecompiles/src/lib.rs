@@ -1,5 +1,6 @@
 use std::collections::{BTreeSet, HashSet};
 
+use crush_circuit::int256::Int256CpuProverExt;
 use crush_circuit::{CrushConfig, CrushConfigExecutor, CrushCpuBuilder, CrushCpuProverExt};
 use crush_translation::LinkedProgram;
 use openvm_circuit::arch::{
@@ -121,6 +122,9 @@ impl OpenVmISA for CrushISA {
         inventory.start_new_extension();
         VmCircuitExtension::extend_circuit(&shared_chips, &mut inventory)?;
         VmCircuitExtension::extend_circuit(&config.base, &mut inventory)?;
+        if let Some(int256) = &config.int256 {
+            VmCircuitExtension::extend_circuit(int256, &mut inventory)?;
+        }
         Ok(inventory)
     }
 
@@ -147,6 +151,17 @@ impl OpenVmISA for CrushISA {
             &config.base,
             inventory,
         )?;
+
+        // Int256 opcodes are not in `allowed_opcodes`, so they never appear inside an
+        // autoprecompile and these chips are never asked for a trace. They are still built
+        // to keep the chip list index-aligned with `create_dummy_airs`.
+        if let Some(int256) = &config.int256 {
+            VmProverExtension::<BabyBearPoseidon2CpuEngine, _, _>::extend_prover(
+                &Int256CpuProverExt,
+                int256,
+                inventory,
+            )?;
+        }
 
         Ok(chip_complex)
     }

@@ -2,6 +2,7 @@
 #![cfg_attr(feature = "tco", feature(explicit_tail_calls))]
 #![cfg_attr(feature = "tco", allow(internal_features))]
 #![cfg_attr(feature = "tco", feature(core_intrinsics))]
+use crate::int256::{Int256, Int256CpuProverExt, Int256Executor};
 use crate::memory_config::memory_config_with_fp;
 use openvm_circuit::{
     arch::{
@@ -49,6 +50,8 @@ pub use shift::*;
 mod hintstore;
 pub use hintstore::*;
 
+pub mod int256;
+
 mod extension;
 pub use extension::*;
 
@@ -82,6 +85,10 @@ pub struct CrushConfig {
     pub system: SystemConfig,
     #[extension]
     pub base: Crush,
+    /// Optional Int256 extension. Must stay the last extension field: the autoprecompile
+    /// dummy chip complex relies on its AIRs being last.
+    #[extension(executor = "Int256Executor")]
+    pub int256: Option<Int256>,
 }
 
 // This seems trivial but it's tricky to put into powdr-openvm because of some From implementation issues.
@@ -104,6 +111,7 @@ impl Default for CrushConfig {
         Self {
             system,
             base: Default::default(),
+            int256: None,
         }
     }
 }
@@ -114,7 +122,14 @@ impl CrushConfig {
         Self {
             system,
             base: Default::default(),
+            int256: None,
         }
+    }
+
+    /// Enable the Int256 precompiles.
+    pub fn with_int256(mut self) -> Self {
+        self.int256 = Some(Int256::default());
+        self
     }
 
     pub fn with_public_values_and_segment_len(public_values: usize, segment_len: usize) -> Self {
@@ -124,6 +139,7 @@ impl CrushConfig {
         Self {
             system,
             base: Default::default(),
+            int256: None,
         }
     }
 }
@@ -161,6 +177,9 @@ where
             VmBuilder::<E>::create_chip_complex(&SystemCpuBuilder, &config.system, circuit)?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&CrushCpuProverExt, &config.base, inventory)?;
+        if let Some(int256) = &config.int256 {
+            VmProverExtension::<E, _, _>::extend_prover(&Int256CpuProverExt, int256, inventory)?;
+        }
         Ok(chip_complex)
     }
 }
@@ -192,6 +211,12 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for CrushGpuBuilder {
         >,
         ChipInventoryError,
     > {
+        // The Int256 chips are CPU-only here: no GPU prover extension has been ported.
+        assert!(
+            config.int256.is_none(),
+            "the Int256 extension is not supported on the CUDA backend"
+        );
+
         let mut chip_complex = VmBuilder::<BabyBearPoseidon2GpuEngine>::create_chip_complex(
             &SystemGpuBuilder,
             &config.system,

@@ -51,6 +51,9 @@ openvm-instructions = { git = "https://github.com/powdr-labs/openvm.git", tag = 
 openvm-instructions-derive = { git = "https://github.com/powdr-labs/openvm.git", tag = "v2.0.0-beta.2-powdr.1", default-features = false }
 openvm-rv32im-transpiler = { git = "https://github.com/powdr-labs/openvm.git", tag = "v2.0.0-beta.2-powdr.1", default-features = false }
 openvm-rv32im-circuit = { git = "https://github.com/powdr-labs/openvm.git", tag = "v2.0.0-beta.2-powdr.1", default-features = false }
+# Only the VecToFlat* wrappers are used: they are generic over the inner adapter and do
+# no register access, so they are reused verbatim with crush's FP-aware inner adapters.
+openvm-rv32-adapters = { git = "https://github.com/powdr-labs/openvm.git", tag = "v2.0.0-beta.2-powdr.1", default-features = false }
 openvm-transpiler = { git = "https://github.com/powdr-labs/openvm.git", tag = "v2.0.0-beta.2-powdr.1", default-features = false }
 openvm-recursion-circuit = { git = "https://github.com/powdr-labs/openvm.git", tag = "v2.0.0-beta.2-powdr.1", default-features = false }
 openvm-sdk-config = { git = "https://github.com/powdr-labs/openvm.git", tag = "v2.0.0-beta.2-powdr.1", default-features = false }

@@ -1,0 +1,212 @@
+use std::borrow::{Borrow, BorrowMut};
+
+use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
+use openvm_circuit_primitives_derive::AlignedBytesBorrow;
+use openvm_crush_transpiler::Mul256Opcode;
+use openvm_instructions::{
+    LocalOpcode,
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+};
+use openvm_rv32im_circuit::MultiplicationExecutor;
+use openvm_rv32im_transpiler::MulOpcode;
+use openvm_stark_backend::p3_field::PrimeField32;
+
+use crate::memory_config::FpMemory;
+
+use crate::int256::{
+    AluAdapterExecutor, INT256_NUM_LIMBS, Rv32Multiplication256Executor,
+    common::{bytes_to_u32_array, read_int256, u32_array_to_bytes, write_int256},
+};
+
+impl Rv32Multiplication256Executor {
+    pub fn new(adapter: AluAdapterExecutor, offset: usize) -> Self {
+        Self(MultiplicationExecutor::new(adapter, offset))
+    }
+}
+
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct MultPreCompute {
+    a: u8,
+    b: u8,
+    c: u8,
+}
+
+impl<F: PrimeField32> InterpreterExecutor<F> for Rv32Multiplication256Executor {
+    fn pre_compute_size(&self) -> usize {
+        size_of::<MultPreCompute>()
+    }
+
+    #[cfg(not(feature = "tco"))]
+    fn pre_compute<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let data: &mut MultPreCompute = data.borrow_mut();
+        self.pre_compute_impl(pc, inst, data)?;
+        Ok(execute_e1_impl)
+    }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let data: &mut MultPreCompute = data.borrow_mut();
+        self.pre_compute_impl(pc, inst, data)?;
+        Ok(execute_e1_handler)
+    }
+}
+
+#[cfg(feature = "aot")]
+impl<F: PrimeField32> AotExecutor<F> for Rv32Multiplication256Executor {}
+
+impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv32Multiplication256Executor {
+    fn metered_pre_compute_size(&self) -> usize {
+        size_of::<E2PreCompute<MultPreCompute>>()
+    }
+
+    #[cfg(not(feature = "tco"))]
+    fn metered_pre_compute<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let data: &mut E2PreCompute<MultPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        self.pre_compute_impl(pc, inst, &mut data.data)?;
+        Ok(execute_e2_impl)
+    }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let data: &mut E2PreCompute<MultPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        self.pre_compute_impl(pc, inst, &mut data.data)?;
+        Ok(execute_e2_handler)
+    }
+}
+
+#[cfg(feature = "aot")]
+impl<F: PrimeField32> AotMeteredExecutor<F> for Rv32Multiplication256Executor {}
+
+#[inline(always)]
+unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
+    pre_compute: &MultPreCompute,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+) {
+    // Register addresses are frame-pointer relative.
+    let fp = exec_state.memory.fp::<F>();
+    let rs1_ptr = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, fp + pre_compute.b as u32);
+    let rs2_ptr = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, fp + pre_compute.c as u32);
+    let rd_ptr = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, fp + pre_compute.a as u32);
+    let rs1 = read_int256(exec_state, RV32_MEMORY_AS, u32::from_le_bytes(rs1_ptr));
+    let rs2 = read_int256(exec_state, RV32_MEMORY_AS, u32::from_le_bytes(rs2_ptr));
+    let rd = u256_mul(rs1, rs2);
+    write_int256(exec_state, RV32_MEMORY_AS, u32::from_le_bytes(rd_ptr), &rd);
+
+    let pc = exec_state.pc();
+    exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
+}
+
+#[create_handler]
+#[inline(always)]
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
+    pre_compute: *const u8,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+) {
+    let pre_compute: &MultPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<MultPreCompute>()).borrow();
+    execute_e12_impl(pre_compute, exec_state);
+}
+
+#[create_handler]
+#[inline(always)]
+unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
+    pre_compute: *const u8,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+) {
+    let pre_compute: &E2PreCompute<MultPreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<MultPreCompute>>()).borrow();
+    exec_state
+        .ctx
+        .on_height_change(pre_compute.chip_idx as usize, 1);
+    execute_e12_impl(&pre_compute.data, exec_state);
+}
+
+impl Rv32Multiplication256Executor {
+    fn pre_compute_impl<F: PrimeField32>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut MultPreCompute,
+    ) -> Result<(), StaticProgramError> {
+        let Instruction {
+            opcode,
+            a,
+            b,
+            c,
+            d,
+            e,
+            ..
+        } = inst;
+        let e_u32 = e.as_canonical_u32();
+        if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 != RV32_MEMORY_AS {
+            return Err(StaticProgramError::InvalidInstruction(pc));
+        }
+        let local_opcode =
+            MulOpcode::from_usize(opcode.local_opcode_idx(Mul256Opcode::CLASS_OFFSET));
+        assert_eq!(local_opcode, MulOpcode::MUL);
+        *data = MultPreCompute {
+            a: a.as_canonical_u32() as u8,
+            b: b.as_canonical_u32() as u8,
+            c: c.as_canonical_u32() as u8,
+        };
+        Ok(())
+    }
+}
+
+#[inline(always)]
+pub(crate) fn u256_mul(
+    rs1: [u8; INT256_NUM_LIMBS],
+    rs2: [u8; INT256_NUM_LIMBS],
+) -> [u8; INT256_NUM_LIMBS] {
+    let rs1_u64: [u32; 8] = bytes_to_u32_array(rs1);
+    let rs2_u64: [u32; 8] = bytes_to_u32_array(rs2);
+    let mut rd = [0u32; 8];
+    for i in 0..8 {
+        let mut carry = 0u64;
+        for j in 0..(8 - i) {
+            let res = rs1_u64[i] as u64 * rs2_u64[j] as u64 + rd[i + j] as u64 + carry;
+            rd[i + j] = res as u32;
+            carry = res >> 32;
+        }
+    }
+    u32_array_to_bytes(rd)
+}
