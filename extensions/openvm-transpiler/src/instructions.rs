@@ -1,11 +1,11 @@
 use openvm_instructions::LocalOpcode;
 use openvm_instructions_derive::LocalOpcode;
 use serde::{Deserialize, Serialize};
-use strum::{EnumCount, EnumIter, FromRepr};
+use strum::{EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 
 pub use openvm_rv32im_transpiler::{
-    BaseAluOpcode, DivRemOpcode, LessThanOpcode, MulOpcode, Rv32LoadStoreOpcode as LoadStoreOpcode,
-    ShiftOpcode,
+    BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, LessThanOpcode,
+    MulOpcode, Rv32LoadStoreOpcode as LoadStoreOpcode, ShiftOpcode,
 };
 
 #[derive(
@@ -281,4 +281,73 @@ pub enum Phantom {
     TraceSyscall,
     /// Fill hint stream with 8 bytes of incrementing clock timestamp.
     ClockTimeGet,
+}
+
+// =================================================================================================
+// Int256 opcodes
+// =================================================================================================
+//
+// Newtype wrappers over the 32-bit opcode enums, exactly as OpenVM's bigint extension does:
+// the 256-bit chips reuse the same core AIRs, so they reuse the same operation enums and only
+// need a distinct class offset. Offsets mirror upstream's relative layout (0x400 + n) shifted
+// into a free crush range; 0x1310..=0x1313 are reserved for the keccak and sha2 branches.
+
+#[derive(Copy, Clone, Debug, LocalOpcode)]
+#[opcode_offset = 0x1400]
+pub struct BaseAlu256Opcode(pub BaseAluOpcode);
+
+impl BaseAlu256Opcode {
+    pub fn iter() -> impl Iterator<Item = Self> {
+        BaseAluOpcode::iter().map(Self)
+    }
+}
+
+#[derive(Copy, Clone, Debug, LocalOpcode)]
+#[opcode_offset = 0x1405]
+pub struct Shift256Opcode(pub ShiftOpcode);
+
+impl Shift256Opcode {
+    pub fn iter() -> impl Iterator<Item = Self> {
+        ShiftOpcode::iter().map(Self)
+    }
+}
+
+#[derive(Copy, Clone, Debug, LocalOpcode)]
+#[opcode_offset = 0x1408]
+pub struct LessThan256Opcode(pub LessThanOpcode);
+
+impl LessThan256Opcode {
+    pub fn iter() -> impl Iterator<Item = Self> {
+        LessThanOpcode::iter().map(Self)
+    }
+}
+
+#[derive(Copy, Clone, Debug, LocalOpcode)]
+#[opcode_offset = 0x1420]
+pub struct BranchEqual256Opcode(pub BranchEqualOpcode);
+
+impl BranchEqual256Opcode {
+    pub fn iter() -> impl Iterator<Item = Self> {
+        BranchEqualOpcode::iter().map(Self)
+    }
+}
+
+#[derive(Copy, Clone, Debug, LocalOpcode)]
+#[opcode_offset = 0x1425]
+pub struct BranchLessThan256Opcode(pub BranchLessThanOpcode);
+
+impl BranchLessThan256Opcode {
+    pub fn iter() -> impl Iterator<Item = Self> {
+        BranchLessThanOpcode::iter().map(Self)
+    }
+}
+
+#[derive(Copy, Clone, Debug, LocalOpcode)]
+#[opcode_offset = 0x1450]
+pub struct Mul256Opcode(pub MulOpcode);
+
+impl Mul256Opcode {
+    pub fn iter() -> impl Iterator<Item = Self> {
+        MulOpcode::iter().map(Self)
+    }
 }
