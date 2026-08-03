@@ -54,12 +54,12 @@ unsafe extern "C" {
     /// One SHA-256 compression. `state` and `output` are 32 bytes (8 little-endian u32
     /// words), `input` is one 64-byte message block. All three must be 4-byte aligned.
     /// `output` may alias `state`.
-    unsafe fn __native_sha256_compress(state: *const u8, input: *const u8, output: *mut u8);
+    unsafe fn __sha256_compress(state: *const u8, input: *const u8, output: *mut u8);
 
     /// One SHA-512 compression. `state` and `output` are 64 bytes (8 little-endian u64
     /// words), `input` is one 128-byte message block. All three must be 4-byte aligned.
     /// `output` may alias `state`.
-    unsafe fn __native_sha512_compress(state: *const u8, input: *const u8, output: *mut u8);
+    unsafe fn __sha512_compress(state: *const u8, input: *const u8, output: *mut u8);
 }
 
 /// Software stand-ins for the precompiles, so the block loop and padding below can be
@@ -96,12 +96,12 @@ mod host {
         };
     }
 
-    host_compress!(__native_sha256_compress, u32, 64, sha2::compress256);
-    host_compress!(__native_sha512_compress, u64, 128, sha2::compress512);
+    host_compress!(__sha256_compress, u32, 64, sha2::compress256);
+    host_compress!(__sha512_compress, u64, 128, sha2::compress512);
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-use host::{__native_sha256_compress, __native_sha512_compress};
+use host::{__sha256_compress, __sha512_compress};
 
 /// A byte buffer aligned to 4 bytes, which the precompiles require of every pointer.
 #[repr(align(4))]
@@ -232,7 +232,7 @@ sha2_hasher!(
     SHA256_STATE_BYTES,
     SHA256_OUTPUT_SIZE,
     8,
-    __native_sha256_compress,
+    __sha256_compress,
     sha256,
     "Compute the SHA-256 hash of `data`."
 );
@@ -246,7 +246,7 @@ sha2_hasher!(
     SHA512_STATE_BYTES,
     SHA512_OUTPUT_SIZE,
     16,
-    __native_sha512_compress,
+    __sha512_compress,
     sha512,
     "Compute the SHA-512 hash of `data`."
 );

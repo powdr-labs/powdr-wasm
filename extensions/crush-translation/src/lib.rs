@@ -649,7 +649,7 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
             // SHA-2 precompiles. The guest drives the block loop and padding; these are
             // one compression per call. Both digests take the same three pointers, so the
             // arms differ only in the instruction emitted.
-            ("env", "__native_sha256_compress") | ("env", "__native_sha512_compress") => {
+            ("env", "__sha256_compress") | ("env", "__sha512_compress") => {
                 // fn(state: *const u8, input: *const u8, output: *mut u8)
                 assert!(outputs.is_empty());
                 let mem_start = c
@@ -668,7 +668,7 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
                     rebase_wasm_ptr::<F>(c, &mut directives, output_ptr, mem_start);
                 // Instruction operand order is (dst, state, input), which differs from
                 // the import's (state, input, output).
-                let insn = if function == "__native_sha256_compress" {
+                let insn = if function == "__sha256_compress" {
                     ib::sha256_compress(effective_output, effective_state, effective_input)
                 } else {
                     ib::sha512_compress(effective_output, effective_state, effective_input)

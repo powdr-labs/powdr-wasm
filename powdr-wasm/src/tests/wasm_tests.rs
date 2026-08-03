@@ -599,7 +599,7 @@ fn test_n_first_sums() {
 ///
 /// The isolated instruction tests cover the compression itself at three FP bases, but
 /// build the instruction directly; this is the only test that goes through
-/// crush-translation's `__native_sha256_compress` arm and the real guest block loop.
+/// crush-translation's `__sha256_compress` arm and the real guest block loop.
 /// `variant`: 0 = SHA-256, 1 = SHA-512.
 fn sha2_precompile_crush(variant: u32, iterations: u32, expected_first_byte: u32) {
     let path = format!(

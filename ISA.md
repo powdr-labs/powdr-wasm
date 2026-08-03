@@ -425,7 +425,7 @@ the block at `MEM[input]`, writing the new state to `MEM[dst]`.
 
 Opcode from `Sha2Opcode`, offset `0x1313`. Same encoding and semantics as `SHA256`, with
 a 64-byte state (8 little-endian u64 words) and a 128-byte message block. Reached from a
-guest via the `__native_sha512_compress` import.
+guest via the `__sha512_compress` import.
 
 There is no SHA-384 opcode: its compression function is identical to SHA-512's, differing
 only in the initial state and a truncated digest, both of which are guest-side. A SHA-384
