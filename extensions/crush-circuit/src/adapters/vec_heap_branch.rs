@@ -352,6 +352,11 @@ impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS_PER_READ: usize, cons
             },
         );
 
+        // Records and columns share this row buffer (hence the reverse iteration below),
+        // so copy the FP fields out before any column write reaches their bytes.
+        let record_fp = record.fp;
+        let record_fp_prev_timestamp = record.fp_read_aux.prev_timestamp;
+
         // +1 for the FP read that precedes the register reads.
         let timestamp_delta = 1 + NUM_READS + NUM_READS * BLOCKS_PER_READ;
         let mut timestamp = record.from_timestamp + timestamp_delta as u32;
@@ -386,11 +391,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS_PER_READ: usize, cons
             });
 
         // Filled last because the walk is in reverse and the FP read is first.
-        mem_helper.fill(
-            record.fp_read_aux.prev_timestamp,
-            timestamp_mm(),
-            cols.fp_aux.as_mut(),
-        );
+        mem_helper.fill(record_fp_prev_timestamp, timestamp_mm(), cols.fp_aux.as_mut());
 
         cols.rs_val
             .iter_mut()
@@ -408,6 +409,6 @@ impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS_PER_READ: usize, cons
             });
         cols.from_state.timestamp = F::from_u32(record.from_timestamp);
         cols.from_state.pc = F::from_u32(record.from_pc);
-        cols.from_state.fp = F::from_u32(record.fp);
+        cols.from_state.fp = F::from_u32(record_fp);
     }
 }

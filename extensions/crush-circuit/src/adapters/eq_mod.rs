@@ -434,6 +434,11 @@ impl<
             adapter_row.borrow_mut();
 
         let mut timestamp = record.timestamp + (NUM_READS + NUM_READS * BLOCKS_PER_READ) as u32 + 1;
+        // Records and columns share this row buffer (hence the reverse iteration below),
+        // so copy the FP fields out before any column write reaches their bytes.
+        let record_fp = record.fp;
+        let record_fp_prev_timestamp = record.fp_read_aux.prev_timestamp;
+
         let mut timestamp_mm = || {
             timestamp -= 1;
             timestamp
@@ -484,17 +489,13 @@ impl<
             });
 
         // Filled last because the walk is in reverse and the FP read is first.
-        mem_helper.fill(
-            record.fp_read_aux.prev_timestamp,
-            timestamp_mm(),
-            cols.fp_aux.as_mut(),
-        );
+        mem_helper.fill(record_fp_prev_timestamp, timestamp_mm(), cols.fp_aux.as_mut());
 
         cols.rs_val = record.rs_val.map(|val| val.to_le_bytes().map(F::from_u8));
         cols.rs_ptr = record.rs_ptr.map(|ptr| F::from_u32(ptr));
 
         cols.from_state.timestamp = F::from_u32(record.timestamp);
         cols.from_state.pc = F::from_u32(record.from_pc);
-        cols.from_state.fp = F::from_u32(record.fp);
+        cols.from_state.fp = F::from_u32(record_fp);
     }
 }

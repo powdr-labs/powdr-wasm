@@ -546,6 +546,13 @@ impl<
             );
         }
 
+        // Records and columns share this row buffer, which is why everything below is iterated
+        // in reverse: a record field must be read before column writes reach its bytes. The FP
+        // fields sit near the front of the record and are consumed last, so copy them out now,
+        // before any column is written.
+        let record_fp = record.fp;
+        let record_fp_prev_timestamp = record.fp_read_aux.prev_timestamp;
+
         // +1 for the FP read that precedes the register reads.
         let timestamp_delta = 1 + NUM_READS + 1 + NUM_READS * BLOCKS_PER_READ + BLOCKS_PER_WRITE;
         let mut timestamp = record.from_timestamp + timestamp_delta as u32;
@@ -611,15 +618,12 @@ impl<
             .for_each(|(cols_ptr, ptr)| {
                 *cols_ptr = F::from_u32(*ptr);
             });
-        // Filled last because the walk is in reverse and the FP read is first.
-        mem_helper.fill(
-            record.fp_read_aux.prev_timestamp,
-            timestamp_mm(),
-            cols.fp_aux.as_mut(),
-        );
+        // Filled last because the walk is in reverse and the FP read is first. Uses the
+        // copies taken above: the record bytes here have been overwritten by columns.
+        mem_helper.fill(record_fp_prev_timestamp, timestamp_mm(), cols.fp_aux.as_mut());
 
         cols.from_state.timestamp = F::from_u32(record.from_timestamp);
         cols.from_state.pc = F::from_u32(record.from_pc);
-        cols.from_state.fp = F::from_u32(record.fp);
+        cols.from_state.fp = F::from_u32(record_fp);
     }
 }
