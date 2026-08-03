@@ -60,8 +60,6 @@ impl<F> VmExecutionExtension<F> for Keccak256 {
     ) -> Result<(), ExecutorInventoryError> {
         let pointer_max_bits = inventory.pointer_max_bits();
 
-        // Registered per variant rather than via `iter()`: the two opcodes now share one
-        // enum, so iterating it would bind both to the same executor.
         let xorin_executor = XorinVmExecutor::new(KeccakOpcodes::CLASS_OFFSET, pointer_max_bits);
         inventory.add_executor(xorin_executor, [KeccakOpcodes::XORIN.global_opcode()])?;
 
