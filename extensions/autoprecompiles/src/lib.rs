@@ -1,5 +1,7 @@
 use std::collections::{BTreeSet, HashSet};
 
+use crush_circuit::algebra::AlgebraCpuProverExt;
+use crush_circuit::ecc::EccCpuProverExt;
 use crush_circuit::int256::Int256CpuProverExt;
 use crush_circuit::{CrushConfig, CrushConfigExecutor, CrushCpuBuilder, CrushCpuProverExt};
 use crush_translation::LinkedProgram;
@@ -125,6 +127,16 @@ impl OpenVmISA for CrushISA {
         if let Some(int256) = &config.int256 {
             VmCircuitExtension::extend_circuit(int256, &mut inventory)?;
         }
+        if let Some(modular) = &config.modular {
+            VmCircuitExtension::extend_circuit(modular, &mut inventory)?;
+        }
+        if let Some(fp2) = &config.fp2 {
+            VmCircuitExtension::extend_circuit(fp2, &mut inventory)?;
+        }
+        if let Some(ecc) = &config.ecc {
+            VmCircuitExtension::extend_circuit(ecc, &mut inventory)?;
+        }
+        // `pairing` adds no AIRs, so it is deliberately absent here.
         Ok(inventory)
     }
 
@@ -159,6 +171,27 @@ impl OpenVmISA for CrushISA {
             VmProverExtension::<BabyBearPoseidon2CpuEngine, _, _>::extend_prover(
                 &Int256CpuProverExt,
                 int256,
+                inventory,
+            )?;
+        }
+        if let Some(modular) = &config.modular {
+            VmProverExtension::<BabyBearPoseidon2CpuEngine, _, _>::extend_prover(
+                &AlgebraCpuProverExt,
+                modular,
+                inventory,
+            )?;
+        }
+        if let Some(fp2) = &config.fp2 {
+            VmProverExtension::<BabyBearPoseidon2CpuEngine, _, _>::extend_prover(
+                &AlgebraCpuProverExt,
+                fp2,
+                inventory,
+            )?;
+        }
+        if let Some(ecc) = &config.ecc {
+            VmProverExtension::<BabyBearPoseidon2CpuEngine, _, _>::extend_prover(
+                &EccCpuProverExt,
+                ecc,
                 inventory,
             )?;
         }
