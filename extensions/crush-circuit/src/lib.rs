@@ -160,6 +160,20 @@ impl CrushConfig {
         }
     }
 
+    /// Whether any optional precompile extension is enabled, and therefore whether this
+    /// config's AIR set differs from the default one. Callers that cache a proving key for
+    /// the default config must generate a fresh one when this is true.
+    ///
+    /// `pairing` is included even though it adds no AIRs, so that adding one later cannot
+    /// silently invalidate a cached key.
+    pub fn has_optional_extensions(&self) -> bool {
+        self.int256.is_some()
+            || self.modular.is_some()
+            || self.fp2.is_some()
+            || self.ecc.is_some()
+            || self.pairing.is_some()
+    }
+
     /// Enable the Int256 precompiles.
     pub fn with_int256(mut self) -> Self {
         self.int256 = Some(Int256::default());

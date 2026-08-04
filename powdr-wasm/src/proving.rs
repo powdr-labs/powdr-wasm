@@ -262,7 +262,7 @@ where
         + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
 {
     // Cached key for the default config; a fresh one when extensions change the AIR set.
-    let pk_storage = if vm_config.int256.is_some() {
+    let pk_storage = if vm_config.has_optional_extensions() {
         let circuit = vm_config
             .create_airs()
             .expect("failed to create AIR inventory for keygen");

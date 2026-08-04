@@ -737,8 +737,8 @@ unsafe fn execute_e12_impl<
     let mut write_data = [0u8; RV32_REGISTER_NUM_LIMBS];
     write_data[0] = (b == c) as u8;
 
-    // Write result to register
-    exec_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &write_data);
+    // Write result to register, which like the reads above is frame-pointer relative.
+    exec_state.vm_write(RV32_REGISTER_AS, fp + pre_compute.a as u32, &write_data);
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));

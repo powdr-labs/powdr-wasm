@@ -433,7 +433,10 @@ impl<
         let cols: &mut Rv32IsEqualModAdapterCols<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE> =
             adapter_row.borrow_mut();
 
-        let mut timestamp = record.timestamp + (NUM_READS + NUM_READS * BLOCKS_PER_READ) as u32 + 1;
+        // The leading 1 is the FP read, which precedes every register access; the trailing one
+        // is the write to rd.
+        let mut timestamp =
+            record.timestamp + (1 + NUM_READS + NUM_READS * BLOCKS_PER_READ + 1) as u32;
         // Records and columns share this row buffer (hence the reverse iteration below),
         // so copy the FP fields out before any column write reaches their bytes.
         let record_fp = record.fp;
