@@ -779,6 +779,53 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
                 directives.push(Directive::Instruction(insn));
                 directives
             }
+            // Pairing final-exponentiation hint, named `__pairing_<index>_hint_final_exp`. The
+            // index selects which configured pairing curve to use, matching the order given
+            // to `--pairing`.
+            //
+            // The phantom wants two `{ptr, len}` descriptors in the heap holding *absolute*
+            // addresses, which a wasm guest cannot write for itself -- it only knows offsets
+            // into linear memory. So the guest passes the point arrays directly, along with a
+            // 16-byte scratch buffer, and the descriptors get assembled here from the rebased
+            // pointers.
+            ("env", name) if name.starts_with("__pairing_") => {
+                assert!(outputs.is_empty());
+                let mem_start = c
+                    .module()
+                    .linear_memory_start()
+                    .expect("no memory allocated");
+                let (_, idx, op) = split_indexed_intrinsic(name);
+                assert_eq!(op, "hint_final_exp", "unknown pairing intrinsic `{name}`");
+
+                let scratch = inputs[0].as_register().unwrap().start as usize;
+                let p_ptr = inputs[1].as_register().unwrap().start as usize;
+                let p_len = inputs[2].as_register().unwrap().start as usize;
+                let q_ptr = inputs[3].as_register().unwrap().start as usize;
+                let q_len = inputs[4].as_register().unwrap().start as usize;
+
+                let mut directives = vec![];
+                let p_desc = rebase_wasm_ptr::<F>(c, &mut directives, scratch, mem_start);
+                let p_ptr = rebase_wasm_ptr::<F>(c, &mut directives, p_ptr, mem_start);
+                let q_ptr = rebase_wasm_ptr::<F>(c, &mut directives, q_ptr, mem_start);
+
+                // The two descriptors are the two halves of the scratch buffer. The phantom
+                // takes a separate register for each, so the second one needs its own.
+                let q_desc = c.allocate_tmp_type::<OpenVMSettings<F>>(ValType::I32).start as usize;
+                directives.push(Directive::Instruction(ib::add_imm(
+                    q_desc,
+                    p_desc,
+                    AluImm::from(8i16),
+                )));
+
+                directives.push(Directive::Instruction(ib::storew(p_ptr, p_desc, 0)));
+                directives.push(Directive::Instruction(ib::storew(p_len, p_desc, 4)));
+                directives.push(Directive::Instruction(ib::storew(q_ptr, q_desc, 0)));
+                directives.push(Directive::Instruction(ib::storew(q_len, q_desc, 4)));
+                directives.push(Directive::Instruction(ib::pairing_hint_final_exp(
+                    idx, p_desc, q_desc,
+                )));
+                directives
+            }
             ("env", "abort") => {
                 vec![Directive::Instruction(ib::abort())]
             }

@@ -5,7 +5,10 @@ use openvm_crush_transpiler::{
 };
 use openvm_algebra_transpiler::{Fp2Opcode, Rv32ModularArithmeticOpcode};
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
-use openvm_instructions::{LocalOpcode, SystemOpcode, VmOpcode, instruction::Instruction, riscv};
+use openvm_pairing_transpiler::PairingPhantom;
+use openvm_instructions::{
+    LocalOpcode, PhantomDiscriminant, SystemOpcode, VmOpcode, instruction::Instruction, riscv,
+};
 use openvm_stark_backend::p3_field::PrimeField32;
 use strum::EnumCount;
 
@@ -1153,6 +1156,28 @@ pub fn ecc_op<F: PrimeField32>(
         Rv32WeierstrassOpcode::EC_DOUBLE | Rv32WeierstrassOpcode::SETUP_EC_DOUBLE => 0,
     };
     heap_r_type(opcode, rd_reg, rs1_reg, rs2_reg)
+}
+
+/// Pairing final-exponentiation hint for the `curve_idx`-th configured pairing curve.
+///
+/// The pairing extension has no chips of its own, only this hint: it runs the Miller loop
+/// over the given points on the host and pushes the residue witness onto the hint stream,
+/// which the guest then reads back and verifies with the Fp2 and modular chips.
+///
+/// `p_desc_reg` and `q_desc_reg` hold pointers to two-word descriptors `{ptr, len}` in the
+/// heap, naming an array of G1 and an array of G2 points respectively. Both `ptr`s are
+/// absolute heap addresses, so a caller working in wasm offsets has to rebase them.
+pub fn pairing_hint_final_exp<F: PrimeField32>(
+    curve_idx: usize,
+    p_desc_reg: usize,
+    q_desc_reg: usize,
+) -> Instruction<F> {
+    Instruction::phantom(
+        PhantomDiscriminant(PairingPhantom::HintFinalExp as u16),
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * p_desc_reg),
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * q_desc_reg),
+        curve_idx as u16,
+    )
 }
 
 /// TraceSyscall phantom: Prints "[wasi] #<seq> <name>" to stderr.

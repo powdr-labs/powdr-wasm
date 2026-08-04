@@ -1083,6 +1083,7 @@ dependencies = [
  "openvm-crush-transpiler",
  "openvm-ecc-transpiler",
  "openvm-instructions",
+ "openvm-pairing-transpiler",
  "openvm-rv32im-transpiler",
  "openvm-stark-backend",
  "strum 0.26.3",

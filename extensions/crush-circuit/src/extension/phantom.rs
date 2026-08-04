@@ -15,7 +15,7 @@ use crate::memory_config::FpMemory;
 use openvm_instructions::riscv::RV32_MEMORY_AS;
 
 /// Reads a 32-bit register value from memory, applying FP offset.
-fn read_register<F: PrimeField32>(memory: &GuestMemory, reg_offset: u32) -> u32 {
+pub(crate) fn read_register<F: PrimeField32>(memory: &GuestMemory, reg_offset: u32) -> u32 {
     let fp = memory.fp::<F>();
     read_rv32_register(memory, fp + reg_offset)
 }

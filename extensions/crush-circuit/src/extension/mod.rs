@@ -43,7 +43,7 @@ use crate::{
     loadstore::execution::LoadStoreExecutor, *,
 };
 
-mod phantom;
+pub(crate) mod phantom;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {

@@ -517,12 +517,12 @@ pub(crate) mod phantom {
         system::memory::online::GuestMemory,
     };
     use openvm_instructions::{PhantomDiscriminant, riscv::RV32_MEMORY_AS};
-    use openvm_rv32im_circuit::adapters::read_rv32_register;
     use openvm_stark_backend::p3_field::PrimeField32;
     use rand::{SeedableRng, rngs::StdRng};
 
     use super::{find_non_qr, mod_sqrt};
     use crate::algebra::{NUM_LIMBS_32, NUM_LIMBS_48};
+    use crate::extension::phantom::read_register;
 
     #[derive(derive_new::new)]
     pub struct SqrtHintSubEx(NonQrHintSubEx);
@@ -565,7 +565,7 @@ pub(crate) mod phantom {
                 bail!("Modulus too large")
             };
 
-            let rs1 = read_rv32_register(memory, a);
+            let rs1 = read_register::<F>(memory, a);
             // SAFETY:
             // - MEMORY_AS consists of `u8`s
             // - MEMORY_AS is in bounds

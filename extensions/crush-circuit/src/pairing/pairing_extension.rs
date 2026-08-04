@@ -19,7 +19,10 @@ use openvm_pairing_guest::{
     bn254::{BN254_ECC_STRUCT_NAME, BN254_MODULUS, BN254_ORDER, BN254_XI_ISIZE},
 };
 use openvm_pairing_transpiler::PairingPhantom;
-use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, p3_field::Field};
+use openvm_stark_backend::{
+    StarkEngine, StarkProtocolConfig, Val,
+    p3_field::{Field, PrimeField32},
+};
 use serde::{Deserialize, Serialize};
 use strum::FromRepr;
 
@@ -76,7 +79,7 @@ pub enum PairingExtensionExecutor<F: Field> {
     Phantom(PhantomExecutor<F>),
 }
 
-impl<F: Field> VmExecutionExtension<F> for PairingExtension {
+impl<F: PrimeField32> VmExecutionExtension<F> for PairingExtension {
     type Executor = PairingExtensionExecutor<F>;
 
     fn extend_execution(
@@ -101,6 +104,7 @@ pub struct PairingProverExt;
 impl<E, RA> VmProverExtension<E, RA, PairingExtension> for PairingProverExt
 where
     E: StarkEngine,
+    Val<E::SC>: PrimeField32,
 {
     fn extend_prover(
         &self,
@@ -130,15 +134,16 @@ pub(crate) mod phantom {
         bn254::BN254_NUM_LIMBS,
         pairing::{FinalExp, MultiMillerLoop},
     };
-    use openvm_rv32im_circuit::adapters::{memory_read, read_rv32_register};
-    use openvm_stark_backend::p3_field::Field;
+    use openvm_rv32im_circuit::adapters::memory_read;
+    use openvm_stark_backend::p3_field::{Field, PrimeField32};
     use rand::rngs::StdRng;
 
     use super::PairingCurve;
+    use crate::extension::phantom::read_register;
 
     pub struct PairingHintSubEx;
 
-    impl<F: Field> PhantomSubExecutor<F> for PairingHintSubEx {
+    impl<F: PrimeField32> PhantomSubExecutor<F> for PairingHintSubEx {
         fn phantom_execute(
             &self,
             memory: &GuestMemory,
@@ -149,8 +154,8 @@ pub(crate) mod phantom {
             b: u32,
             c_upper: u16,
         ) -> eyre::Result<()> {
-            let rs1 = read_rv32_register(memory, a);
-            let rs2 = read_rv32_register(memory, b);
+            let rs1 = read_register::<F>(memory, a);
+            let rs2 = read_register::<F>(memory, b);
             hint_pairing(memory, &mut streams.hint_stream, rs1, rs2, c_upper)
         }
     }
