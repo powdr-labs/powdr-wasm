@@ -289,9 +289,6 @@ pub enum Phantom {
 
 /// One SHA-2 compression: reads the previous hash state and one message block,
 /// writes the new state. Padding and the block loop live in the guest.
-///
-/// Offsets 0x1310/0x1311 are reserved for the keccak256 extension (KECCAKF, XORIN)
-/// so the two extensions can land independently without colliding.
 #[derive(
     Copy,
     Clone,
