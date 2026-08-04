@@ -1133,8 +1133,8 @@ pub fn fp2_op<F: PrimeField32>(
 /// coordinate modulus; `SETUP_EC_DOUBLE` constrains both of them to be the modulus and the
 /// curve coefficient `a`.
 ///
-/// The doubling chip and its setup use a single-read adapter, so they ignore `rs2_reg`
-/// entirely -- it is the only case here where the pointer need not be valid.
+/// The doubling chip and its setup use a single-read adapter, so `rs2_reg` is ignored and
+/// forced to zero: the adapter never dereferences it, and its AIR reports `c = 0`.
 pub fn ecc_op<F: PrimeField32>(
     curve_idx: usize,
     op: Rv32WeierstrassOpcode,
@@ -1145,6 +1145,13 @@ pub fn ecc_op<F: PrimeField32>(
     let opcode = VmOpcode::from_usize(
         op.global_opcode().as_usize() + curve_idx * Rv32WeierstrassOpcode::COUNT,
     );
+    let rs2_reg = match op {
+        Rv32WeierstrassOpcode::EC_ADD_NE | Rv32WeierstrassOpcode::SETUP_EC_ADD_NE => rs2_reg,
+        // The doubling chip has a single-read adapter, whose AIR has no second register
+        // operand to report and so hardcodes `c = 0` on the program bus. Encoding anything
+        // else here leaves that bus unbalanced.
+        Rv32WeierstrassOpcode::EC_DOUBLE | Rv32WeierstrassOpcode::SETUP_EC_DOUBLE => 0,
+    };
     heap_r_type(opcode, rd_reg, rs1_reg, rs2_reg)
 }
 
