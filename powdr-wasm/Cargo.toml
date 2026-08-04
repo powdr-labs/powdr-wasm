@@ -46,6 +46,8 @@ metrics-tracing-context = "0.16.0"
 metrics-util = "0.17.0"
 
 [dev-dependencies]
+# Reference compression functions for the SHA256/SHA512 instruction tests.
+sha2 = { workspace = true, features = ["compress"] }
 postcard = { version = "1.1", features = ["alloc"] }
 
 [features]

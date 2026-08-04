@@ -61,6 +61,19 @@ pub struct TestSpec {
 
     /// Optional stdin data for hint tests.
     pub stdin: StdIn,
+
+    /// Enable the SHA-2 extension. Only the SHA256/SHA512 tests need it; leaving it off
+    /// elsewhere keeps every other test on the default AIR set.
+    pub sha2: bool,
+}
+
+/// The VM config a spec runs under.
+fn vm_config_for(spec: &TestSpec) -> CrushConfig {
+    if spec.sha2 {
+        CrushConfig::default().with_sha2()
+    } else {
+        CrushConfig::default()
+    }
 }
 
 /// Read a register value from memory.
@@ -177,7 +190,7 @@ fn verify_state(
 /// Raw execution using InterpretedInstance::execute_from_state.
 pub fn test_execution(spec: &TestSpec) -> Result<(), Box<dyn std::error::Error>> {
     let exe = build_exe(spec);
-    let vm_config = CrushConfig::default();
+    let vm_config = vm_config_for(spec);
     let vm = VmExecutor::new(vm_config.clone()).unwrap();
     let instance = vm.instance(&exe).unwrap();
 
@@ -190,9 +203,12 @@ pub fn test_execution(spec: &TestSpec) -> Result<(), Box<dyn std::error::Error>>
 /// Metered execution using InterpretedInstance::execute_metered_from_state.
 pub fn test_metered_execution(spec: &TestSpec) -> Result<(), Box<dyn std::error::Error>> {
     let exe = build_exe(spec);
-    let vm_config = CrushConfig::default();
-    let (segments, final_state) =
-        helpers::test_metered_execution(&exe, build_initial_state(spec, &exe, &vm_config))?;
+    let vm_config = vm_config_for(spec);
+    let (segments, final_state) = helpers::test_metered_execution(
+        vm_config.clone(),
+        &exe,
+        build_initial_state(spec, &exe, &vm_config),
+    )?;
 
     assert_eq!(segments.len(), 1, "expected a single segment");
     verify_state(spec, &final_state)
@@ -201,8 +217,12 @@ pub fn test_metered_execution(spec: &TestSpec) -> Result<(), Box<dyn std::error:
 /// Preflight using VirtualMachine::execute_preflight.
 pub fn test_preflight(spec: &TestSpec) -> Result<(), Box<dyn std::error::Error>> {
     let exe = build_exe(spec);
-    let vm_config = CrushConfig::default();
-    let final_state = helpers::test_preflight(&exe, build_initial_state(spec, &exe, &vm_config))?;
+    let vm_config = vm_config_for(spec);
+    let final_state = helpers::test_preflight(
+        vm_config.clone(),
+        &exe,
+        build_initial_state(spec, &exe, &vm_config),
+    )?;
 
     verify_state(spec, &final_state)
 }
@@ -213,12 +233,12 @@ pub fn test_preflight(spec: &TestSpec) -> Result<(), Box<dyn std::error::Error>>
 /// Runs on the specified backends (CPU, GPU, or both) and verifies the final state.
 pub fn test_prove(spec: &TestSpec, backends: &[Backend]) -> Result<(), Box<dyn std::error::Error>> {
     let exe = build_exe(spec);
-    let vm_config = CrushConfig::default();
+    let vm_config = vm_config_for(spec);
     let init_state = build_initial_state(spec, &exe, &vm_config);
 
     for &backend in backends {
         let final_state = backend
-            .mock_prove(&exe, init_state.clone())
+            .mock_prove(vm_config.clone(), &exe, init_state.clone())
             .map_err(|e| format!("{} mock_prove: {e}", backend.name()))?;
         verify_state(spec, &final_state)
             .map_err(|e| format!("{} verify_state: {e}", backend.name()))?;
@@ -3753,6 +3773,166 @@ mod tests {
             stdin,
             ..Default::default()
         };
+        test_spec_for_all_register_bases(spec)
+    }
+
+    // ==================== SHA-2 Tests ====================
+    // One compression per opcode. Running each spec at all three FP bases is the point:
+    // it exercises the FP read and the FP-relative addressing of the three register
+    // operands, including the range check on the top pointer limb at a 3-byte base.
+
+    /// Spread `bytes` over word-aligned RAM entries starting at `addr`.
+    fn sha_ram_words(addr: u32, bytes: &[u8]) -> Vec<(u32, u32)> {
+        assert!(addr.is_multiple_of(4), "buffer must be word aligned");
+        assert!(bytes.len().is_multiple_of(4));
+        bytes
+            .chunks_exact(4)
+            .enumerate()
+            .map(|(i, w)| {
+                (
+                    addr + 4 * i as u32,
+                    u32::from_le_bytes(w.try_into().unwrap()),
+                )
+            })
+            .collect()
+    }
+
+    /// SHA-256 initial state, as the little-endian u32 words the precompile expects.
+    fn sha256_init_state() -> [u8; 32] {
+        const H0: [u32; 8] = [
+            0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
+            0x5be0cd19,
+        ];
+        let mut out = [0u8; 32];
+        for (c, w) in out.chunks_exact_mut(4).zip(H0) {
+            c.copy_from_slice(&w.to_le_bytes());
+        }
+        out
+    }
+
+    #[test]
+    fn test_sha256_compress() {
+        setup_tracing_with_log_level(Level::WARN);
+
+        const DST: u32 = 1000;
+        const STATE: u32 = 2000;
+        const INPUT: u32 = 3000;
+
+        let prev_state = sha256_init_state();
+        let block: [u8; 64] = core::array::from_fn(|i| (i * 7 + 3) as u8);
+
+        // Reference: compress the block into the state, keeping the little-endian
+        // u32-word encoding the precompile uses on both sides.
+        let mut words = [0u32; 8];
+        for (w, c) in words.iter_mut().zip(prev_state.chunks_exact(4)) {
+            *w = u32::from_le_bytes(c.try_into().unwrap());
+        }
+        sha2::compress256(&mut words, &[block.into()]);
+        let mut new_state = [0u8; 32];
+        for (c, w) in new_state.chunks_exact_mut(4).zip(words) {
+            c.copy_from_slice(&w.to_le_bytes());
+        }
+
+        let mut start_ram = sha_ram_words(STATE, &prev_state);
+        start_ram.extend(sha_ram_words(INPUT, &block));
+
+        // reg[fp+0] = dst ptr, reg[fp+1] = state ptr, reg[fp+2] = input ptr
+        let spec = TestSpec {
+            program: vec![sha256_compress(0, 1, 2)],
+            start_fp: 10,
+            start_registers: vec![(10, DST), (11, STATE), (12, INPUT)],
+            start_ram,
+            expected_ram: sha_ram_words(DST, &new_state),
+            sha2: true,
+            ..Default::default()
+        };
+
+        test_spec_for_all_register_bases(spec)
+    }
+
+    /// The same, writing the new state back over the input state buffer. The precompile
+    /// documents that `output` may alias `state`, and the guest sponge relies on it.
+    #[test]
+    fn test_sha256_compress_in_place() {
+        setup_tracing_with_log_level(Level::WARN);
+
+        const STATE: u32 = 2000;
+        const INPUT: u32 = 3000;
+
+        let prev_state = sha256_init_state();
+        let block: [u8; 64] = core::array::from_fn(|i| (i * 11 + 1) as u8);
+
+        let mut words = [0u32; 8];
+        for (w, c) in words.iter_mut().zip(prev_state.chunks_exact(4)) {
+            *w = u32::from_le_bytes(c.try_into().unwrap());
+        }
+        sha2::compress256(&mut words, &[block.into()]);
+        let mut new_state = [0u8; 32];
+        for (c, w) in new_state.chunks_exact_mut(4).zip(words) {
+            c.copy_from_slice(&w.to_le_bytes());
+        }
+
+        let mut start_ram = sha_ram_words(STATE, &prev_state);
+        start_ram.extend(sha_ram_words(INPUT, &block));
+
+        let spec = TestSpec {
+            program: vec![sha256_compress(0, 0, 1)],
+            start_fp: 10,
+            start_registers: vec![(10, STATE), (11, INPUT)],
+            start_ram,
+            expected_ram: sha_ram_words(STATE, &new_state),
+            sha2: true,
+            ..Default::default()
+        };
+
+        test_spec_for_all_register_bases(spec)
+    }
+
+    #[test]
+    fn test_sha512_compress() {
+        setup_tracing_with_log_level(Level::WARN);
+
+        const DST: u32 = 1000;
+        const STATE: u32 = 2000;
+        const INPUT: u32 = 3000;
+
+        // SHA-512 initial state, as little-endian u64 words.
+        const H0: [u64; 8] = [
+            0x6a09e667f3bcc908,
+            0xbb67ae8584caa73b,
+            0x3c6ef372fe94f82b,
+            0xa54ff53a5f1d36f1,
+            0x510e527fade682d1,
+            0x9b05688c2b3e6c1f,
+            0x1f83d9abfb41bd6b,
+            0x5be0cd19137e2179,
+        ];
+        let mut prev_state = [0u8; 64];
+        for (c, w) in prev_state.chunks_exact_mut(8).zip(H0) {
+            c.copy_from_slice(&w.to_le_bytes());
+        }
+        let block: [u8; 128] = core::array::from_fn(|i| (i * 5 + 9) as u8);
+
+        let mut words = H0;
+        sha2::compress512(&mut words, &[block.into()]);
+        let mut new_state = [0u8; 64];
+        for (c, w) in new_state.chunks_exact_mut(8).zip(words) {
+            c.copy_from_slice(&w.to_le_bytes());
+        }
+
+        let mut start_ram = sha_ram_words(STATE, &prev_state);
+        start_ram.extend(sha_ram_words(INPUT, &block));
+
+        let spec = TestSpec {
+            program: vec![sha512_compress(0, 1, 2)],
+            start_fp: 10,
+            start_registers: vec![(10, DST), (11, STATE), (12, INPUT)],
+            start_ram,
+            expected_ram: sha_ram_words(DST, &new_state),
+            sha2: true,
+            ..Default::default()
+        };
+
         test_spec_for_all_register_bases(spec)
     }
 

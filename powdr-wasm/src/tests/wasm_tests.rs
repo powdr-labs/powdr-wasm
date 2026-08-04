@@ -271,12 +271,32 @@ fn run_wasm_test_function_raw(
     prove: bool,
     byte_inputs: &[&[u8]],
 ) -> Result<Vec<u32>, Box<dyn std::error::Error>> {
+    run_wasm_test_function_raw_with_config(
+        module,
+        function,
+        args,
+        output_words,
+        prove,
+        byte_inputs,
+        CrushConfig::default(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_wasm_test_function_raw_with_config(
+    module: &mut LinkedProgram<F>,
+    function: &str,
+    args: &[u32],
+    output_words: usize,
+    prove: bool,
+    byte_inputs: &[&[u8]],
+    vm_config: CrushConfig,
+) -> Result<Vec<u32>, Box<dyn std::error::Error>> {
     setup_tracing_with_log_level(Level::WARN);
     println!("Running WASM test with {function}({args:?}): output_words={output_words}");
 
     // Capture the exe before module.execute() mutates memory_image.
     let exe = module.program_with_entry_point(function);
-    let vm_config = CrushConfig::default();
 
     let make_stdin = || {
         let mut stdin = StdIn::default();
@@ -315,7 +335,8 @@ fn run_wasm_test_function_raw(
 
     // Metered execution
     println!("  Metered execution");
-    let (segments, _) = helpers::test_metered_execution(&exe, initial_state.clone())?;
+    let (segments, _) =
+        helpers::test_metered_execution(vm_config.clone(), &exe, initial_state.clone())?;
     let total_insns: u64 = segments.iter().map(|s| s.num_insns).sum();
     println!(
         "    {} segment(s), {} total instructions",
@@ -325,17 +346,17 @@ fn run_wasm_test_function_raw(
 
     // Preflight
     println!("  Preflight");
-    helpers::test_preflight(&exe, initial_state.clone())?;
+    helpers::test_preflight(vm_config.clone(), &exe, initial_state.clone())?;
 
     // Mock proof (CPU)
     println!("  Mock proof (CPU)");
-    mock_prove(&exe, initial_state.clone())?;
+    mock_prove(vm_config.clone(), &exe, initial_state.clone())?;
 
     // Mock proof (GPU)
     #[cfg(feature = "cuda")]
     {
         println!("  Mock proof (GPU)");
-        crate::proving::mock_prove_gpu(&exe, initial_state)?;
+        crate::proving::mock_prove_gpu(vm_config, &exe, initial_state)?;
     }
 
     Ok(output)
@@ -574,6 +595,56 @@ fn test_n_first_sums() {
     .unwrap()
 }
 
+/// SHA-256 through the guest library, i.e. through the wasm import translation.
+///
+/// The isolated instruction tests cover the compression itself at three FP bases, but
+/// build the instruction directly; this is the only test that goes through
+/// crush-translation's `__sha256_compress` arm and the real guest block loop.
+/// `variant`: 0 = SHA-256, 1 = SHA-512.
+fn sha2_precompile_crush(variant: u32, iterations: u32, expected_first_byte: u32) {
+    let path = format!(
+        "{}/../sample-programs/sha2_precompile",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    build_wasm(&PathBuf::from(&path));
+    let wasm_path = format!("{path}/target/wasm32-unknown-unknown/release/sha2_precompile.wasm");
+    let mut module = load_wasm_module(&wasm_path, false);
+    run_wasm_test_function_raw_with_config(
+        &mut module,
+        "main",
+        &[0, 0, variant, iterations, expected_first_byte],
+        0,
+        true,
+        &[],
+        CrushConfig::default().with_sha2(),
+    )
+    .unwrap();
+}
+
+#[test]
+fn test_sha256_precompile_crush_1() {
+    // sha256([0; 32]) starts with 0x66 = 102
+    sha2_precompile_crush(0, 1, 102);
+}
+
+#[test]
+fn test_sha256_precompile_crush_2() {
+    // sha256^2([0; 32]) starts with 0x2b = 43
+    sha2_precompile_crush(0, 2, 43);
+}
+
+#[test]
+fn test_sha512_precompile_crush_1() {
+    // sha512([0; 64]) starts with 0x7b = 123
+    sha2_precompile_crush(1, 1, 123);
+}
+
+#[test]
+fn test_sha512_precompile_crush_2() {
+    // sha512^2([0; 64]) starts with 0xf5 = 245
+    sha2_precompile_crush(1, 2, 245);
+}
+
 #[test]
 fn test_call_indirect_wasm() {
     run_and_prove_single_wasm_test(
@@ -646,7 +717,8 @@ fn test_keeper_wasi() {
     let mut stdin = StdIn::default();
     stdin.write_bytes(&payload);
     let initial_state = VmState::initial(&vm_config.system, &exe.init_memory, exe.pc_start, stdin);
-    let (segments, _) = helpers::test_metered_execution(&exe, initial_state).unwrap();
+    let (segments, _) =
+        helpers::test_metered_execution(CrushConfig::default(), &exe, initial_state).unwrap();
     let total_insns: u64 = segments.iter().map(|s| s.num_insns).sum();
     println!(
         "  keeper_wasi: {} segment(s), {} total instructions",
@@ -676,7 +748,8 @@ fn test_keeper_decode_only() {
     let mut stdin = StdIn::default();
     stdin.write_bytes(&payload);
     let initial_state = VmState::initial(&vm_config.system, &exe.init_memory, exe.pc_start, stdin);
-    let (segments, _) = helpers::test_metered_execution(&exe, initial_state).unwrap();
+    let (segments, _) =
+        helpers::test_metered_execution(CrushConfig::default(), &exe, initial_state).unwrap();
     let total_insns: u64 = segments.iter().map(|s| s.num_insns).sum();
     println!(
         "  keeper_decode_only: {} segment(s), {} total instructions",

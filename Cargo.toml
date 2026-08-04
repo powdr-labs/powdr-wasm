@@ -4,7 +4,7 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 
 [workspace]
-members = ["powdr-wasm", "extensions/openvm-transpiler", "extensions/crush-circuit", "guest-io", "extensions/autoprecompiles", "extensions/crush-translation"]
+members = ["powdr-wasm", "extensions/openvm-transpiler", "extensions/crush-circuit", "guest-io", "guest-libs/rust/sha2", "extensions/autoprecompiles", "extensions/crush-translation"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -23,6 +23,7 @@ openvm-crush-transpiler = { path = "extensions/openvm-transpiler" }
 crush-circuit = { path = "extensions/crush-circuit" }
 autoprecompiles = { path = "extensions/autoprecompiles" }
 crush-translation = { path = "extensions/crush-translation" }
+crush-guest-sha2 = { path = "guest-libs/rust/sha2" }
 
 openvm-stark-sdk = { git = "https://github.com/powdr-labs/stark-backend.git", tag = "v2.0.0-beta.2-powdr", features = [
   "parallel",
@@ -75,6 +76,10 @@ rustc-hash = "2.0.0"
 cfg-if = "1.0.0"
 test-case = "3.3.1"
 itertools = "0.14"
+# SHA-2 sub-AIR reused from upstream rather than forked; must track the openvm pin.
+openvm-sha2-air = { git = "https://github.com/powdr-labs/openvm.git", tag = "v2.0.0-beta.2-powdr.1", default-features = false }
+ndarray = { version = "0.16.1", default-features = false }
+sha2 = { version = "0.10", default-features = false, features = ["compress"] }
 
 rrs-lib = "0.1.0"
 tracing = "0.1.40"

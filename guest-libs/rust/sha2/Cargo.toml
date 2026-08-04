@@ -1,0 +1,12 @@
+[package]
+name = "crush-guest-sha2"
+description = "SHA-256 for crush guests, using the SHA256 compression precompile"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Off target there is no precompile to call, so the block loop falls back to a
+# software compression function. This keeps the guest build (wasm32) dependency-free
+# while letting the padding and block logic be unit tested on the host.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+sha2 = { workspace = true, features = ["compress"] }

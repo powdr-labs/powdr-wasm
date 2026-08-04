@@ -282,3 +282,31 @@ pub enum Phantom {
     /// Fill hint stream with 8 bytes of incrementing clock timestamp.
     ClockTimeGet,
 }
+
+// =================================================================================================
+// SHA-2 opcodes
+// =================================================================================================
+
+/// One SHA-2 compression: reads the previous hash state and one message block,
+/// writes the new state. Padding and the block loop live in the guest.
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    LocalOpcode,
+    Serialize,
+    Deserialize,
+)]
+#[opcode_offset = 0x1312]
+#[repr(usize)]
+pub enum Sha2Opcode {
+    SHA256,
+    SHA512,
+}

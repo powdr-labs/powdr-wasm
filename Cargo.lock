@@ -1016,6 +1016,7 @@ dependencies = [
  "derive_more 1.0.0",
  "eyre",
  "itertools 0.14.0",
+ "ndarray",
  "openvm-circuit",
  "openvm-circuit-derive",
  "openvm-circuit-primitives",
@@ -1030,6 +1031,7 @@ dependencies = [
  "openvm-rv32im-transpiler",
  "openvm-sdk",
  "openvm-sdk-config",
+ "openvm-sha2-air",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "openvm-transpiler",
@@ -1039,6 +1041,7 @@ dependencies = [
  "pretty_assertions",
  "rand 0.9.4",
  "serde",
+ "sha2",
  "struct-reflection",
  "strum 0.26.3",
  "test-case",
@@ -1050,6 +1053,13 @@ version = "0.0.1"
 dependencies = [
  "postcard",
  "serde",
+]
+
+[[package]]
+name = "crush-guest-sha2"
+version = "0.0.1"
+dependencies = [
+ "sha2",
 ]
 
 [[package]]
@@ -4678,6 +4688,7 @@ dependencies = [
  "rmp-serde",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror 1.0.69",
  "tracing",
  "tracing-forest",

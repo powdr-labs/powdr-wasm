@@ -1,0 +1,15 @@
+[workspace]
+[package]
+name = "sha2_precompile"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+crush-guest-io = { path = "../../guest-io" }
+crush-guest-sha2 = { path = "../../guest-libs/rust/sha2" }
+
+[profile.release]
+panic = "abort"
+
+[profile.dev]
+panic = "abort"
