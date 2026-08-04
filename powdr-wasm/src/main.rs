@@ -249,12 +249,22 @@ impl Curve {
     fn complex_struct_name(self) -> String {
         format!("{:?}Fp2", self)
     }
+}
 
-    fn pairing_curve(self) -> Option<PairingCurve> {
-        match self {
-            Curve::Bn254 => Some(PairingCurve::Bn254),
-            Curve::Bls12_381 => Some(PairingCurve::Bls12_381),
-            Curve::Secp256k1 | Curve::P256 => None,
+/// A curve that has a pairing. Separate from [`Curve`] so that `--pairing`'s help lists only
+/// the curves it accepts.
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+enum Pairing {
+    Bn254,
+    #[value(name = "bls12-381")]
+    Bls12_381,
+}
+
+impl From<Pairing> for PairingCurve {
+    fn from(value: Pairing) -> Self {
+        match value {
+            Pairing::Bn254 => PairingCurve::Bn254,
+            Pairing::Bls12_381 => PairingCurve::Bls12_381,
         }
     }
 }
@@ -286,10 +296,10 @@ struct ExtensionArgs {
     /// Enable Weierstrass curve arithmetic for each curve
     #[arg(long, value_delimiter = ',', value_enum)]
     ecc: Vec<Curve>,
-    /// Enable pairing hints for each curve. Only bn254 and bls12-381 have pairings; this
-    /// adds no AIRs of its own, just the hint phantoms the pairing algorithms need.
+    /// Enable pairing hints for each curve. This adds no AIRs of its own, just the hint
+    /// phantoms the pairing algorithms need.
     #[arg(long, value_delimiter = ',', value_enum)]
-    pairing: Vec<Curve>,
+    pairing: Vec<Pairing>,
 }
 
 impl ExtensionArgs {
@@ -318,15 +328,7 @@ impl ExtensionArgs {
             config = config.with_ecc(self.ecc.iter().map(|c| c.curve_config()).collect());
         }
         if !self.pairing.is_empty() {
-            config = config.with_pairing(
-                self.pairing
-                    .iter()
-                    .map(|c| {
-                        c.pairing_curve()
-                            .unwrap_or_else(|| panic!("{c:?} has no pairing"))
-                    })
-                    .collect(),
-            );
+            config = config.with_pairing(self.pairing.iter().copied().map(Into::into).collect());
         }
         config
     }

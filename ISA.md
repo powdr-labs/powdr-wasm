@@ -422,7 +422,7 @@ their own class offsets.
 |--------|-----------|
 | `__int256_{add,sub,xor,or,and}(rd, rs1, rs2)` | `MEM[rd] = MEM[rs1] op MEM[rs2]` |
 | `__int256_mul(rd, rs1, rs2)` | Low 256 bits of the product |
-| `__int256_lt_{u,s}(rd, rs1, rs2)` | Comparison, result written to `MEM[rd]` |
+| `__int256_lt_{u,s}(rd, rs1, rs2)` | Comparison; 1 or 0 written to `MEM[rd]` |
 | `__int256_{shl,shr_u,shr_s}(rd, rs1, rs2)` | Shifts |
 
 ### Modular arithmetic, Fp2 and elliptic curves
@@ -431,6 +431,10 @@ These are *parameterised*: one set of chips per configured modulus or curve. Whi
 instruction targets is encoded in the opcode itself, as `CLASS_OFFSET + index * COUNT + local`,
 and the index appears in the import name. With `--modular bn254,secp256k1`, `__modular_0_add`
 is addition mod the BN254 coordinate prime and `__modular_1_add` mod the secp256k1 one.
+
+The modulus also fixes the operand width: 32 bytes for a modulus that fits in 32, otherwise 48.
+So an Fp2 element -- two coefficients -- is 64 or 96 bytes, and a curve point 64 or 96. A
+modulus wider than 48 bytes is rejected at config time.
 
 Each set must be initialised by a SETUP instruction before its first use. Setup constrains the
 leading bytes of the operands it reads to equal the modulus -- and for `EC_DOUBLE`, the curve
@@ -445,13 +449,13 @@ frame-pointer relative, so offset 0 is an ordinary local slot and a real pointer
 
 | Import | Semantics |
 |--------|-----------|
-| `__modular_N_{add,sub,mul,div}(rd, rs1, rs2)` | Arithmetic mod the `N`-th modulus, on 32-byte operands |
+| `__modular_N_{add,sub,mul,div}(rd, rs1, rs2)` | Arithmetic mod the `N`-th modulus |
 | `__modular_N_is_eq(rs1, rs2) -> i32` | Equality. Unlike the rest, the result goes to a register |
 | `__modular_N_setup_{addsub,muldiv}(rd, modulus, unused)` | Bind the modulus to the add/sub or mul/div chip |
 | `__modular_N_setup_iseq(modulus, unused) -> i32` | Same for the equality chip |
-| `__fp2_N_{add,sub,mul,div}(rd, rs1, rs2)` | Arithmetic in `Fp[u]/(u^2 + 1)`; operands are `c0` then `c1`, 64 bytes |
+| `__fp2_N_{add,sub,mul,div}(rd, rs1, rs2)` | Arithmetic in `Fp[u]/(u^2 + 1)`; operands are `c0` then `c1` |
 | `__fp2_N_setup_{addsub,muldiv}(rd, modulus, unused)` | Bind the modulus |
-| `__ecc_N_add_ne(rd, p, q)` | Weierstrass addition, for `p != q` only. Points are x then y, 64 bytes |
+| `__ecc_N_add_ne(rd, p, q)` | Weierstrass addition, for `p != q` only. Points are x then y |
 | `__ecc_N_double(rd, p, unused)` | Point doubling |
 | `__ecc_N_setup_add_ne(rd, modulus, unused)` | Bind the coordinate modulus |
 | `__ecc_N_setup_double(rd, modulus_then_a, unused)` | Bind the modulus and the coefficient `a` |

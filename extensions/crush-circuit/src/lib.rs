@@ -94,8 +94,10 @@ pub struct CrushConfig {
     pub system: SystemConfig,
     #[extension]
     pub base: Crush,
-    /// Optional Int256 extension. Must stay the last extension field: the autoprecompile
-    /// dummy chip complex relies on its AIRs being last.
+    // The optional extensions below are declared in the order their AIRs and chips are
+    // registered. `CrushCpuBuilder` and the autoprecompile dummy chip complex must add them in
+    // this same order, or the two inventories stop being index-aligned.
+    /// Optional Int256 extension.
     #[extension(executor = "Int256Executor")]
     pub int256: Option<Int256>,
     /// Optional modular arithmetic extension, parameterised by the supported moduli.
