@@ -492,7 +492,11 @@ impl<
             });
 
         // Filled last because the walk is in reverse and the FP read is first.
-        mem_helper.fill(record_fp_prev_timestamp, timestamp_mm(), cols.fp_aux.as_mut());
+        mem_helper.fill(
+            record_fp_prev_timestamp,
+            timestamp_mm(),
+            cols.fp_aux.as_mut(),
+        );
 
         cols.rs_val = record.rs_val.map(|val| val.to_le_bytes().map(F::from_u8));
         cols.rs_ptr = record.rs_ptr.map(|ptr| F::from_u32(ptr));

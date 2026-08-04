@@ -620,7 +620,11 @@ impl<
             });
         // Filled last because the walk is in reverse and the FP read is first. Uses the
         // copies taken above: the record bytes here have been overwritten by columns.
-        mem_helper.fill(record_fp_prev_timestamp, timestamp_mm(), cols.fp_aux.as_mut());
+        mem_helper.fill(
+            record_fp_prev_timestamp,
+            timestamp_mm(),
+            cols.fp_aux.as_mut(),
+        );
 
         cols.from_state.timestamp = F::from_u32(record.from_timestamp);
         cols.from_state.pc = F::from_u32(record.from_pc);

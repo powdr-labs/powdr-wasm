@@ -391,7 +391,11 @@ impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS_PER_READ: usize, cons
             });
 
         // Filled last because the walk is in reverse and the FP read is first.
-        mem_helper.fill(record_fp_prev_timestamp, timestamp_mm(), cols.fp_aux.as_mut());
+        mem_helper.fill(
+            record_fp_prev_timestamp,
+            timestamp_mm(),
+            cols.fp_aux.as_mut(),
+        );
 
         cols.rs_val
             .iter_mut()

@@ -1,14 +1,14 @@
-use openvm_crush_transpiler::{
-    BaseAlu64Opcode, BaseAluOpcode, CallOpcode, ConstOpcodes, Eq64Opcode, EqOpcode,
-    BaseAlu256Opcode, HintStoreOpcode, JumpOpcode, LessThan256Opcode, LessThan64Opcode,
-    LessThanOpcode, Mul256Opcode, MulOpcode, Phantom, Shift256Opcode, Shift64Opcode, ShiftOpcode,
-};
 use openvm_algebra_transpiler::{Fp2Opcode, Rv32ModularArithmeticOpcode};
+use openvm_crush_transpiler::{
+    BaseAlu64Opcode, BaseAlu256Opcode, BaseAluOpcode, CallOpcode, ConstOpcodes, Eq64Opcode,
+    EqOpcode, HintStoreOpcode, JumpOpcode, LessThan64Opcode, LessThan256Opcode, LessThanOpcode,
+    Mul256Opcode, MulOpcode, Phantom, Shift64Opcode, Shift256Opcode, ShiftOpcode,
+};
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
-use openvm_pairing_transpiler::PairingPhantom;
 use openvm_instructions::{
     LocalOpcode, PhantomDiscriminant, SystemOpcode, VmOpcode, instruction::Instruction, riscv,
 };
+use openvm_pairing_transpiler::PairingPhantom;
 use openvm_stark_backend::p3_field::PrimeField32;
 use strum::EnumCount;
 
@@ -996,7 +996,12 @@ pub fn int256_alu<F: PrimeField32>(
     rs1_reg: usize,
     rs2_reg: usize,
 ) -> Instruction<F> {
-    heap_r_type(BaseAlu256Opcode(op).global_opcode(), rd_reg, rs1_reg, rs2_reg)
+    heap_r_type(
+        BaseAlu256Opcode(op).global_opcode(),
+        rd_reg,
+        rs1_reg,
+        rs2_reg,
+    )
 }
 
 /// 256-bit multiply (low 256 bits).

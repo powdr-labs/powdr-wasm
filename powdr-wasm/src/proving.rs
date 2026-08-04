@@ -6,7 +6,8 @@ use std::sync::OnceLock;
 use autoprecompiles::CrushISA;
 use crush_circuit::{CrushConfig, CrushCpuBuilder};
 use openvm_circuit::arch::{
-    Executor, MeteredExecutor, PreflightExecutor, VirtualMachine, VmBuilder, VmCircuitConfig, VmExecutionConfig, VmState, debug_proving_ctx,
+    Executor, MeteredExecutor, PreflightExecutor, VirtualMachine, VmBuilder, VmCircuitConfig,
+    VmExecutionConfig, VmState, debug_proving_ctx,
 };
 use openvm_instructions::exe::VmExe;
 use openvm_sdk::StdIn;
@@ -262,18 +263,45 @@ where
         + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
 {
     // Cached key for the default config; a fresh one when extensions change the AIR set.
-    let pk_storage = if vm_config.has_optional_extensions() {
-        let circuit = vm_config
-            .create_airs()
-            .expect("failed to create AIR inventory for keygen");
-        let airs: Vec<_> = circuit.into_airs().collect();
-        let (pk, _vk) = engine.keygen(&airs);
-        Some(pk)
-    } else {
-        None
-    };
+    let pk_storage = vm_config
+        .has_optional_extensions()
+        .then(|| keygen(&engine, &vm_config));
     let pk_ref = pk_storage.as_ref().unwrap_or_else(|| vm_proving_key());
-    let d_pk = engine.device().transport_pk_to_device(pk_ref);
+    mock_prove_with_pk(engine, builder, vm_config, pk_ref, exe, init_state)
+}
+
+/// Generate a proving key for `vm_config`. Callers that mock-prove several programs under one
+/// config should do this once and pass the key to [`mock_prove_with_pk`]: keygen dominates the
+/// cost of a small program.
+pub fn keygen<E: StarkEngine>(engine: &E, vm_config: &CrushConfig) -> MultiStarkProvingKey<E::SC>
+where
+    Val<E::SC>: PrimeField32 + openvm_stark_backend::p3_field::InjectiveMonomial<7>,
+{
+    let circuit = vm_config
+        .create_airs()
+        .expect("failed to create AIR inventory for keygen");
+    let airs: Vec<_> = circuit.into_airs().collect();
+    engine.keygen(&airs).0
+}
+
+/// [`mock_prove_with`] with the proving key supplied by the caller.
+pub fn mock_prove_with_pk<E, VB>(
+    engine: E,
+    builder: VB,
+    vm_config: CrushConfig,
+    pk: &MultiStarkProvingKey<E::SC>,
+    exe: &VmExe<F>,
+    init_state: VmState<F>,
+) -> Result<VmState<F>, Box<dyn std::error::Error>>
+where
+    E: StarkEngine<SC = SC>,
+    VB: VmBuilder<E, VmConfig = CrushConfig> + Clone,
+    Val<E::SC>: PrimeField32,
+    <CrushConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
+        + MeteredExecutor<Val<E::SC>>
+        + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
+{
+    let d_pk = engine.device().transport_pk_to_device(pk);
     let mut vm = VirtualMachine::<_, VB>::new(engine, builder, vm_config, d_pk)?;
 
     // Run metered execution to discover segments.
