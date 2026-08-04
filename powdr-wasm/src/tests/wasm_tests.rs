@@ -356,7 +356,8 @@ fn run_wasm_test_function_raw(
 
     // Metered execution
     println!("  Metered execution");
-    let (segments, _) = helpers::test_metered_execution(&exe, initial_state.clone())?;
+    let (segments, _) =
+        helpers::test_metered_execution(vm_config.clone(), &exe, initial_state.clone())?;
     let total_insns: u64 = segments.iter().map(|s| s.num_insns).sum();
     println!(
         "    {} segment(s), {} total instructions",
@@ -366,7 +367,7 @@ fn run_wasm_test_function_raw(
 
     // Preflight
     println!("  Preflight");
-    helpers::test_preflight(&exe, initial_state.clone())?;
+    helpers::test_preflight(vm_config.clone(), &exe, initial_state.clone())?;
 
     // Mock proof (CPU)
     println!("  Mock proof (CPU)");
@@ -742,7 +743,8 @@ fn test_keeper_wasi() {
     let mut stdin = StdIn::default();
     stdin.write_bytes(&payload);
     let initial_state = VmState::initial(&vm_config.system, &exe.init_memory, exe.pc_start, stdin);
-    let (segments, _) = helpers::test_metered_execution(&exe, initial_state).unwrap();
+    let (segments, _) =
+        helpers::test_metered_execution(CrushConfig::default(), &exe, initial_state).unwrap();
     let total_insns: u64 = segments.iter().map(|s| s.num_insns).sum();
     println!(
         "  keeper_wasi: {} segment(s), {} total instructions",
@@ -772,7 +774,8 @@ fn test_keeper_decode_only() {
     let mut stdin = StdIn::default();
     stdin.write_bytes(&payload);
     let initial_state = VmState::initial(&vm_config.system, &exe.init_memory, exe.pc_start, stdin);
-    let (segments, _) = helpers::test_metered_execution(&exe, initial_state).unwrap();
+    let (segments, _) =
+        helpers::test_metered_execution(CrushConfig::default(), &exe, initial_state).unwrap();
     let total_insns: u64 = segments.iter().map(|s| s.num_insns).sum();
     println!(
         "  keeper_decode_only: {} segment(s), {} total instructions",

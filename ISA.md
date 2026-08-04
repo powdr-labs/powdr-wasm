@@ -402,6 +402,85 @@ These use OpenVM's built-in `SystemOpcode` rather than crush-specific opcodes.
 
 ---
 
+## Precompiles
+
+Five optional extensions, all off by default and enabled per run with
+`--int256`, `--modular`, `--fp2`, `--ecc` and `--pairing`. Enabling one changes the VM's AIR
+set, so the same flags must be passed to every command of a compile/keygen/prove pipeline.
+
+A guest reaches them through `env` imports, which the translation layer turns into single
+instructions. Their operands are *wasm pointers*: the instruction names registers holding
+pointers into address space 2, where the actual values live, and the translation rebases those
+pointers onto the linear memory base. Nothing is passed by value.
+
+### Int256
+
+Fixed-width 256-bit integers -- 32 little-endian bytes -- reusing the 32-bit core chips at
+their own class offsets.
+
+| Import | Semantics |
+|--------|-----------|
+| `__int256_{add,sub,xor,or,and}(rd, rs1, rs2)` | `MEM[rd] = MEM[rs1] op MEM[rs2]` |
+| `__int256_mul(rd, rs1, rs2)` | Low 256 bits of the product |
+| `__int256_lt_{u,s}(rd, rs1, rs2)` | Comparison, result written to `MEM[rd]` |
+| `__int256_{shl,shr_u,shr_s}(rd, rs1, rs2)` | Shifts |
+
+### Modular arithmetic, Fp2 and elliptic curves
+
+These are *parameterised*: one set of chips per configured modulus or curve. Which set an
+instruction targets is encoded in the opcode itself, as `CLASS_OFFSET + index * COUNT + local`,
+and the index appears in the import name. With `--modular bn254,secp256k1`, `__modular_0_add`
+is addition mod the BN254 coordinate prime and `__modular_1_add` mod the secp256k1 one.
+
+Each set must be initialised by a SETUP instruction before its first use. Setup constrains the
+leading bytes of the operands it reads to equal the modulus -- and for `EC_DOUBLE`, the curve
+coefficient `a` -- that the chip was built with, so the index a guest names is checked against
+the configuration rather than merely assumed to match.
+
+Setup reads the *same number* of operands as the corresponding operation, since it goes through
+the same adapter; the trailing ones are unconstrained but must still be readable, and must be
+reduced field elements where the chip range checks them. Upstream's RISC-V encoding puts `x0`
+in `rs2` for setup, relying on register zero reading as the address `0`; crush registers are
+frame-pointer relative, so offset 0 is an ordinary local slot and a real pointer is required.
+
+| Import | Semantics |
+|--------|-----------|
+| `__modular_N_{add,sub,mul,div}(rd, rs1, rs2)` | Arithmetic mod the `N`-th modulus, on 32-byte operands |
+| `__modular_N_is_eq(rs1, rs2) -> i32` | Equality. Unlike the rest, the result goes to a register |
+| `__modular_N_setup_{addsub,muldiv}(rd, modulus, unused)` | Bind the modulus to the add/sub or mul/div chip |
+| `__modular_N_setup_iseq(modulus, unused) -> i32` | Same for the equality chip |
+| `__fp2_N_{add,sub,mul,div}(rd, rs1, rs2)` | Arithmetic in `Fp[u]/(u^2 + 1)`; operands are `c0` then `c1`, 64 bytes |
+| `__fp2_N_setup_{addsub,muldiv}(rd, modulus, unused)` | Bind the modulus |
+| `__ecc_N_add_ne(rd, p, q)` | Weierstrass addition, for `p != q` only. Points are x then y, 64 bytes |
+| `__ecc_N_double(rd, p, unused)` | Point doubling |
+| `__ecc_N_setup_add_ne(rd, modulus, unused)` | Bind the coordinate modulus |
+| `__ecc_N_setup_double(rd, modulus_then_a, unused)` | Bind the modulus and the coefficient `a` |
+
+The doubling chip reads a single operand, so its third argument is ignored and encoded as
+`c = 0`: its adapter has no second register operand to report, and its AIR hardcodes zero on
+the program bus.
+
+### Pairing
+
+The pairing extension contributes no chips and no opcodes -- only the final-exponentiation hint
+phantom. It runs the Miller loop over the given points on the host and pushes the residue
+witness onto the hint stream, which a guest pairing implementation reads back with
+`__hint_buffer` and verifies using the modular, Fp2 and ecc chips.
+
+| Import | Semantics |
+|--------|-----------|
+| `__pairing_N_hint_final_exp(scratch, g1, g1_len, g2, g2_len)` | Push the witness for `multi_miller_loop(g1, g2)` |
+
+The phantom wants two `{ptr, len}` descriptors in the heap holding *absolute* addresses, which
+a wasm guest cannot write for itself -- it only knows offsets into linear memory. So the import
+takes the point arrays directly, plus 16 bytes of scratch, and the translation assembles the
+descriptors from the rebased pointers.
+
+A G1 point is two 32-byte coordinates; a G2 point is two Fp2 coordinates, 128 bytes. BN254's
+witness is 768 bytes: two Fq12 values of six Fq2 coefficients of two 32-byte Fp coefficients.
+
+---
+
 ## Opcode Map Summary
 
 | Enum | Offset | Opcodes |
@@ -423,5 +502,20 @@ These use OpenVM's built-in `SystemOpcode` rather than crush-specific opcodes.
 | `Eq64Opcode` | 0x220c | EQ, NEQ |
 | `Mul64Opcode` | 0x2250 | MUL |
 | `DivRem64Opcode` | 0x2254 | DIV, DIVU, REM, REMU |
+| `BaseAlu256Opcode` | 0x1400 | ADD, SUB, XOR, OR, AND |
+| `Shift256Opcode` | 0x1405 | SLL, SRL, SRA |
+| `LessThan256Opcode` | 0x1408 | SLT, SLTU |
+| `BranchEqual256Opcode` | 0x1420 | BEQ, BNE |
+| `BranchLessThan256Opcode` | 0x1425 | BLT, BLTU, BGE, BGEU |
+| `Mul256Opcode` | 0x1450 | MUL |
+| `Rv32ModularArithmeticOpcode` | 0x0500 | ADD, SUB, SETUP_ADDSUB, MUL, DIV, SETUP_MULDIV, IS_EQ, SETUP_ISEQ |
+| `Rv32WeierstrassOpcode` | 0x0600 | EC_ADD_NE, SETUP_EC_ADD_NE, EC_DOUBLE, SETUP_EC_DOUBLE |
+| `Fp2Opcode` | 0x0710 | ADD, SUB, SETUP_ADDSUB, MUL, DIV, SETUP_MULDIV |
 
 The 32-bit ALU/Mul/DivRem/Shift/LessThan opcodes are re-exported from OpenVM's RV32IM transpiler and share the same offset range. The 64-bit variants are crush-specific and use offset range `0x22xx` with the same variant names and order to reuse the same core chips.
+
+The Int256 opcodes are newtypes over the 32-bit operation enums, so they reuse those cores too;
+their offsets mirror upstream's relative layout shifted into a free crush range, clear of
+`0x1310..=0x1313` which the keccak and sha2 branches use. The modular, Weierstrass and Fp2
+opcodes keep upstream's offsets, which do not collide with crush's, and each configured
+modulus or curve shifts the whole class by one `COUNT`.

@@ -1,8 +1,9 @@
 use openvm_algebra_transpiler::{Fp2Opcode, Rv32ModularArithmeticOpcode};
 use openvm_crush_transpiler::{
-    BaseAlu64Opcode, BaseAlu256Opcode, BaseAluOpcode, CallOpcode, ConstOpcodes, Eq64Opcode,
-    EqOpcode, HintStoreOpcode, JumpOpcode, LessThan64Opcode, LessThan256Opcode, LessThanOpcode,
-    Mul256Opcode, MulOpcode, Phantom, Shift64Opcode, Shift256Opcode, ShiftOpcode,
+    BaseAlu64Opcode, BaseAlu256Opcode, BaseAluOpcode, BranchEqual256Opcode, BranchEqualOpcode,
+    BranchLessThan256Opcode, BranchLessThanOpcode, CallOpcode, ConstOpcodes, Eq64Opcode, EqOpcode,
+    HintStoreOpcode, JumpOpcode, LessThan64Opcode, LessThan256Opcode, LessThanOpcode, Mul256Opcode,
+    MulOpcode, Phantom, Shift64Opcode, Shift256Opcode, ShiftOpcode,
 };
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::{
@@ -1041,6 +1042,59 @@ pub fn int256_shift<F: PrimeField32>(
     rs2_reg: usize,
 ) -> Instruction<F> {
     heap_r_type(Shift256Opcode(op).global_opcode(), rd_reg, rs1_reg, rs2_reg)
+}
+
+/// 256-bit branch: compares `MEM[rs1]` against `MEM[rs2]` and, if the comparison holds, jumps
+/// by `imm` bytes instead of falling through.
+///
+/// Unlike the other Int256 instructions this takes no destination, so `c` carries the pc offset
+/// rather than a register. There is no wasm import for it -- wasm branches on an i32, so a guest
+/// compares first and branches on the result -- but the chips are part of the Int256 extension,
+/// and `powdr-wasm/src/tests/isolated_tests.rs` exercises them directly.
+fn int256_b_type<F: PrimeField32>(
+    opcode: VmOpcode,
+    rs1_reg: usize,
+    rs2_reg: usize,
+    imm: i32,
+) -> Instruction<F> {
+    Instruction::from_isize(
+        opcode,
+        (riscv::RV32_REGISTER_NUM_LIMBS * rs1_reg) as isize,
+        (riscv::RV32_REGISTER_NUM_LIMBS * rs2_reg) as isize,
+        imm as isize,
+        riscv::RV32_REGISTER_AS as isize,
+        riscv::RV32_MEMORY_AS as isize,
+    )
+}
+
+/// 256-bit equality branch: BEQ or BNE.
+pub fn int256_branch_eq<F: PrimeField32>(
+    op: BranchEqualOpcode,
+    rs1_reg: usize,
+    rs2_reg: usize,
+    imm: i32,
+) -> Instruction<F> {
+    int256_b_type(
+        BranchEqual256Opcode(op).global_opcode(),
+        rs1_reg,
+        rs2_reg,
+        imm,
+    )
+}
+
+/// 256-bit ordering branch: BLT, BLTU, BGE or BGEU.
+pub fn int256_branch_lt<F: PrimeField32>(
+    op: BranchLessThanOpcode,
+    rs1_reg: usize,
+    rs2_reg: usize,
+    imm: i32,
+) -> Instruction<F> {
+    int256_b_type(
+        BranchLessThan256Opcode(op).global_opcode(),
+        rs1_reg,
+        rs2_reg,
+        imm,
+    )
 }
 
 // =================================================================================================

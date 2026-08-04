@@ -23,6 +23,7 @@ use openvm_sdk::StdIn;
 use super::helpers;
 use crate::proving::{ALL_BACKENDS, Backend};
 use crush_translation::instruction_builder::*;
+use openvm_crush_transpiler::{BranchEqualOpcode, BranchLessThanOpcode};
 
 type F = openvm_stark_sdk::p3_baby_bear::BabyBear;
 
@@ -61,6 +62,10 @@ pub struct TestSpec {
 
     /// Optional stdin data for hint tests.
     pub stdin: StdIn,
+
+    /// VM config to run under. Defaults to `CrushConfig::default()`; set it to reach an
+    /// opcode from one of the optional precompile extensions.
+    pub vm_config: CrushConfig,
 }
 
 /// Read a register value from memory.
@@ -177,7 +182,7 @@ fn verify_state(
 /// Raw execution using InterpretedInstance::execute_from_state.
 pub fn test_execution(spec: &TestSpec) -> Result<(), Box<dyn std::error::Error>> {
     let exe = build_exe(spec);
-    let vm_config = CrushConfig::default();
+    let vm_config = spec.vm_config.clone();
     let vm = VmExecutor::new(vm_config.clone()).unwrap();
     let instance = vm.instance(&exe).unwrap();
 
@@ -190,9 +195,12 @@ pub fn test_execution(spec: &TestSpec) -> Result<(), Box<dyn std::error::Error>>
 /// Metered execution using InterpretedInstance::execute_metered_from_state.
 pub fn test_metered_execution(spec: &TestSpec) -> Result<(), Box<dyn std::error::Error>> {
     let exe = build_exe(spec);
-    let vm_config = CrushConfig::default();
-    let (segments, final_state) =
-        helpers::test_metered_execution(&exe, build_initial_state(spec, &exe, &vm_config))?;
+    let vm_config = spec.vm_config.clone();
+    let (segments, final_state) = helpers::test_metered_execution(
+        vm_config.clone(),
+        &exe,
+        build_initial_state(spec, &exe, &vm_config),
+    )?;
 
     assert_eq!(segments.len(), 1, "expected a single segment");
     verify_state(spec, &final_state)
@@ -201,8 +209,12 @@ pub fn test_metered_execution(spec: &TestSpec) -> Result<(), Box<dyn std::error:
 /// Preflight using VirtualMachine::execute_preflight.
 pub fn test_preflight(spec: &TestSpec) -> Result<(), Box<dyn std::error::Error>> {
     let exe = build_exe(spec);
-    let vm_config = CrushConfig::default();
-    let final_state = helpers::test_preflight(&exe, build_initial_state(spec, &exe, &vm_config))?;
+    let vm_config = spec.vm_config.clone();
+    let final_state = helpers::test_preflight(
+        vm_config.clone(),
+        &exe,
+        build_initial_state(spec, &exe, &vm_config),
+    )?;
 
     verify_state(spec, &final_state)
 }
@@ -213,7 +225,7 @@ pub fn test_preflight(spec: &TestSpec) -> Result<(), Box<dyn std::error::Error>>
 /// Runs on the specified backends (CPU, GPU, or both) and verifies the final state.
 pub fn test_prove(spec: &TestSpec, backends: &[Backend]) -> Result<(), Box<dyn std::error::Error>> {
     let exe = build_exe(spec);
-    let vm_config = CrushConfig::default();
+    let vm_config = spec.vm_config.clone();
     let init_state = build_initial_state(spec, &exe, &vm_config);
 
     for &backend in backends {
@@ -3754,6 +3766,93 @@ mod tests {
             ..Default::default()
         };
         test_spec_for_all_register_bases(spec)
+    }
+
+    // ==================== Int256 branch tests ====================
+    //
+    // The 256-bit branch chips are the one part of the Int256 extension with no wasm import:
+    // wasm branches on an i32, so a guest compares first and branches on the result. They are
+    // covered here instead, which also exercises the `vec_heap_branch` adapter fork.
+    //
+    // Operands are two register-held pointers into the heap, each naming 32 little-endian
+    // bytes, plus a pc offset. Both values below need all 32 bytes to be compared:
+    //
+    //   x = 2^248 + 1     y = 2^248
+    //
+    // so they differ only in the lowest byte, and x > y unsigned. Read as signed, both are
+    // positive (the top byte is 0x01), so the signed and unsigned orderings agree; a swapped
+    // limb order or a truncated comparison would disagree with at least one expectation.
+
+    const X_ADDR: u32 = 0x100;
+    const Y_ADDR: u32 = 0x200;
+
+    /// `start_ram` entries putting x at [`X_ADDR`] and y at [`Y_ADDR`].
+    fn int256_operands() -> Vec<(u32, u32)> {
+        let mut ram = vec![];
+        // x = 2^248 + 1: lowest word 1, highest word 0x0100_0000.
+        ram.push((X_ADDR, 1));
+        ram.extend((1..7).map(|i| (X_ADDR + 4 * i, 0)));
+        ram.push((X_ADDR + 28, 0x0100_0000));
+        // y = 2^248.
+        ram.extend((0..7).map(|i| (Y_ADDR + 4 * i, 0)));
+        ram.push((Y_ADDR + 28, 0x0100_0000));
+        ram
+    }
+
+    /// The offset every branch below uses. A taken branch sets `pc = from_pc + imm`, so to be
+    /// distinguishable from falling through it has to skip a whole instruction: two steps.
+    const BRANCH_OFFSET: i32 = 2 * DEFAULT_PC_STEP as i32;
+
+    /// A spec running `branch` with the pointers in registers `fp+0` and `fp+1`, followed by a
+    /// `halt` the branch jumps over. Whichever way it goes the program halts immediately, so
+    /// the final pc is what says which way that was.
+    fn int256_branch_spec(branch: Instruction<F>, taken: bool) -> TestSpec {
+        const FP: u32 = 40;
+        TestSpec {
+            program: vec![branch, halt()],
+            start_fp: FP,
+            start_registers: vec![(FP as usize, X_ADDR), (FP as usize + 1, Y_ADDR)],
+            start_ram: int256_operands(),
+            expected_pc: Some(if taken {
+                BRANCH_OFFSET as u32
+            } else {
+                DEFAULT_PC_STEP
+            }),
+            vm_config: CrushConfig::default().with_int256(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn test_int256_branch_eq() {
+        setup_tracing_with_log_level(Level::WARN);
+        // x != y, so BEQ falls through and BNE is taken.
+        test_spec(int256_branch_spec(
+            int256_branch_eq(BranchEqualOpcode::BEQ, 0, 1, BRANCH_OFFSET),
+            false,
+        ));
+        test_spec(int256_branch_spec(
+            int256_branch_eq(BranchEqualOpcode::BNE, 0, 1, BRANCH_OFFSET),
+            true,
+        ));
+    }
+
+    #[test]
+    fn test_int256_branch_lt() {
+        setup_tracing_with_log_level(Level::WARN);
+        // x > y, and both are positive, so the signed and unsigned answers agree.
+        for op in [BranchLessThanOpcode::BLT, BranchLessThanOpcode::BLTU] {
+            test_spec(int256_branch_spec(
+                int256_branch_lt(op, 0, 1, BRANCH_OFFSET),
+                false,
+            ));
+        }
+        for op in [BranchLessThanOpcode::BGE, BranchLessThanOpcode::BGEU] {
+            test_spec(int256_branch_spec(
+                int256_branch_lt(op, 0, 1, BRANCH_OFFSET),
+                true,
+            ));
+        }
     }
 
     // ==================== Non-TestSpec Tests ====================

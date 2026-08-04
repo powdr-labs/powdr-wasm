@@ -28,7 +28,7 @@ use powdr_openvm::program::{CompiledProgram, OriginalCompiledProgram};
 use powdr_openvm::{DEFAULT_DEGREE_BOUND, SpecializedConfig, StagedPipeline};
 
 pub type F = openvm_stark_sdk::p3_baby_bear::BabyBear;
-type SC = BabyBearPoseidon2Config;
+pub type SC = BabyBearPoseidon2Config;
 
 static VM_PROVING_KEY: OnceLock<MultiStarkProvingKey<SC>> = OnceLock::new();
 
