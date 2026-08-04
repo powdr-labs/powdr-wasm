@@ -35,7 +35,7 @@ type F = openvm_stark_sdk::p3_baby_bear::BabyBear;
 use crate::builtin_functions::BuiltinFunction;
 use crush_translation::{Directive, LinkedProgram, OpenVMSettings};
 
-use crush_circuit::CrushConfig;
+use crush_circuit::{CrushConfig, ecc, pairing::PairingCurve};
 use powdr_autoprecompiles::{GenerateConfig, SelectConfig};
 
 #[derive(Parser)]
@@ -105,6 +105,8 @@ enum Commands {
         /// Support unaligned memory accesses (needed for e.g. Go-compiled WASM)
         #[arg(long, default_value_t = false)]
         unaligned_memory: bool,
+        #[command(flatten)]
+        extensions: ExtensionArgs,
     },
     /// Compile a WASM program: WASM loading, PGO, APC generation, and keygen.
     /// Outputs a compiled artifact directory that can be used by `prove` or `prove-riscv`.
@@ -125,6 +127,8 @@ enum Commands {
         /// Support unaligned memory accesses (needed for e.g. Go-compiled WASM)
         #[arg(long, default_value_t = false)]
         unaligned_memory: bool,
+        #[command(flatten)]
+        extensions: ExtensionArgs,
     },
     /// Compile a RISC-V program: Rust compilation, PGO, APC generation, and keygen.
     /// Outputs a compiled artifact directory that can be used by `prove-riscv`.
@@ -171,11 +175,15 @@ enum Commands {
         /// Support unaligned memory accesses (needed for e.g. Go-compiled WASM)
         #[arg(long, default_value_t = false)]
         unaligned_memory: bool,
+        #[command(flatten)]
+        extensions: ExtensionArgs,
     },
     /// Generate and cache proving keys to a directory (for use with `prove --cache-dir`)
     Keygen {
         /// Directory to write cached proving keys to
         cache_dir: PathBuf,
+        #[command(flatten)]
+        extensions: ExtensionArgs,
     },
     /// Mock-proves execution of a function from the WASM program with the given arguments
     /// (constraint verification only, no cryptographic proof)
@@ -191,6 +199,8 @@ enum Commands {
         /// Support unaligned memory accesses (needed for e.g. Go-compiled WASM)
         #[arg(long, default_value_t = false)]
         unaligned_memory: bool,
+        #[command(flatten)]
+        extensions: ExtensionArgs,
     },
     /// Proves execution of a function from the RISC-V program with the given arguments.
     /// Even though not the main goal of this crate, this is useful for benchmarking against
@@ -213,6 +223,113 @@ enum Commands {
         #[arg(long)]
         compiled_dir: Option<PathBuf>,
     },
+}
+
+/// A curve whose parameters the precompile extensions can be configured with.
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+enum Curve {
+    Secp256k1,
+    P256,
+    Bn254,
+    #[value(name = "bls12-381")]
+    Bls12_381,
+}
+
+impl Curve {
+    fn curve_config(self) -> ecc::CurveConfig {
+        match self {
+            Curve::Secp256k1 => ecc::SECP256K1_CONFIG.clone(),
+            Curve::P256 => ecc::P256_CONFIG.clone(),
+            Curve::Bn254 => PairingCurve::Bn254.curve_config(),
+            Curve::Bls12_381 => PairingCurve::Bls12_381.curve_config(),
+        }
+    }
+
+    /// The name the Fp2 extension knows this curve's quadratic extension field by.
+    fn complex_struct_name(self) -> String {
+        format!("{:?}Fp2", self)
+    }
+
+    fn pairing_curve(self) -> Option<PairingCurve> {
+        match self {
+            Curve::Bn254 => Some(PairingCurve::Bn254),
+            Curve::Bls12_381 => Some(PairingCurve::Bls12_381),
+            Curve::Secp256k1 | Curve::P256 => None,
+        }
+    }
+}
+
+/// Optional precompile extensions.
+///
+/// These change which chips the VM contains, so the same flags must be passed to every
+/// command of a compile/keygen/prove pipeline, or the proving key will not match the
+/// executable.
+///
+/// The curve-parameterised extensions each take a list of curves, and the order matters:
+/// it fixes the index that the guest's intrinsic names refer to, because the ISA encodes
+/// the modulus (or curve) index in the opcode itself. With `--modular bn254,secp256k1`,
+/// `__modular_0_add` is addition mod the BN254 coordinate prime and `__modular_1_add` is
+/// addition mod the secp256k1 one. The lists are independent of each other, so an `--ecc`
+/// curve does not have to appear in `--modular` unless the guest also does field
+/// arithmetic on its coordinates.
+#[derive(Args, Clone, Debug, Default)]
+struct ExtensionArgs {
+    /// Enable the Int256 precompiles
+    #[arg(long, default_value_t = false)]
+    int256: bool,
+    /// Enable modular arithmetic over each curve's coordinate field
+    #[arg(long, value_delimiter = ',', value_enum)]
+    modular: Vec<Curve>,
+    /// Enable Fp2 arithmetic over each curve's coordinate field
+    #[arg(long, value_delimiter = ',', value_enum)]
+    fp2: Vec<Curve>,
+    /// Enable Weierstrass curve arithmetic for each curve
+    #[arg(long, value_delimiter = ',', value_enum)]
+    ecc: Vec<Curve>,
+    /// Enable pairing hints for each curve. Only bn254 and bls12-381 have pairings; this
+    /// adds no AIRs of its own, just the hint phantoms the pairing algorithms need.
+    #[arg(long, value_delimiter = ',', value_enum)]
+    pairing: Vec<Curve>,
+}
+
+impl ExtensionArgs {
+    fn build_config(&self) -> CrushConfig {
+        let mut config = CrushConfig::default();
+        if self.int256 {
+            config = config.with_int256();
+        }
+        if !self.modular.is_empty() {
+            config = config.with_modular(
+                self.modular
+                    .iter()
+                    .map(|c| c.curve_config().modulus)
+                    .collect(),
+            );
+        }
+        if !self.fp2.is_empty() {
+            config = config.with_fp2(
+                self.fp2
+                    .iter()
+                    .map(|c| (c.complex_struct_name(), c.curve_config().modulus))
+                    .collect(),
+            );
+        }
+        if !self.ecc.is_empty() {
+            config = config.with_ecc(self.ecc.iter().map(|c| c.curve_config()).collect());
+        }
+        if !self.pairing.is_empty() {
+            config = config.with_pairing(
+                self.pairing
+                    .iter()
+                    .map(|c| {
+                        c.pairing_curve()
+                            .unwrap_or_else(|| panic!("{c:?} has no pairing"))
+                    })
+                    .collect(),
+            );
+        }
+        config
+    }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -244,13 +361,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             input,
             metrics,
             unaligned_memory,
+            extensions,
         } => {
             // Create and execute program
             let mut linked_program = load_wasm_module(&program, unaligned_memory);
             let stdin = make_stdin(&input);
 
             let run = || -> Result<()> {
-                let output = linked_program.execute(CrushConfig::default(), &function, stdin)?;
+                let config = extensions.build_config();
+                let output = linked_program.execute(config, &function, stdin)?;
                 println!("output: {output:?}");
                 Ok(())
             };
@@ -271,9 +390,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             powdr,
             output_dir,
             unaligned_memory,
+            extensions,
         } => {
+            let config = extensions.build_config();
             let original_program =
-                load_wasm_original_program(&program, &function, unaligned_memory);
+                load_wasm_original_program(&program, &function, unaligned_memory, config);
             let stdin = make_stdin(&input);
             let (generate, select) = powdr.build_powdr_config();
             compile::compile_crush_to_disk(
@@ -316,6 +437,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             cache_dir,
             compiled_dir,
             unaligned_memory,
+            extensions,
         } => {
             let stdin = make_stdin(&input);
 
@@ -328,8 +450,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         program.expect("program is required when --compiled-dir is not provided");
                     let function =
                         function.expect("function is required when --compiled-dir is not provided");
+                    let config = extensions.build_config();
                     let original_program =
-                        load_wasm_original_program(&program, &function, unaligned_memory);
+                        load_wasm_original_program(&program, &function, unaligned_memory, config);
                     let (generate, select) = powdr.build_powdr_config();
                     proving::prove(
                         original_program,
@@ -355,8 +478,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 prove()?;
             }
         }
-        Commands::Keygen { cache_dir } => {
-            proving::keygen_to_disk(&cache_dir)?;
+        Commands::Keygen {
+            cache_dir,
+            extensions,
+        } => {
+            let config = extensions.build_config();
+            proving::keygen_to_disk(&cache_dir, config)?;
             println!("Keys written to {}", cache_dir.display());
         }
         Commands::MockProve {
@@ -364,10 +491,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             function,
             input,
             unaligned_memory,
+            extensions,
         } => {
             let exe = load_wasm_exe(&program, &function, unaligned_memory);
             let stdin = make_stdin(&input);
-            let vm_config = CrushConfig::default();
+            let vm_config = extensions.build_config();
 
             let initial_state = VmState::initial(
                 &vm_config.system,
@@ -378,12 +506,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             #[cfg(feature = "cuda")]
             {
-                proving::mock_prove_gpu(&exe, initial_state).map_err(|e| eyre::eyre!("{e}"))?;
+                proving::mock_prove_gpu(vm_config, &exe, initial_state).map_err(|e| eyre::eyre!("{e}"))?;
                 println!("GPU mock proof verified successfully.");
             }
             #[cfg(not(feature = "cuda"))]
             {
-                proving::mock_prove(&exe, initial_state).map_err(|e| eyre::eyre!("{e}"))?;
+                proving::mock_prove(vm_config, &exe, initial_state).map_err(|e| eyre::eyre!("{e}"))?;
                 println!("Mock proof verified successfully.");
             }
         }
@@ -471,10 +599,11 @@ fn load_wasm_original_program(
     program: impl AsRef<Path>,
     function: &str,
     unaligned_memory: bool,
+    config: CrushConfig,
 ) -> OriginalCompiledProgram<'static, autoprecompiles::CrushISA> {
     let linked_program = load_wasm_module(program, unaligned_memory);
     let exe = Arc::new(linked_program.program_with_entry_point(function));
-    let vm_config = OriginalVmConfig::new(CrushConfig::default());
+    let vm_config = OriginalVmConfig::new(config);
 
     OriginalCompiledProgram {
         exe,

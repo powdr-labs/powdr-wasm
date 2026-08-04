@@ -329,13 +329,13 @@ fn run_wasm_test_function_raw(
 
     // Mock proof (CPU)
     println!("  Mock proof (CPU)");
-    mock_prove(&exe, initial_state.clone())?;
+    mock_prove(vm_config.clone(), &exe, initial_state.clone())?;
 
     // Mock proof (GPU)
     #[cfg(feature = "cuda")]
     {
         println!("  Mock proof (GPU)");
-        crate::proving::mock_prove_gpu(&exe, initial_state)?;
+        crate::proving::mock_prove_gpu(vm_config, &exe, initial_state)?;
     }
 
     Ok(output)

@@ -1,10 +1,5 @@
 use std::sync::Arc;
 
-use hex_literal::hex;
-use lazy_static::lazy_static;
-use num_bigint::BigUint;
-use num_traits::{FromPrimitive, Zero};
-use once_cell::sync::Lazy;
 use openvm_circuit::{
     arch::{
         AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, DEFAULT_BLOCK_SIZE,
@@ -22,12 +17,17 @@ use openvm_circuit_primitives::{
     var_range::VariableRangeCheckerBus,
 };
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
+// Plain curve data, with no frame-pointer involvement: reuse upstream's rather than
+// duplicating it, so the pairing extension's `CurveConfig` is the same type as ours.
+pub use openvm_ecc_circuit::{
+    CurveConfig, P256_CONFIG, P256_ECC_STRUCT_NAME, P256_MODULUS, P256_ORDER, SECP256K1_CONFIG,
+    SECP256K1_ECC_STRUCT_NAME, SECP256K1_MODULUS, SECP256K1_ORDER,
+};
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val, p3_field::PrimeField32};
 use serde::{Deserialize, Serialize};
-use serde_with::{DisplayFromStr, serde_as};
 use strum::EnumCount;
 
 use crate::ecc::{
@@ -35,41 +35,6 @@ use crate::ecc::{
     NUM_LIMBS_48, WeierstrassAir, get_ec_addne_air, get_ec_addne_chip, get_ec_addne_step,
     get_ec_double_air, get_ec_double_chip, get_ec_double_step,
 };
-
-#[serde_as]
-#[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
-pub struct CurveConfig {
-    /// The name of the curve struct as defined by moduli_declare.
-    pub struct_name: String,
-    /// The coordinate modulus of the curve.
-    #[serde_as(as = "DisplayFromStr")]
-    pub modulus: BigUint,
-    /// The scalar field modulus of the curve.
-    #[serde_as(as = "DisplayFromStr")]
-    pub scalar: BigUint,
-    /// The coefficient a of y^2 = x^3 + ax + b.
-    #[serde_as(as = "DisplayFromStr")]
-    pub a: BigUint,
-    /// The coefficient b of y^2 = x^3 + ax + b.
-    #[serde_as(as = "DisplayFromStr")]
-    pub b: BigUint,
-}
-
-pub static SECP256K1_CONFIG: Lazy<CurveConfig> = Lazy::new(|| CurveConfig {
-    struct_name: SECP256K1_ECC_STRUCT_NAME.to_string(),
-    modulus: SECP256K1_MODULUS.clone(),
-    scalar: SECP256K1_ORDER.clone(),
-    a: BigUint::zero(),
-    b: BigUint::from_u8(7u8).unwrap(),
-});
-
-pub static P256_CONFIG: Lazy<CurveConfig> = Lazy::new(|| CurveConfig {
-    struct_name: P256_ECC_STRUCT_NAME.to_string(),
-    modulus: P256_MODULUS.clone(),
-    scalar: P256_ORDER.clone(),
-    a: BigUint::from_bytes_le(&P256_A),
-    b: BigUint::from_bytes_le(&P256_B),
-});
 
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
 pub struct WeierstrassExtension {
@@ -391,31 +356,3 @@ where
         Ok(())
     }
 }
-
-// Convenience constants for constructors
-lazy_static! {
-    // The constants are taken from: https://en.bitcoin.it/wiki/Secp256k1
-    pub static ref SECP256K1_MODULUS: BigUint = BigUint::from_bytes_be(&hex!(
-        "FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F"
-    ));
-    pub static ref SECP256K1_ORDER: BigUint = BigUint::from_bytes_be(&hex!(
-        "FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
-    ));
-}
-
-lazy_static! {
-    // The constants are taken from: https://neuromancer.sk/std/secg/secp256r1
-    pub static ref P256_MODULUS: BigUint = BigUint::from_bytes_be(&hex!(
-        "ffffffff00000001000000000000000000000000ffffffffffffffffffffffff"
-    ));
-    pub static ref P256_ORDER: BigUint = BigUint::from_bytes_be(&hex!(
-        "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"
-    ));
-}
-// little-endian
-const P256_A: [u8; 32] = hex!("fcffffffffffffffffffffff00000000000000000000000001000000ffffffff");
-// little-endian
-const P256_B: [u8; 32] = hex!("4b60d2273e3cce3bf6b053ccb0061d65bc86987655bdebb3e7933aaad835c65a");
-
-pub const SECP256K1_ECC_STRUCT_NAME: &str = "Secp256k1Point";
-pub const P256_ECC_STRUCT_NAME: &str = "P256Point";

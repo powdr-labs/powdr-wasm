@@ -6,8 +6,7 @@ use std::sync::OnceLock;
 use autoprecompiles::CrushISA;
 use crush_circuit::{CrushConfig, CrushCpuBuilder};
 use openvm_circuit::arch::{
-    Executor, MeteredExecutor, PreflightExecutor, VirtualMachine, VmBuilder, VmCircuitConfig,
-    VmExecutionConfig, VmState, debug_proving_ctx,
+    Executor, MeteredExecutor, PreflightExecutor, VirtualMachine, VmBuilder, VmCircuitConfig, VmExecutionConfig, VmState, debug_proving_ctx,
 };
 use openvm_instructions::exe::VmExe;
 use openvm_sdk::StdIn;
@@ -55,13 +54,14 @@ impl Backend {
     /// Run mock proof on this backend, returning the final state.
     pub fn mock_prove(
         self,
+        vm_config: CrushConfig,
         exe: &VmExe<F>,
         init_state: VmState<F>,
     ) -> Result<VmState<F>, Box<dyn std::error::Error>> {
         match self {
-            Backend::Cpu => mock_prove(exe, init_state),
+            Backend::Cpu => mock_prove(vm_config, exe, init_state),
             #[cfg(feature = "cuda")]
-            Backend::Gpu => mock_prove_gpu(exe, init_state),
+            Backend::Gpu => mock_prove_gpu(vm_config, exe, init_state),
         }
     }
 
@@ -125,8 +125,7 @@ pub(crate) const APP_PK_FILE: &str = "app_pk.bin";
 pub(crate) const AGG_PK_FILE: &str = "agg_pk.bin";
 pub(crate) const COMPILED_PROGRAM_FILE: &str = "compiled_program.bin";
 
-fn default_app_config_without_apcs() -> AppConfig<SpecializedConfig<CrushISA>> {
-    let vm_config = CrushConfig::default();
+fn app_config_without_apcs(vm_config: CrushConfig) -> AppConfig<SpecializedConfig<CrushISA>> {
     let app_config = powdr_openvm::SpecializedConfig::<CrushISA>::new(
         OriginalVmConfig::new(vm_config),
         vec![],
@@ -138,10 +137,13 @@ fn default_app_config_without_apcs() -> AppConfig<SpecializedConfig<CrushISA>> {
 }
 
 /// Generate app and aggregation proving keys and write them to `cache_dir`.
-pub fn keygen_to_disk(cache_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+pub fn keygen_to_disk(
+    cache_dir: &Path,
+    vm_config: CrushConfig,
+) -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(cache_dir)?;
 
-    let app_config = default_app_config_without_apcs();
+    let app_config = app_config_without_apcs(vm_config);
     let sdk = CrushSdk::new_without_transpiler(app_config, AggregationSystemParams::default())?;
 
     tracing::info!("Generating app proving key...");
@@ -159,7 +161,10 @@ pub fn keygen_to_disk(cache_dir: &Path) -> Result<(), Box<dyn std::error::Error>
     Ok(())
 }
 
-fn build_sdk(cache_dir: Option<&Path>) -> Result<CrushSdk, Box<dyn std::error::Error>> {
+fn build_sdk(
+    cache_dir: Option<&Path>,
+    fresh_config: AppConfig<SpecializedConfig<CrushISA>>,
+) -> Result<CrushSdk, Box<dyn std::error::Error>> {
     let mut builder = CrushSdk::builder();
 
     // Each proving layer has a single source of truth: either a cached proving
@@ -181,7 +186,7 @@ fn build_sdk(cache_dir: Option<&Path>) -> Result<CrushSdk, Box<dyn std::error::E
             have_agg_pk = true;
         }
     } else {
-        builder = builder.app_config(default_app_config_without_apcs());
+        builder = builder.app_config(fresh_config);
     }
 
     if !have_agg_pk {
@@ -207,7 +212,7 @@ pub fn prove(
     let app_fri_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
     let app_config = AppConfig::new(compiled.vm_config.clone(), app_fri_params);
     let sdk = if apc_count == 0 {
-        build_sdk(cache_dir)?
+        build_sdk(cache_dir, app_config.clone())?
     } else {
         CrushSdk::new_without_transpiler(app_config, AggregationSystemParams::default())?
     };
@@ -244,6 +249,7 @@ pub fn prove(
 pub fn mock_prove_with<E, VB>(
     engine: E,
     builder: VB,
+    vm_config: CrushConfig,
     exe: &VmExe<F>,
     init_state: VmState<F>,
 ) -> Result<VmState<F>, Box<dyn std::error::Error>>
@@ -255,9 +261,19 @@ where
         + MeteredExecutor<Val<E::SC>>
         + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
 {
-    let pk = vm_proving_key();
-    let d_pk = engine.device().transport_pk_to_device(pk);
-    let vm_config = CrushConfig::default();
+    // Cached key for the default config; a fresh one when extensions change the AIR set.
+    let pk_storage = if vm_config.int256.is_some() {
+        let circuit = vm_config
+            .create_airs()
+            .expect("failed to create AIR inventory for keygen");
+        let airs: Vec<_> = circuit.into_airs().collect();
+        let (pk, _vk) = engine.keygen(&airs);
+        Some(pk)
+    } else {
+        None
+    };
+    let pk_ref = pk_storage.as_ref().unwrap_or_else(|| vm_proving_key());
+    let d_pk = engine.device().transport_pk_to_device(pk_ref);
     let mut vm = VirtualMachine::<_, VB>::new(engine, builder, vm_config, d_pk)?;
 
     // Run metered execution to discover segments.
@@ -295,10 +311,11 @@ where
 /// Mock proof with constraint verification (all segments) using CPU engine.
 /// Returns the final state after all segments have been processed.
 pub fn mock_prove(
+    vm_config: CrushConfig,
     exe: &VmExe<F>,
     init_state: VmState<F>,
 ) -> Result<VmState<F>, Box<dyn std::error::Error>> {
-    mock_prove_with(cpu_engine(), CrushCpuBuilder, exe, init_state)
+    mock_prove_with(cpu_engine(), CrushCpuBuilder, vm_config, exe, init_state)
 }
 
 /// Mock proof with constraint verification (all segments) using GPU engine.
@@ -306,12 +323,14 @@ pub fn mock_prove(
 /// Returns the final state after all segments have been processed.
 #[cfg(feature = "cuda")]
 pub fn mock_prove_gpu(
+    vm_config: CrushConfig,
     exe: &VmExe<F>,
     init_state: VmState<F>,
 ) -> Result<VmState<F>, Box<dyn std::error::Error>> {
     mock_prove_with(
         gpu_engine(),
         crush_circuit::CrushGpuBuilder,
+        vm_config,
         exe,
         init_state,
     )

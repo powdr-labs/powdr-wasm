@@ -164,9 +164,9 @@ impl OpenVmISA for CrushISA {
             inventory,
         )?;
 
-        // Int256 opcodes are not in `allowed_opcodes`, so they never appear inside an
-        // autoprecompile and these chips are never asked for a trace. They are still built
-        // to keep the chip list index-aligned with `create_dummy_airs`.
+        // None of the precompile opcodes are in `allowed_opcodes`, so they never appear
+        // inside an autoprecompile and the chips below are never asked for a trace. They are
+        // still built to keep the chip list index-aligned with `create_dummy_airs`.
         if let Some(int256) = &config.int256 {
             VmProverExtension::<BabyBearPoseidon2CpuEngine, _, _>::extend_prover(
                 &Int256CpuProverExt,

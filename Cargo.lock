@@ -1078,11 +1078,14 @@ dependencies = [
  "crush",
  "crush-circuit",
  "itertools 0.14.0",
+ "openvm-algebra-transpiler",
  "openvm-circuit",
  "openvm-crush-transpiler",
+ "openvm-ecc-transpiler",
  "openvm-instructions",
  "openvm-rv32im-transpiler",
  "openvm-stark-backend",
+ "strum 0.26.3",
  "wasmparser 0.235.0",
 ]
 

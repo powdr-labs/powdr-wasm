@@ -27,6 +27,7 @@ use crush::{
 };
 use crush_circuit::CrushConfig;
 use itertools::Itertools;
+use openvm_algebra_transpiler::{Fp2Opcode, Rv32ModularArithmeticOpcode};
 use openvm_circuit::{
     arch::{ExecutionError, Streams, VmExecutor},
     system::memory::{merkle::public_values::extract_public_values, online::LinearMemory},
@@ -35,6 +36,7 @@ use openvm_crush_transpiler::{
     BaseAlu64Opcode, BaseAluOpcode, DivRem64Opcode, DivRemOpcode, Eq64Opcode, EqOpcode,
     LessThan64Opcode, LessThanOpcode, Mul64Opcode, MulOpcode, Shift64Opcode, ShiftOpcode,
 };
+use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::{
     exe::{SparseMemoryImage, VmExe},
     instruction::Instruction,
@@ -646,6 +648,137 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
                 )));
                 directives
             }
+            // Int256 heap intrinsics. Each takes three wasm pointers -- destination,
+            // then the two operands -- to 32-byte little-endian integers. The chips read
+            // the pointers from registers and the data from the heap, so all three are
+            // rebased onto the linear memory base here.
+            ("env", name) if name.starts_with("__int256_") => {
+                assert!(outputs.is_empty());
+                let mem_start = c
+                    .module()
+                    .linear_memory_start()
+                    .expect("no memory allocated");
+                let rd = inputs[0].as_register().unwrap().start as usize;
+                let rs1 = inputs[1].as_register().unwrap().start as usize;
+                let rs2 = inputs[2].as_register().unwrap().start as usize;
+                let mut directives = vec![];
+                let rd = rebase_wasm_ptr::<F>(c, &mut directives, rd, mem_start);
+                let rs1 = rebase_wasm_ptr::<F>(c, &mut directives, rs1, mem_start);
+                let rs2 = rebase_wasm_ptr::<F>(c, &mut directives, rs2, mem_start);
+                let insn = match name {
+                    "__int256_add" => ib::int256_alu(BaseAluOpcode::ADD, rd, rs1, rs2),
+                    "__int256_sub" => ib::int256_alu(BaseAluOpcode::SUB, rd, rs1, rs2),
+                    "__int256_xor" => ib::int256_alu(BaseAluOpcode::XOR, rd, rs1, rs2),
+                    "__int256_or" => ib::int256_alu(BaseAluOpcode::OR, rd, rs1, rs2),
+                    "__int256_and" => ib::int256_alu(BaseAluOpcode::AND, rd, rs1, rs2),
+                    "__int256_mul" => ib::int256_mul(rd, rs1, rs2),
+                    "__int256_lt_u" => ib::int256_less_than(LessThanOpcode::SLTU, rd, rs1, rs2),
+                    "__int256_lt_s" => ib::int256_less_than(LessThanOpcode::SLT, rd, rs1, rs2),
+                    "__int256_shl" => ib::int256_shift(ShiftOpcode::SLL, rd, rs1, rs2),
+                    "__int256_shr_u" => ib::int256_shift(ShiftOpcode::SRL, rd, rs1, rs2),
+                    "__int256_shr_s" => ib::int256_shift(ShiftOpcode::SRA, rd, rs1, rs2),
+                    other => unimplemented!("unknown Int256 intrinsic `{other}`"),
+                };
+                directives.push(Directive::Instruction(insn));
+                directives
+            }
+            // Modular arithmetic, Fp2 and elliptic curve intrinsics, named
+            // `__<ext>_<index>_<op>`. The index selects which configured modulus (or curve)
+            // to use, matching the order given to `--modular`/`--fp2`/`--ecc`.
+            //
+            // Like the Int256 ones these take heap pointers in registers, so the pointers get
+            // rebased. `is_eq` is the exception: its destination is a plain i32 register.
+            ("env", name)
+                if name.starts_with("__modular_")
+                    || name.starts_with("__fp2_")
+                    || name.starts_with("__ecc_") =>
+            {
+                let mem_start = c
+                    .module()
+                    .linear_memory_start()
+                    .expect("no memory allocated");
+                let (ext, idx, op) = split_indexed_intrinsic(name);
+                let mut directives = vec![];
+
+                // `is_eq` returns its result in a register, so its first argument is already
+                // an operand pointer rather than a destination pointer.
+                let returns_register = op == "is_eq" || op == "setup_iseq";
+                let mut ptr = |i: usize| {
+                    let reg = inputs[i].as_register().unwrap().start as usize;
+                    rebase_wasm_ptr::<F>(c, &mut directives, reg, mem_start)
+                };
+                let insn = if returns_register {
+                    assert_eq!(outputs.len(), 1);
+                    let rd = outputs[0].start as usize;
+                    let (rs1, rs2) = (ptr(0), ptr(1));
+                    match op {
+                        "is_eq" => ib::modular_is_eq(idx, rd, rs1, rs2),
+                        _ => ib::modular_setup(
+                            idx,
+                            Rv32ModularArithmeticOpcode::SETUP_ISEQ,
+                            rd,
+                            rs1,
+                            rs2,
+                        ),
+                    }
+                } else {
+                    assert!(outputs.is_empty());
+                    let (rd, rs1, rs2) = (ptr(0), ptr(1), ptr(2));
+                    match (ext, op) {
+                        ("modular", "add") => {
+                            ib::modular_op(idx, Rv32ModularArithmeticOpcode::ADD, rd, rs1, rs2)
+                        }
+                        ("modular", "sub") => {
+                            ib::modular_op(idx, Rv32ModularArithmeticOpcode::SUB, rd, rs1, rs2)
+                        }
+                        ("modular", "mul") => {
+                            ib::modular_op(idx, Rv32ModularArithmeticOpcode::MUL, rd, rs1, rs2)
+                        }
+                        ("modular", "div") => {
+                            ib::modular_op(idx, Rv32ModularArithmeticOpcode::DIV, rd, rs1, rs2)
+                        }
+                        ("modular", "setup_addsub") => ib::modular_setup(
+                            idx,
+                            Rv32ModularArithmeticOpcode::SETUP_ADDSUB,
+                            rd,
+                            rs1,
+                            rs2,
+                        ),
+                        ("modular", "setup_muldiv") => ib::modular_setup(
+                            idx,
+                            Rv32ModularArithmeticOpcode::SETUP_MULDIV,
+                            rd,
+                            rs1,
+                            rs2,
+                        ),
+                        ("fp2", "add") => ib::fp2_op(idx, Fp2Opcode::ADD, rd, rs1, rs2),
+                        ("fp2", "sub") => ib::fp2_op(idx, Fp2Opcode::SUB, rd, rs1, rs2),
+                        ("fp2", "mul") => ib::fp2_op(idx, Fp2Opcode::MUL, rd, rs1, rs2),
+                        ("fp2", "div") => ib::fp2_op(idx, Fp2Opcode::DIV, rd, rs1, rs2),
+                        ("fp2", "setup_addsub") => {
+                            ib::fp2_op(idx, Fp2Opcode::SETUP_ADDSUB, rd, rs1, rs2)
+                        }
+                        ("fp2", "setup_muldiv") => {
+                            ib::fp2_op(idx, Fp2Opcode::SETUP_MULDIV, rd, rs1, rs2)
+                        }
+                        ("ecc", "add_ne") => {
+                            ib::ecc_op(idx, Rv32WeierstrassOpcode::EC_ADD_NE, rd, rs1, rs2)
+                        }
+                        ("ecc", "double") => {
+                            ib::ecc_op(idx, Rv32WeierstrassOpcode::EC_DOUBLE, rd, rs1, rs2)
+                        }
+                        ("ecc", "setup_add_ne") => {
+                            ib::ecc_op(idx, Rv32WeierstrassOpcode::SETUP_EC_ADD_NE, rd, rs1, rs2)
+                        }
+                        ("ecc", "setup_double") => {
+                            ib::ecc_op(idx, Rv32WeierstrassOpcode::SETUP_EC_DOUBLE, rd, rs1, rs2)
+                        }
+                        _ => unimplemented!("unknown intrinsic `{name}`"),
+                    }
+                };
+                directives.push(Directive::Instruction(insn));
+                directives
+            }
             ("env", "abort") => {
                 vec![Directive::Instruction(ib::abort())]
             }
@@ -961,6 +1094,52 @@ impl<'a, F: PrimeField32> crush::loader::rwm::settings::Settings<'a> for OpenVMS
             })
             .unwrap_or_else(|| translate_complex_ins(c, module, op, inputs, output, unaligned))
     }
+}
+
+/// Split an intrinsic name of the form `__<ext>_<index>_<op>` into its parts, where `op` may
+/// itself contain underscores (`setup_addsub`, `add_ne`, ...).
+fn split_indexed_intrinsic(name: &str) -> (&str, usize, &str) {
+    let rest = name.strip_prefix("__").expect("not an intrinsic name");
+    let (ext, rest) = rest
+        .split_once('_')
+        .unwrap_or_else(|| panic!("`{name}` has no extension name"));
+    let (idx, op) = rest
+        .split_once('_')
+        .unwrap_or_else(|| panic!("`{name}` has no operation name"));
+    let idx = idx
+        .parse()
+        .unwrap_or_else(|e| panic!("`{name}` has a bad modulus/curve index: {e}"));
+    (ext, idx, op)
+}
+
+/// Translate a WASM linear-memory pointer held in `ptr_reg` into an absolute VM address by
+/// adding the linear memory base.
+///
+/// Returns the register holding the absolute address, appending any instructions needed to
+/// `directives`. When the base is zero the input register is returned unchanged; otherwise
+/// the result goes into a fresh temporary, because `ptr_reg` may be a live WASM local.
+fn rebase_wasm_ptr<F: PrimeField32>(
+    c: &mut Ctx<'_, '_>,
+    directives: &mut Vec<Directive<F>>,
+    ptr_reg: usize,
+    mem_start: u32,
+) -> usize {
+    if mem_start == 0 {
+        return ptr_reg;
+    }
+    let tmp = c.allocate_tmp_type::<OpenVMSettings<F>>(ValType::I32).start as usize;
+    if let Ok(imm) = AluImm::try_from(mem_start) {
+        directives.push(Directive::Instruction(ib::add_imm(tmp, ptr_reg, imm)));
+    } else {
+        let tmp2 = c.allocate_tmp_type::<OpenVMSettings<F>>(ValType::I32).start as usize;
+        directives.push(Directive::Instruction(ib::const_32_imm(
+            tmp2,
+            mem_start as u16,
+            (mem_start >> 16) as u16,
+        )));
+        directives.push(Directive::Instruction(ib::add(tmp, ptr_reg, tmp2)));
+    }
+    tmp
 }
 
 impl<F: PrimeField32> Directive<F> {

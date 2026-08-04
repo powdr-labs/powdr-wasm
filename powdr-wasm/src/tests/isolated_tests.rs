@@ -218,7 +218,7 @@ pub fn test_prove(spec: &TestSpec, backends: &[Backend]) -> Result<(), Box<dyn s
 
     for &backend in backends {
         let final_state = backend
-            .mock_prove(&exe, init_state.clone())
+            .mock_prove(vm_config.clone(), &exe, init_state.clone())
             .map_err(|e| format!("{} mock_prove: {e}", backend.name()))?;
         verify_state(spec, &final_state)
             .map_err(|e| format!("{} verify_state: {e}", backend.name()))?;
