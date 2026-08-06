@@ -7,13 +7,13 @@ pub use add_ne::*;
 pub use curves::CurveType;
 pub use double::*;
 
-use crate::adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller};
+use crate::adapters::{VecHeapAdapterAir, VecHeapAdapterFiller};
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 use openvm_mod_circuit_builder::{FieldExpressionCoreAir, FieldExpressionFiller};
 
 pub type WeierstrassAir<const NUM_READS: usize, const BLOCKS: usize, const BLOCK_SIZE: usize> =
     VmAirWrapper<
-        Rv32VecHeapAdapterAir<NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+        VecHeapAdapterAir<NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         FieldExpressionCoreAir,
     >;
 
@@ -21,6 +21,6 @@ pub type WeierstrassChip<F, const NUM_READS: usize, const BLOCKS: usize, const B
     VmChipWrapper<
         F,
         FieldExpressionFiller<
-            Rv32VecHeapAdapterFiller<NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+            VecHeapAdapterFiller<NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         >,
     >;

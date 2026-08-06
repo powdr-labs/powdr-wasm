@@ -10,7 +10,7 @@ use openvm_circuit::arch::DEFAULT_BLOCK_SIZE;
 #[cfg(feature = "cuda")]
 use {
     openvm_mod_circuit_builder::FieldExpressionCoreRecordMut,
-    openvm_rv32_adapters::Rv32VecHeapAdapterRecord,
+    openvm_rv32_adapters::VecHeapAdapterRecord,
 };
 
 mod extension;
@@ -34,6 +34,6 @@ pub(crate) type EccRecord<
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
 > = (
-    &'a mut Rv32VecHeapAdapterRecord<NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+    &'a mut VecHeapAdapterRecord<NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
     FieldExpressionCoreRecordMut<'a>,
 );

@@ -1,7 +1,7 @@
 //! Fast PreflightExecutor implementations for ECC operations that use native field arithmetic
 //! instead of BigUint-based computation.
 
-use crate::adapters::Rv32VecHeapAdapterExecutor;
+use crate::adapters::VecHeapAdapterExecutor;
 use openvm_algebra_circuit::fields::FieldType;
 use openvm_circuit::{
     arch::{AdapterTraceExecutor, ExecutionError, PreflightExecutor, RecordArena, VmStateMut},
@@ -124,10 +124,10 @@ where
         'buf,
         FieldExpressionRecordLayout<
             F,
-            Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+            VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         >,
         (
-            <Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as AdapterTraceExecutor<F>>::RecordMut<'buf>,
+            <VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as AdapterTraceExecutor<F>>::RecordMut<'buf>,
             FieldExpressionCoreRecordMut<'buf>,
         ),
     >,
@@ -140,7 +140,7 @@ where
         let (mut adapter_record, mut core_record) =
             state.ctx.alloc(self.inner.get_record_layout());
 
-        <Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as AdapterTraceExecutor<F>>::start(
+        <VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as AdapterTraceExecutor<F>>::start(
             *state.pc,
             state.memory,
             &mut adapter_record,
@@ -202,10 +202,10 @@ where
         'buf,
         FieldExpressionRecordLayout<
             F,
-            Rv32VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+            VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         >,
         (
-            <Rv32VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as AdapterTraceExecutor<F>>::RecordMut<'buf>,
+            <VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as AdapterTraceExecutor<F>>::RecordMut<'buf>,
             FieldExpressionCoreRecordMut<'buf>,
         ),
     >,
@@ -218,7 +218,7 @@ where
         let (mut adapter_record, mut core_record) =
             state.ctx.alloc(self.inner.get_record_layout());
 
-        <Rv32VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as AdapterTraceExecutor<F>>::start(
+        <VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as AdapterTraceExecutor<F>>::start(
             *state.pc,
             state.memory,
             &mut adapter_record,

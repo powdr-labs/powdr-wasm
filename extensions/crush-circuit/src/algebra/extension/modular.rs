@@ -1,7 +1,7 @@
 use std::{array, sync::Arc};
 
 use crate::adapters::{
-    Rv32IsEqualModAdapterAir, Rv32IsEqualModAdapterExecutor, Rv32IsEqualModAdapterFiller,
+    IsEqualModAdapterAir, IsEqualModAdapterExecutor, IsEqualModAdapterFiller,
 };
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, One};
@@ -146,7 +146,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                 });
 
                 let is_eq = VmModularIsEqualExecutor::new(
-                    Rv32IsEqualModAdapterExecutor::new(pointer_max_bits),
+                    IsEqualModAdapterExecutor::new(pointer_max_bits),
                     start_offset,
                     modulus_limbs,
                 );
@@ -200,7 +200,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                 });
 
                 let is_eq = VmModularIsEqualExecutor::new(
-                    Rv32IsEqualModAdapterExecutor::new(pointer_max_bits),
+                    IsEqualModAdapterExecutor::new(pointer_max_bits),
                     start_offset,
                     modulus_limbs,
                 );
@@ -293,7 +293,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
 
                 let is_eq =
                     ModularIsEqualAir::<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>::new(
-                        Rv32IsEqualModAdapterAir::new(
+                        IsEqualModAdapterAir::new(
                             exec_bridge,
                             memory_bridge,
                             bitwise_lu,
@@ -333,7 +333,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
 
                 let is_eq =
                     ModularIsEqualAir::<MODULAR_BLOCKS_48, DEFAULT_BLOCK_SIZE, NUM_LIMBS_48>::new(
-                        Rv32IsEqualModAdapterAir::new(
+                        IsEqualModAdapterAir::new(
                             exec_bridge,
                             memory_bridge,
                             bitwise_lu,
@@ -435,7 +435,7 @@ where
                     NUM_LIMBS_32,
                 >::new(
                     ModularIsEqualFiller::new(
-                        Rv32IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
+                        IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                         start_offset,
                         modulus_limbs,
                         bitwise_lu.clone(),
@@ -487,7 +487,7 @@ where
                     NUM_LIMBS_48,
                 >::new(
                     ModularIsEqualFiller::new(
-                        Rv32IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
+                        IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                         start_offset,
                         modulus_limbs,
                         bitwise_lu.clone(),

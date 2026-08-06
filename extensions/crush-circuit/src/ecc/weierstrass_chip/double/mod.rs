@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::adapters::{
-    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterExecutor, Rv32VecHeapAdapterFiller,
+    VecHeapAdapterAir, VecHeapAdapterExecutor, VecHeapAdapterFiller,
 };
 use num_bigint::BigUint;
 use num_traits::One;
@@ -69,7 +69,7 @@ pub fn ec_double_ne_expr(
 #[derive(Clone)]
 pub struct EcDoubleExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize> {
     pub(crate) inner: FieldExpressionExecutor<
-        Rv32VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+        VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
     >,
     pub(crate) cached_curve_type: Option<CurveType>,
 }
@@ -77,7 +77,7 @@ pub struct EcDoubleExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize> {
 impl<const BLOCKS: usize, const BLOCK_SIZE: usize> EcDoubleExecutor<BLOCKS, BLOCK_SIZE> {
     pub fn new(
         inner: FieldExpressionExecutor<
-            Rv32VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+            VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         >,
     ) -> Self {
         let cached_curve_type = inner
@@ -94,7 +94,7 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> EcDoubleExecutor<BLOCKS, BLOC
 
 impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Deref for EcDoubleExecutor<BLOCKS, BLOCK_SIZE> {
     type Target = FieldExpressionExecutor<
-        Rv32VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+        VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
     >;
 
     fn deref(&self) -> &Self::Target {
@@ -138,7 +138,7 @@ pub fn get_ec_double_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 ) -> WeierstrassAir<1, BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus, a_biguint);
     WeierstrassAir::new(
-        Rv32VecHeapAdapterAir::new(
+        VecHeapAdapterAir::new(
             exec_bridge,
             mem_bridge,
             bitwise_lookup_bus,
@@ -157,7 +157,7 @@ pub fn get_ec_double_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 ) -> EcDoubleExecutor<BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus, a_biguint);
     EcDoubleExecutor::new(FieldExpressionExecutor::new(
-        Rv32VecHeapAdapterExecutor::new(pointer_max_bits),
+        VecHeapAdapterExecutor::new(pointer_max_bits),
         expr,
         offset,
         local_opcode_idx,
@@ -177,7 +177,7 @@ pub fn get_ec_double_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker.bus(), a_biguint);
     WeierstrassChip::new(
         FieldExpressionFiller::new(
-            Rv32VecHeapAdapterFiller::new(pointer_max_bits, bitwise_lookup_chip),
+            VecHeapAdapterFiller::new(pointer_max_bits, bitwise_lookup_chip),
             expr,
             local_opcode_idx,
             vec![],

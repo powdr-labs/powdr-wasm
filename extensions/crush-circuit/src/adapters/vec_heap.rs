@@ -51,7 +51,7 @@ use crate::execution::ExecutionState;
 ///   heap, starting from the address in `rd`.
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
-pub struct Rv32VecHeapAdapterCols<
+pub struct VecHeapAdapterCols<
     T,
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
@@ -77,9 +77,8 @@ pub struct Rv32VecHeapAdapterCols<
     pub writes_aux: [MemoryWriteAuxCols<T, WRITE_SIZE>; BLOCKS_PER_WRITE],
 }
 
-#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, derive_new::new)]
-pub struct Rv32VecHeapAdapterAir<
+pub struct VecHeapAdapterAir<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCKS_PER_WRITE: usize,
@@ -101,10 +100,10 @@ impl<
     const READ_SIZE: usize,
     const WRITE_SIZE: usize,
 > BaseAir<F>
-    for Rv32VecHeapAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
+    for VecHeapAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
 {
     fn width(&self) -> usize {
-        Rv32VecHeapAdapterCols::<
+        VecHeapAdapterCols::<
             F,
             NUM_READS,
             BLOCKS_PER_READ,
@@ -123,10 +122,10 @@ impl<
     const READ_SIZE: usize,
     const WRITE_SIZE: usize,
 > ColumnsAir<F>
-    for Rv32VecHeapAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
+    for VecHeapAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
 {
     fn columns(&self) -> Option<Vec<String>> {
-        <Rv32VecHeapAdapterCols<
+        <VecHeapAdapterCols<
             F,
             NUM_READS,
             BLOCKS_PER_READ,
@@ -145,7 +144,7 @@ impl<
     const READ_SIZE: usize,
     const WRITE_SIZE: usize,
 > VmAdapterAir<AB>
-    for Rv32VecHeapAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
+    for VecHeapAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
 {
     type Interface = VecHeapAdapterInterface<
         AB::Expr,
@@ -162,7 +161,7 @@ impl<
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let cols: &Rv32VecHeapAdapterCols<
+        let cols: &VecHeapAdapterCols<
             _,
             NUM_READS,
             BLOCKS_PER_READ,
@@ -284,7 +283,7 @@ impl<
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let cols: &Rv32VecHeapAdapterCols<
+        let cols: &VecHeapAdapterCols<
             _,
             NUM_READS,
             BLOCKS_PER_READ,
@@ -299,7 +298,7 @@ impl<
 // Intermediate type that should not be copied or cloned and should be directly written to
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv32VecHeapAdapterRecord<
+pub struct VecHeapAdapterRecord<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCKS_PER_WRITE: usize,
@@ -326,7 +325,7 @@ pub struct Rv32VecHeapAdapterRecord<
 }
 
 #[derive(derive_new::new, Clone, Copy)]
-pub struct Rv32VecHeapAdapterExecutor<
+pub struct VecHeapAdapterExecutor<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCKS_PER_WRITE: usize,
@@ -337,7 +336,7 @@ pub struct Rv32VecHeapAdapterExecutor<
 }
 
 #[derive(derive_new::new)]
-pub struct Rv32VecHeapAdapterFiller<
+pub struct VecHeapAdapterFiller<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCKS_PER_WRITE: usize,
@@ -356,7 +355,7 @@ impl<
     const READ_SIZE: usize,
     const WRITE_SIZE: usize,
 > AdapterTraceExecutor<F>
-    for Rv32VecHeapAdapterExecutor<
+    for VecHeapAdapterExecutor<
         NUM_READS,
         BLOCKS_PER_READ,
         BLOCKS_PER_WRITE,
@@ -364,7 +363,7 @@ impl<
         WRITE_SIZE,
     >
 {
-    const WIDTH: usize = Rv32VecHeapAdapterCols::<
+    const WIDTH: usize = VecHeapAdapterCols::<
         F,
         NUM_READS,
         BLOCKS_PER_READ,
@@ -374,7 +373,7 @@ impl<
     >::width();
     type ReadData = [[[u8; READ_SIZE]; BLOCKS_PER_READ]; NUM_READS];
     type WriteData = [[u8; WRITE_SIZE]; BLOCKS_PER_WRITE];
-    type RecordMut<'a> = &'a mut Rv32VecHeapAdapterRecord<
+    type RecordMut<'a> = &'a mut VecHeapAdapterRecord<
         NUM_READS,
         BLOCKS_PER_READ,
         BLOCKS_PER_WRITE,
@@ -392,7 +391,7 @@ impl<
         &self,
         memory: &mut TracingMemory,
         instruction: &Instruction<F>,
-        record: &mut &mut Rv32VecHeapAdapterRecord<
+        record: &mut &mut VecHeapAdapterRecord<
             NUM_READS,
             BLOCKS_PER_READ,
             BLOCKS_PER_WRITE,
@@ -450,7 +449,7 @@ impl<
         memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         data: Self::WriteData,
-        record: &mut &mut Rv32VecHeapAdapterRecord<
+        record: &mut &mut VecHeapAdapterRecord<
             NUM_READS,
             BLOCKS_PER_READ,
             BLOCKS_PER_WRITE,
@@ -487,7 +486,7 @@ impl<
     const READ_SIZE: usize,
     const WRITE_SIZE: usize,
 > AdapterTraceFiller<F>
-    for Rv32VecHeapAdapterFiller<
+    for VecHeapAdapterFiller<
         NUM_READS,
         BLOCKS_PER_READ,
         BLOCKS_PER_WRITE,
@@ -495,7 +494,7 @@ impl<
         WRITE_SIZE,
     >
 {
-    const WIDTH: usize = Rv32VecHeapAdapterCols::<
+    const WIDTH: usize = VecHeapAdapterCols::<
         F,
         NUM_READS,
         BLOCKS_PER_READ,
@@ -508,7 +507,7 @@ impl<
         // SAFETY:
         // - caller ensures `adapter_row` contains a valid record representation that was previously
         //   written by the executor
-        let record: &Rv32VecHeapAdapterRecord<
+        let record: &VecHeapAdapterRecord<
             NUM_READS,
             BLOCKS_PER_READ,
             BLOCKS_PER_WRITE,
@@ -516,7 +515,7 @@ impl<
             WRITE_SIZE,
         > = unsafe { get_record_from_slice(&mut adapter_row, ()) };
 
-        let cols: &mut Rv32VecHeapAdapterCols<
+        let cols: &mut VecHeapAdapterCols<
             F,
             NUM_READS,
             BLOCKS_PER_READ,

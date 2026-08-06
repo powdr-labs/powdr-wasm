@@ -3,7 +3,7 @@ use std::{
     borrow::{Borrow, BorrowMut},
 };
 
-use crate::adapters::Rv32IsEqualModAdapterExecutor;
+use crate::adapters::IsEqualModAdapterExecutor;
 use num_bigint::BigUint;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::{
@@ -463,7 +463,7 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize>
     VmModularIsEqualExecutor<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>
 {
     pub fn new(
-        adapter: Rv32IsEqualModAdapterExecutor<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+        adapter: IsEqualModAdapterExecutor<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
         offset: usize,
         modulus_limbs: [u8; TOTAL_LIMBS],
     ) -> Self {

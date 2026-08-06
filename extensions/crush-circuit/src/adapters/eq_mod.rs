@@ -49,7 +49,7 @@ use crate::execution::ExecutionState;
 /// * Writes are to 32-bit register rd.
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
-pub struct Rv32IsEqualModAdapterCols<
+pub struct IsEqualModAdapterCols<
     T,
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
@@ -68,9 +68,8 @@ pub struct Rv32IsEqualModAdapterCols<
     pub writes_aux: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
 }
 
-#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, derive_new::new)]
-pub struct Rv32IsEqualModAdapterAir<
+pub struct IsEqualModAdapterAir<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCK_SIZE: usize,
@@ -88,10 +87,10 @@ impl<
     const BLOCKS_PER_READ: usize,
     const BLOCK_SIZE: usize,
     const TOTAL_READ_SIZE: usize,
-> BaseAir<F> for Rv32IsEqualModAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+> BaseAir<F> for IsEqualModAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 {
     fn width(&self) -> usize {
-        Rv32IsEqualModAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>::width()
+        IsEqualModAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>::width()
     }
 }
 
@@ -102,10 +101,10 @@ impl<
     const BLOCK_SIZE: usize,
     const TOTAL_READ_SIZE: usize,
 > ColumnsAir<F>
-    for Rv32IsEqualModAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+    for IsEqualModAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 {
     fn columns(&self) -> Option<Vec<String>> {
-        <Rv32IsEqualModAdapterCols<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
+        <IsEqualModAdapterCols<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
     }
 }
 
@@ -116,7 +115,7 @@ impl<
     const BLOCK_SIZE: usize,
     const TOTAL_READ_SIZE: usize,
 > VmAdapterAir<AB>
-    for Rv32IsEqualModAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+    for IsEqualModAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 {
     type Interface = BasicAdapterInterface<
         AB::Expr,
@@ -133,7 +132,7 @@ impl<
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let cols: &Rv32IsEqualModAdapterCols<_, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE> =
+        let cols: &IsEqualModAdapterCols<_, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE> =
             local.borrow();
         let timestamp = cols.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
@@ -246,7 +245,7 @@ impl<
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let cols: &Rv32IsEqualModAdapterCols<_, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE> =
+        let cols: &IsEqualModAdapterCols<_, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE> =
             local.borrow();
         cols.from_state.pc
     }
@@ -254,7 +253,7 @@ impl<
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv32IsEqualModAdapterRecord<
+pub struct IsEqualModAdapterRecord<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCK_SIZE: usize,
@@ -276,7 +275,7 @@ pub struct Rv32IsEqualModAdapterRecord<
 }
 
 #[derive(Clone, Copy)]
-pub struct Rv32IsEqualModAdapterExecutor<
+pub struct IsEqualModAdapterExecutor<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCK_SIZE: usize,
@@ -286,7 +285,7 @@ pub struct Rv32IsEqualModAdapterExecutor<
 }
 
 #[derive(derive_new::new)]
-pub struct Rv32IsEqualModAdapterFiller<
+pub struct IsEqualModAdapterFiller<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCK_SIZE: usize,
@@ -301,7 +300,7 @@ impl<
     const BLOCKS_PER_READ: usize,
     const BLOCK_SIZE: usize,
     const TOTAL_READ_SIZE: usize,
-> Rv32IsEqualModAdapterExecutor<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+> IsEqualModAdapterExecutor<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 {
     pub fn new(pointer_max_bits: usize) -> Self {
         assert!(NUM_READS <= 2);
@@ -321,15 +320,15 @@ impl<
     const BLOCK_SIZE: usize,
     const TOTAL_READ_SIZE: usize,
 > AdapterTraceExecutor<F>
-    for Rv32IsEqualModAdapterExecutor<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+    for IsEqualModAdapterExecutor<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 where
     F: PrimeField32,
 {
     const WIDTH: usize =
-        Rv32IsEqualModAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>::width();
+        IsEqualModAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>::width();
     type ReadData = [[u8; TOTAL_READ_SIZE]; NUM_READS];
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
-    type RecordMut<'a> = &'a mut Rv32IsEqualModAdapterRecord<
+    type RecordMut<'a> = &'a mut IsEqualModAdapterRecord<
         NUM_READS,
         BLOCKS_PER_READ,
         BLOCK_SIZE,
@@ -414,23 +413,23 @@ impl<
     const BLOCK_SIZE: usize,
     const TOTAL_READ_SIZE: usize,
 > AdapterTraceFiller<F>
-    for Rv32IsEqualModAdapterFiller<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+    for IsEqualModAdapterFiller<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 {
     const WIDTH: usize =
-        Rv32IsEqualModAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>::width();
+        IsEqualModAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>::width();
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         // SAFETY:
         // - caller ensures `adapter_row` contains a valid record representation that was previously
         //   written by the executor
-        let record: &Rv32IsEqualModAdapterRecord<
+        let record: &IsEqualModAdapterRecord<
             NUM_READS,
             BLOCKS_PER_READ,
             BLOCK_SIZE,
             TOTAL_READ_SIZE,
         > = unsafe { get_record_from_slice(&mut adapter_row, ()) };
 
-        let cols: &mut Rv32IsEqualModAdapterCols<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE> =
+        let cols: &mut IsEqualModAdapterCols<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE> =
             adapter_row.borrow_mut();
 
         // The leading 1 is the FP read, which precedes every register access; the trailing one

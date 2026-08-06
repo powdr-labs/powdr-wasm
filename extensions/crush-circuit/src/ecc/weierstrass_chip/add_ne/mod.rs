@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::adapters::{
-    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterExecutor, Rv32VecHeapAdapterFiller,
+    VecHeapAdapterAir, VecHeapAdapterExecutor, VecHeapAdapterFiller,
 };
 use openvm_algebra_circuit::fields::{FieldType, get_field_type};
 use openvm_circuit::{
@@ -59,7 +59,7 @@ pub fn ec_add_ne_expr(
 #[derive(Clone)]
 pub struct EcAddNeExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize> {
     pub(crate) inner: FieldExpressionExecutor<
-        Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+        VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
     >,
     pub(crate) cached_field_type: Option<FieldType>,
 }
@@ -67,7 +67,7 @@ pub struct EcAddNeExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize> {
 impl<const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddNeExecutor<BLOCKS, BLOCK_SIZE> {
     pub fn new(
         inner: FieldExpressionExecutor<
-            Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+            VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         >,
     ) -> Self {
         let cached_field_type = get_field_type(&inner.expr.prime);
@@ -80,7 +80,7 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddNeExecutor<BLOCKS, BLOCK
 
 impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Deref for EcAddNeExecutor<BLOCKS, BLOCK_SIZE> {
     type Target = FieldExpressionExecutor<
-        Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+        VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
     >;
 
     fn deref(&self) -> &Self::Target {
@@ -121,7 +121,7 @@ pub fn get_ec_addne_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 ) -> WeierstrassAir<2, BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus);
     WeierstrassAir::new(
-        Rv32VecHeapAdapterAir::new(
+        VecHeapAdapterAir::new(
             exec_bridge,
             mem_bridge,
             bitwise_lookup_bus,
@@ -139,7 +139,7 @@ pub fn get_ec_addne_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 ) -> EcAddNeExecutor<BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus);
     EcAddNeExecutor::new(FieldExpressionExecutor::new(
-        Rv32VecHeapAdapterExecutor::new(pointer_max_bits),
+        VecHeapAdapterExecutor::new(pointer_max_bits),
         expr,
         offset,
         local_opcode_idx,
@@ -158,7 +158,7 @@ pub fn get_ec_addne_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker.bus());
     WeierstrassChip::new(
         FieldExpressionFiller::new(
-            Rv32VecHeapAdapterFiller::new(pointer_max_bits, bitwise_lookup_chip),
+            VecHeapAdapterFiller::new(pointer_max_bits, bitwise_lookup_chip),
             expr,
             local_opcode_idx,
             vec![],

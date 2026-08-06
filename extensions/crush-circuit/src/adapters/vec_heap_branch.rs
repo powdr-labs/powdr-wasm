@@ -47,7 +47,7 @@ use crate::execution::ExecutionState;
 /// * No writes are performed (branch operations only compare values).
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
-pub struct Rv32VecHeapBranchAdapterCols<
+pub struct VecHeapBranchAdapterCols<
     T,
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
@@ -64,9 +64,8 @@ pub struct Rv32VecHeapBranchAdapterCols<
     pub reads_aux: [[MemoryReadAuxCols<T>; BLOCKS_PER_READ]; NUM_READS],
 }
 
-#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, derive_new::new)]
-pub struct Rv32VecHeapBranchAdapterAir<
+pub struct VecHeapBranchAdapterAir<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const READ_SIZE: usize,
@@ -79,18 +78,18 @@ pub struct Rv32VecHeapBranchAdapterAir<
 }
 
 impl<F: Field, const NUM_READS: usize, const BLOCKS_PER_READ: usize, const READ_SIZE: usize>
-    BaseAir<F> for Rv32VecHeapBranchAdapterAir<NUM_READS, BLOCKS_PER_READ, READ_SIZE>
+    BaseAir<F> for VecHeapBranchAdapterAir<NUM_READS, BLOCKS_PER_READ, READ_SIZE>
 {
     fn width(&self) -> usize {
-        Rv32VecHeapBranchAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE>::width()
+        VecHeapBranchAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE>::width()
     }
 }
 
 impl<F: Field, const NUM_READS: usize, const BLOCKS_PER_READ: usize, const READ_SIZE: usize>
-    ColumnsAir<F> for Rv32VecHeapBranchAdapterAir<NUM_READS, BLOCKS_PER_READ, READ_SIZE>
+    ColumnsAir<F> for VecHeapBranchAdapterAir<NUM_READS, BLOCKS_PER_READ, READ_SIZE>
 {
     fn columns(&self) -> Option<Vec<String>> {
-        <Rv32VecHeapBranchAdapterCols<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
+        <VecHeapBranchAdapterCols<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
     }
 }
 
@@ -99,7 +98,7 @@ impl<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const READ_SIZE: usize,
-> VmAdapterAir<AB> for Rv32VecHeapBranchAdapterAir<NUM_READS, BLOCKS_PER_READ, READ_SIZE>
+> VmAdapterAir<AB> for VecHeapBranchAdapterAir<NUM_READS, BLOCKS_PER_READ, READ_SIZE>
 {
     type Interface = VecHeapBranchAdapterInterface<AB::Expr, NUM_READS, BLOCKS_PER_READ, READ_SIZE>;
 
@@ -109,7 +108,7 @@ impl<
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let cols: &Rv32VecHeapBranchAdapterCols<_, NUM_READS, BLOCKS_PER_READ, READ_SIZE> =
+        let cols: &VecHeapBranchAdapterCols<_, NUM_READS, BLOCKS_PER_READ, READ_SIZE> =
             local.borrow();
         let timestamp = cols.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
@@ -204,7 +203,7 @@ impl<
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let cols: &Rv32VecHeapBranchAdapterCols<_, NUM_READS, BLOCKS_PER_READ, READ_SIZE> =
+        let cols: &VecHeapBranchAdapterCols<_, NUM_READS, BLOCKS_PER_READ, READ_SIZE> =
             local.borrow();
         cols.from_state.pc
     }
@@ -213,7 +212,7 @@ impl<
 // Intermediate type that should not be copied or cloned and should be directly written to
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv32VecHeapBranchAdapterRecord<
+pub struct VecHeapBranchAdapterRecord<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const READ_SIZE: usize,
@@ -232,7 +231,7 @@ pub struct Rv32VecHeapBranchAdapterRecord<
 }
 
 #[derive(derive_new::new, Clone, Copy)]
-pub struct Rv32VecHeapBranchAdapterExecutor<
+pub struct VecHeapBranchAdapterExecutor<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const READ_SIZE: usize,
@@ -241,7 +240,7 @@ pub struct Rv32VecHeapBranchAdapterExecutor<
 }
 
 #[derive(derive_new::new)]
-pub struct Rv32VecHeapBranchAdapterFiller<
+pub struct VecHeapBranchAdapterFiller<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const READ_SIZE: usize,
@@ -252,14 +251,14 @@ pub struct Rv32VecHeapBranchAdapterFiller<
 
 impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS_PER_READ: usize, const READ_SIZE: usize>
     AdapterTraceExecutor<F>
-    for Rv32VecHeapBranchAdapterExecutor<NUM_READS, BLOCKS_PER_READ, READ_SIZE>
+    for VecHeapBranchAdapterExecutor<NUM_READS, BLOCKS_PER_READ, READ_SIZE>
 {
     const WIDTH: usize =
-        Rv32VecHeapBranchAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE>::width();
+        VecHeapBranchAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE>::width();
     type ReadData = [[[u8; READ_SIZE]; BLOCKS_PER_READ]; NUM_READS];
     type WriteData = ();
     type RecordMut<'a> =
-        &'a mut Rv32VecHeapBranchAdapterRecord<NUM_READS, BLOCKS_PER_READ, READ_SIZE>;
+        &'a mut VecHeapBranchAdapterRecord<NUM_READS, BLOCKS_PER_READ, READ_SIZE>;
 
     #[inline(always)]
     fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
@@ -271,7 +270,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS_PER_READ: usize, cons
         &self,
         memory: &mut TracingMemory,
         instruction: &Instruction<F>,
-        record: &mut &mut Rv32VecHeapBranchAdapterRecord<NUM_READS, BLOCKS_PER_READ, READ_SIZE>,
+        record: &mut &mut VecHeapBranchAdapterRecord<NUM_READS, BLOCKS_PER_READ, READ_SIZE>,
     ) -> Self::ReadData {
         let &Instruction { a, b, d, e, .. } = instruction;
 
@@ -323,19 +322,19 @@ impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS_PER_READ: usize, cons
 
 impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS_PER_READ: usize, const READ_SIZE: usize>
     AdapterTraceFiller<F>
-    for Rv32VecHeapBranchAdapterFiller<NUM_READS, BLOCKS_PER_READ, READ_SIZE>
+    for VecHeapBranchAdapterFiller<NUM_READS, BLOCKS_PER_READ, READ_SIZE>
 {
     const WIDTH: usize =
-        Rv32VecHeapBranchAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE>::width();
+        VecHeapBranchAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE>::width();
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         // SAFETY:
         // - caller ensures `adapter_row` contains a valid record representation that was previously
         //   written by the executor
-        let record: &Rv32VecHeapBranchAdapterRecord<NUM_READS, BLOCKS_PER_READ, READ_SIZE> =
+        let record: &VecHeapBranchAdapterRecord<NUM_READS, BLOCKS_PER_READ, READ_SIZE> =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
 
-        let cols: &mut Rv32VecHeapBranchAdapterCols<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE> =
+        let cols: &mut VecHeapBranchAdapterCols<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE> =
             adapter_row.borrow_mut();
 
         // Range checks:

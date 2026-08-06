@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::adapters::{
-    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterExecutor, Rv32VecHeapAdapterFiller,
+    VecHeapAdapterAir, VecHeapAdapterExecutor, VecHeapAdapterFiller,
 };
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::{
@@ -91,7 +91,7 @@ pub fn get_modular_muldiv_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 ) -> ModularAir<BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
     ModularAir::new(
-        Rv32VecHeapAdapterAir::new(
+        VecHeapAdapterAir::new(
             exec_bridge,
             mem_bridge,
             bitwise_lookup_bus,
@@ -110,7 +110,7 @@ pub fn get_modular_muldiv_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
 
     FieldExprVecHeapExecutor::new(FieldExpressionExecutor::new(
-        Rv32VecHeapAdapterExecutor::new(pointer_max_bits),
+        VecHeapAdapterExecutor::new(pointer_max_bits),
         expr,
         offset,
         local_opcode_idx,
@@ -129,7 +129,7 @@ pub fn get_modular_muldiv_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker.bus());
     ModularChip::new(
         FieldExpressionFiller::new(
-            Rv32VecHeapAdapterFiller::new(pointer_max_bits, bitwise_lookup_chip),
+            VecHeapAdapterFiller::new(pointer_max_bits, bitwise_lookup_chip),
             expr,
             local_opcode_idx,
             opcode_flag_idx,
