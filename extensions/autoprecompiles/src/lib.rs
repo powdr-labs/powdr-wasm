@@ -212,6 +212,16 @@ impl OpenVmISA for CrushISA {
             &config.system,
             circuit,
         )?;
+        // `create_dummy_airs` is shared with the CPU path and adds an AIR set per enabled
+        // precompile extension, but none of them has a GPU prover extension to match, so this
+        // inventory would come out one chip short per extension and `generate_witness` would
+        // pair chips with the wrong AIR names. Fail loudly instead.
+        assert!(
+            !config.has_optional_extensions(),
+            "autoprecompiles with a precompile extension enabled are not supported on the \
+             CUDA backend"
+        );
+
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::extend_prover(
             &SharedPeripheryChipsGpuProverExt,
