@@ -239,6 +239,47 @@ fn run_and_prove_single_wasm_test(
     run_wasm_test_function(&mut module, function, args, expected, true, byte_inputs)
 }
 
+/// Execute and mock-prove each of `functions` under a non-default `vm_config`.
+///
+/// The precompile sample programs signal failure by trapping rather than by returning a
+/// value, so there is nothing to compare an output against: reaching the end is the check.
+/// Every one of them has a negative control recorded in its own comments.
+///
+/// Unlike [`run_wasm_test_function_raw`] this does not call the metered-execution and
+/// preflight helpers, which key off the cached default-config proving key. The mock proof runs
+/// both stages itself against a key built for the config it is given -- generated once here
+/// and shared by every function, since for programs this small keygen is nearly all the cost.
+fn run_and_prove_extension_sample(
+    module_path: &str,
+    functions: &[&str],
+    vm_config: CrushConfig,
+) -> Result<(), Box<dyn std::error::Error>> {
+    setup_tracing_with_log_level(Level::WARN);
+    let engine = crate::proving::cpu_engine();
+    let pk = crate::proving::keygen(&engine, &vm_config);
+    for function in functions {
+        println!("Running {module_path}:{function}");
+        let mut module = load_wasm_module(module_path, false);
+        let exe = module.program_with_entry_point(function);
+        let initial_state = VmState::initial(
+            &vm_config.system,
+            &exe.init_memory,
+            exe.pc_start,
+            StdIn::default(),
+        );
+        module.execute(vm_config.clone(), function, StdIn::default())?;
+        crate::proving::mock_prove_with_pk(
+            crate::proving::cpu_engine(),
+            crush_circuit::CrushCpuBuilder,
+            vm_config.clone(),
+            &pk,
+            &exe,
+            initial_state,
+        )?;
+    }
+    Ok(())
+}
+
 /// Run a WASM program through execution with output verification.
 /// When `prove` is true, also runs metered execution, preflight, and mock
 /// proof (all stages). Supports multi-segment programs.
@@ -315,7 +356,8 @@ fn run_wasm_test_function_raw(
 
     // Metered execution
     println!("  Metered execution");
-    let (segments, _) = helpers::test_metered_execution(&exe, initial_state.clone())?;
+    let (segments, _) =
+        helpers::test_metered_execution(vm_config.clone(), &exe, initial_state.clone())?;
     let total_insns: u64 = segments.iter().map(|s| s.num_insns).sum();
     println!(
         "    {} segment(s), {} total instructions",
@@ -325,17 +367,17 @@ fn run_wasm_test_function_raw(
 
     // Preflight
     println!("  Preflight");
-    helpers::test_preflight(&exe, initial_state.clone())?;
+    helpers::test_preflight(vm_config.clone(), &exe, initial_state.clone())?;
 
     // Mock proof (CPU)
     println!("  Mock proof (CPU)");
-    mock_prove(&exe, initial_state.clone())?;
+    mock_prove(vm_config.clone(), &exe, initial_state.clone())?;
 
     // Mock proof (GPU)
     #[cfg(feature = "cuda")]
     {
         println!("  Mock proof (GPU)");
-        crate::proving::mock_prove_gpu(&exe, initial_state)?;
+        crate::proving::mock_prove_gpu(vm_config, &exe, initial_state)?;
     }
 
     Ok(output)
@@ -602,6 +644,61 @@ fn test_call_indirect_wasm() {
     .unwrap();
 }
 
+// The precompile extensions are off by default, so each of these builds a config enabling
+// just the one it exercises -- which also means each pays for its own keygen, hence one test
+// per extension rather than one per exported function.
+
+#[test]
+fn test_int256() {
+    run_and_prove_extension_sample(
+        "../sample-programs/int256.wasm",
+        &["int256_add", "int256_mul"],
+        CrushConfig::default().with_int256(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn test_modular() {
+    run_and_prove_extension_sample(
+        "../sample-programs/modular.wasm",
+        &["modular_addsub", "modular_muldiv", "modular_is_eq"],
+        CrushConfig::default().with_modular(vec![crush_circuit::ecc::SECP256K1_MODULUS.clone()]),
+    )
+    .unwrap()
+}
+
+#[test]
+fn test_fp2() {
+    let bn254 = crush_circuit::pairing::PairingCurve::Bn254.curve_config();
+    run_and_prove_extension_sample(
+        "../sample-programs/fp2.wasm",
+        &["fp2_addsub", "fp2_muldiv"],
+        CrushConfig::default().with_fp2(vec![("Bn254Fp2".to_string(), bn254.modulus)]),
+    )
+    .unwrap()
+}
+
+#[test]
+fn test_ecc() {
+    run_and_prove_extension_sample(
+        "../sample-programs/ecc.wasm",
+        &["ecc_add_ne", "ecc_double"],
+        CrushConfig::default().with_ecc(vec![crush_circuit::ecc::SECP256K1_CONFIG.clone()]),
+    )
+    .unwrap()
+}
+
+#[test]
+fn test_pairing() {
+    run_and_prove_extension_sample(
+        "../sample-programs/pairing.wasm",
+        &["pairing_hint"],
+        CrushConfig::default().with_pairing(vec![crush_circuit::pairing::PairingCurve::Bn254]),
+    )
+    .unwrap()
+}
+
 #[test]
 fn test_keccak() {
     run_and_prove_single_wasm_test("../sample-programs/keccak.wasm", "main", &[0, 0], &[], &[])
@@ -646,7 +743,8 @@ fn test_keeper_wasi() {
     let mut stdin = StdIn::default();
     stdin.write_bytes(&payload);
     let initial_state = VmState::initial(&vm_config.system, &exe.init_memory, exe.pc_start, stdin);
-    let (segments, _) = helpers::test_metered_execution(&exe, initial_state).unwrap();
+    let (segments, _) =
+        helpers::test_metered_execution(CrushConfig::default(), &exe, initial_state).unwrap();
     let total_insns: u64 = segments.iter().map(|s| s.num_insns).sum();
     println!(
         "  keeper_wasi: {} segment(s), {} total instructions",
@@ -676,7 +774,8 @@ fn test_keeper_decode_only() {
     let mut stdin = StdIn::default();
     stdin.write_bytes(&payload);
     let initial_state = VmState::initial(&vm_config.system, &exe.init_memory, exe.pc_start, stdin);
-    let (segments, _) = helpers::test_metered_execution(&exe, initial_state).unwrap();
+    let (segments, _) =
+        helpers::test_metered_execution(CrushConfig::default(), &exe, initial_state).unwrap();
     let total_insns: u64 = segments.iter().map(|s| s.num_insns).sum();
     println!(
         "  keeper_decode_only: {} segment(s), {} total instructions",

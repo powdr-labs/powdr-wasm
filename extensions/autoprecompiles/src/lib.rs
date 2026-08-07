@@ -1,5 +1,8 @@
 use std::collections::{BTreeSet, HashSet};
 
+use crush_circuit::algebra::AlgebraCpuProverExt;
+use crush_circuit::ecc::EccCpuProverExt;
+use crush_circuit::int256::Int256CpuProverExt;
 use crush_circuit::{CrushConfig, CrushConfigExecutor, CrushCpuBuilder, CrushCpuProverExt};
 use crush_translation::LinkedProgram;
 use openvm_circuit::arch::{
@@ -121,6 +124,19 @@ impl OpenVmISA for CrushISA {
         inventory.start_new_extension();
         VmCircuitExtension::extend_circuit(&shared_chips, &mut inventory)?;
         VmCircuitExtension::extend_circuit(&config.base, &mut inventory)?;
+        if let Some(int256) = &config.int256 {
+            VmCircuitExtension::extend_circuit(int256, &mut inventory)?;
+        }
+        if let Some(modular) = &config.modular {
+            VmCircuitExtension::extend_circuit(modular, &mut inventory)?;
+        }
+        if let Some(fp2) = &config.fp2 {
+            VmCircuitExtension::extend_circuit(fp2, &mut inventory)?;
+        }
+        if let Some(ecc) = &config.ecc {
+            VmCircuitExtension::extend_circuit(ecc, &mut inventory)?;
+        }
+        // `pairing` adds no AIRs, so it is deliberately absent here.
         Ok(inventory)
     }
 
@@ -148,6 +164,38 @@ impl OpenVmISA for CrushISA {
             inventory,
         )?;
 
+        // None of the precompile opcodes are in `allowed_opcodes`, so they never appear
+        // inside an autoprecompile and the chips below are never asked for a trace. They are
+        // still built to keep the chip list index-aligned with `create_dummy_airs`.
+        if let Some(int256) = &config.int256 {
+            VmProverExtension::<BabyBearPoseidon2CpuEngine, _, _>::extend_prover(
+                &Int256CpuProverExt,
+                int256,
+                inventory,
+            )?;
+        }
+        if let Some(modular) = &config.modular {
+            VmProverExtension::<BabyBearPoseidon2CpuEngine, _, _>::extend_prover(
+                &AlgebraCpuProverExt,
+                modular,
+                inventory,
+            )?;
+        }
+        if let Some(fp2) = &config.fp2 {
+            VmProverExtension::<BabyBearPoseidon2CpuEngine, _, _>::extend_prover(
+                &AlgebraCpuProverExt,
+                fp2,
+                inventory,
+            )?;
+        }
+        if let Some(ecc) = &config.ecc {
+            VmProverExtension::<BabyBearPoseidon2CpuEngine, _, _>::extend_prover(
+                &EccCpuProverExt,
+                ecc,
+                inventory,
+            )?;
+        }
+
         Ok(chip_complex)
     }
 
@@ -164,6 +212,16 @@ impl OpenVmISA for CrushISA {
             &config.system,
             circuit,
         )?;
+        // `create_dummy_airs` is shared with the CPU path and adds an AIR set per enabled
+        // precompile extension, but none of them has a GPU prover extension to match, so this
+        // inventory would come out one chip short per extension and `generate_witness` would
+        // pair chips with the wrong AIR names. Fail loudly instead.
+        assert!(
+            !config.has_optional_extensions(),
+            "autoprecompiles with a precompile extension enabled are not supported on the \
+             CUDA backend"
+        );
+
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::extend_prover(
             &SharedPeripheryChipsGpuProverExt,

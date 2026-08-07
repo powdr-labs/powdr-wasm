@@ -1,10 +1,17 @@
+use openvm_algebra_transpiler::{Fp2Opcode, Rv32ModularArithmeticOpcode};
 use openvm_crush_transpiler::{
-    BaseAlu64Opcode, BaseAluOpcode, CallOpcode, ConstOpcodes, Eq64Opcode, EqOpcode,
-    HintStoreOpcode, JumpOpcode, LessThan64Opcode, LessThanOpcode, MulOpcode, Phantom,
-    Shift64Opcode, ShiftOpcode,
+    BaseAlu64Opcode, BaseAlu256Opcode, BaseAluOpcode, BranchEqual256Opcode, BranchEqualOpcode,
+    BranchLessThan256Opcode, BranchLessThanOpcode, CallOpcode, ConstOpcodes, Eq64Opcode, EqOpcode,
+    HintStoreOpcode, JumpOpcode, LessThan64Opcode, LessThan256Opcode, LessThanOpcode, Mul256Opcode,
+    MulOpcode, Phantom, Shift64Opcode, Shift256Opcode, ShiftOpcode,
 };
-use openvm_instructions::{LocalOpcode, SystemOpcode, VmOpcode, instruction::Instruction, riscv};
+use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
+use openvm_instructions::{
+    LocalOpcode, PhantomDiscriminant, SystemOpcode, VmOpcode, instruction::Instruction, riscv,
+};
+use openvm_pairing_transpiler::PairingPhantom;
 use openvm_stark_backend::p3_field::PrimeField32;
+use strum::EnumCount;
 
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode as LoadStoreOpcode;
 
@@ -960,6 +967,275 @@ pub fn hint_buffer<F: PrimeField32>(num_words_reg: usize, mem_ptr_reg: usize) ->
         0,
         riscv::RV32_REGISTER_AS as isize,
         riscv::RV32_MEMORY_AS as isize,
+    )
+}
+
+/// Three-operand heap instruction: `MEM[rd] = MEM[rs1] op MEM[rs2]`, where the register
+/// operands hold pointers into the heap and the actual operands live there. Shared by the
+/// Int256, modular arithmetic, Fp2 and elliptic curve precompiles, which all take their
+/// operands this way and differ only in the width they read.
+fn heap_r_type<F: PrimeField32>(
+    opcode: VmOpcode,
+    rd_reg: usize,
+    rs1_reg: usize,
+    rs2_reg: usize,
+) -> Instruction<F> {
+    Instruction::from_isize(
+        opcode,
+        (riscv::RV32_REGISTER_NUM_LIMBS * rd_reg) as isize,
+        (riscv::RV32_REGISTER_NUM_LIMBS * rs1_reg) as isize,
+        (riscv::RV32_REGISTER_NUM_LIMBS * rs2_reg) as isize,
+        riscv::RV32_REGISTER_AS as isize,
+        riscv::RV32_MEMORY_AS as isize,
+    )
+}
+
+/// 256-bit ALU: ADD, SUB, XOR, OR, AND.
+pub fn int256_alu<F: PrimeField32>(
+    op: BaseAluOpcode,
+    rd_reg: usize,
+    rs1_reg: usize,
+    rs2_reg: usize,
+) -> Instruction<F> {
+    heap_r_type(
+        BaseAlu256Opcode(op).global_opcode(),
+        rd_reg,
+        rs1_reg,
+        rs2_reg,
+    )
+}
+
+/// 256-bit multiply (low 256 bits).
+pub fn int256_mul<F: PrimeField32>(
+    rd_reg: usize,
+    rs1_reg: usize,
+    rs2_reg: usize,
+) -> Instruction<F> {
+    heap_r_type(
+        Mul256Opcode(MulOpcode::MUL).global_opcode(),
+        rd_reg,
+        rs1_reg,
+        rs2_reg,
+    )
+}
+
+/// 256-bit comparison: SLT (signed) or SLTU (unsigned). Writes 1 or 0 to `MEM[rd]`.
+pub fn int256_less_than<F: PrimeField32>(
+    op: LessThanOpcode,
+    rd_reg: usize,
+    rs1_reg: usize,
+    rs2_reg: usize,
+) -> Instruction<F> {
+    heap_r_type(
+        LessThan256Opcode(op).global_opcode(),
+        rd_reg,
+        rs1_reg,
+        rs2_reg,
+    )
+}
+
+/// 256-bit shift: SLL, SRL or SRA.
+pub fn int256_shift<F: PrimeField32>(
+    op: ShiftOpcode,
+    rd_reg: usize,
+    rs1_reg: usize,
+    rs2_reg: usize,
+) -> Instruction<F> {
+    heap_r_type(Shift256Opcode(op).global_opcode(), rd_reg, rs1_reg, rs2_reg)
+}
+
+/// 256-bit branch: compares `MEM[rs1]` against `MEM[rs2]` and, if the comparison holds, jumps
+/// by `imm` bytes instead of falling through.
+///
+/// Unlike the other Int256 instructions this takes no destination, so `c` carries the pc offset
+/// rather than a register. There is no wasm import for it -- wasm branches on an i32, so a guest
+/// compares first and branches on the result -- but the chips are part of the Int256 extension,
+/// and `powdr-wasm/src/tests/isolated_tests.rs` exercises them directly.
+fn int256_b_type<F: PrimeField32>(
+    opcode: VmOpcode,
+    rs1_reg: usize,
+    rs2_reg: usize,
+    imm: i32,
+) -> Instruction<F> {
+    Instruction::from_isize(
+        opcode,
+        (riscv::RV32_REGISTER_NUM_LIMBS * rs1_reg) as isize,
+        (riscv::RV32_REGISTER_NUM_LIMBS * rs2_reg) as isize,
+        imm as isize,
+        riscv::RV32_REGISTER_AS as isize,
+        riscv::RV32_MEMORY_AS as isize,
+    )
+}
+
+/// 256-bit equality branch: BEQ or BNE.
+pub fn int256_branch_eq<F: PrimeField32>(
+    op: BranchEqualOpcode,
+    rs1_reg: usize,
+    rs2_reg: usize,
+    imm: i32,
+) -> Instruction<F> {
+    int256_b_type(
+        BranchEqual256Opcode(op).global_opcode(),
+        rs1_reg,
+        rs2_reg,
+        imm,
+    )
+}
+
+/// 256-bit ordering branch: BLT, BLTU, BGE or BGEU.
+pub fn int256_branch_lt<F: PrimeField32>(
+    op: BranchLessThanOpcode,
+    rs1_reg: usize,
+    rs2_reg: usize,
+    imm: i32,
+) -> Instruction<F> {
+    int256_b_type(
+        BranchLessThan256Opcode(op).global_opcode(),
+        rs1_reg,
+        rs2_reg,
+        imm,
+    )
+}
+
+// =================================================================================================
+// Modular arithmetic, Fp2 and elliptic curve intrinsics
+// =================================================================================================
+//
+// Unlike the fixed-width Int256 chips, these extensions instantiate one set of chips per
+// configured modulus (or curve), and the instruction says which set it targets by shifting
+// the local opcode: `global = CLASS_OFFSET + index * COUNT + local`. `index` is the
+// position of the modulus/curve in the extension's configured list.
+//
+// Each set must be initialised by a SETUP instruction before its first use. Setup constrains
+// the leading bytes of the operands it reads to equal the modulus (and, for `EC_DOUBLE`, the
+// curve coefficient `a`) the chip was built with, which is what ties a `.wat`'s choice of
+// index to the CLI's `--modular`/`--fp2`/`--ecc` order.
+//
+// Setup reads the *same number* of operands as the corresponding operation, because it goes
+// through the same adapter; the trailing ones are simply left unconstrained. Upstream's
+// RISC-V encoding puts `x0` in `rs2` there, relying on register zero reading as the address
+// `0`. Crush registers are frame-pointer relative, so offset 0 is an ordinary local slot
+// holding an arbitrary value -- passing it would make the adapter dereference garbage. Every
+// builder below therefore takes a real `rs2_reg`, and callers must point it at readable
+// memory of the operation's operand width even when its contents do not matter.
+
+/// Opcode for modular arithmetic over the `mod_idx`-th configured modulus.
+fn modular_opcode(mod_idx: usize, op: Rv32ModularArithmeticOpcode) -> VmOpcode {
+    VmOpcode::from_usize(
+        op.global_opcode().as_usize() + mod_idx * Rv32ModularArithmeticOpcode::COUNT,
+    )
+}
+
+/// Modular arithmetic: ADD, SUB, MUL or DIV over the `mod_idx`-th modulus, on 32-byte
+/// little-endian operands.
+pub fn modular_op<F: PrimeField32>(
+    mod_idx: usize,
+    op: Rv32ModularArithmeticOpcode,
+    rd_reg: usize,
+    rs1_reg: usize,
+    rs2_reg: usize,
+) -> Instruction<F> {
+    heap_r_type(modular_opcode(mod_idx, op), rd_reg, rs1_reg, rs2_reg)
+}
+
+/// Modular equality: writes 1 or 0 into the *register* `rd_reg` (not into the heap).
+pub fn modular_is_eq<F: PrimeField32>(
+    mod_idx: usize,
+    rd_reg: usize,
+    rs1_reg: usize,
+    rs2_reg: usize,
+) -> Instruction<F> {
+    heap_r_type(
+        modular_opcode(mod_idx, Rv32ModularArithmeticOpcode::IS_EQ),
+        rd_reg,
+        rs1_reg,
+        rs2_reg,
+    )
+}
+
+/// Modular setup. `which` selects which of the three chips is being initialised, `rs1_reg`
+/// points at the 32-byte modulus, and `rs2_reg` at a second readable 32 bytes whose contents
+/// are unconstrained.
+pub fn modular_setup<F: PrimeField32>(
+    mod_idx: usize,
+    which: Rv32ModularArithmeticOpcode,
+    rd_reg: usize,
+    rs1_reg: usize,
+    rs2_reg: usize,
+) -> Instruction<F> {
+    assert!(
+        matches!(
+            which,
+            Rv32ModularArithmeticOpcode::SETUP_ADDSUB
+                | Rv32ModularArithmeticOpcode::SETUP_MULDIV
+                | Rv32ModularArithmeticOpcode::SETUP_ISEQ
+        ),
+        "{which:?} is not a modular setup opcode"
+    );
+    heap_r_type(modular_opcode(mod_idx, which), rd_reg, rs1_reg, rs2_reg)
+}
+
+/// Fp2 arithmetic: ADD, SUB, MUL, DIV or one of the two setups, over the `mod_idx`-th
+/// configured Fp2 modulus. Operands are pairs of 32-byte coefficients, `c0` then `c1`.
+pub fn fp2_op<F: PrimeField32>(
+    mod_idx: usize,
+    op: Fp2Opcode,
+    rd_reg: usize,
+    rs1_reg: usize,
+    rs2_reg: usize,
+) -> Instruction<F> {
+    let opcode = VmOpcode::from_usize(op.global_opcode().as_usize() + mod_idx * Fp2Opcode::COUNT);
+    heap_r_type(opcode, rd_reg, rs1_reg, rs2_reg)
+}
+
+/// Weierstrass curve arithmetic over the `curve_idx`-th configured curve. Points are an x and
+/// a y coordinate laid out back to back.
+///
+/// `SETUP_EC_ADD_NE` constrains the first coordinate of `rs1_reg`'s point to be the
+/// coordinate modulus; `SETUP_EC_DOUBLE` constrains both of them to be the modulus and the
+/// curve coefficient `a`.
+///
+/// The doubling chip and its setup use a single-read adapter, so `rs2_reg` is ignored and
+/// forced to zero: the adapter never dereferences it, and its AIR reports `c = 0`.
+pub fn ecc_op<F: PrimeField32>(
+    curve_idx: usize,
+    op: Rv32WeierstrassOpcode,
+    rd_reg: usize,
+    rs1_reg: usize,
+    rs2_reg: usize,
+) -> Instruction<F> {
+    let opcode = VmOpcode::from_usize(
+        op.global_opcode().as_usize() + curve_idx * Rv32WeierstrassOpcode::COUNT,
+    );
+    let rs2_reg = match op {
+        Rv32WeierstrassOpcode::EC_ADD_NE | Rv32WeierstrassOpcode::SETUP_EC_ADD_NE => rs2_reg,
+        // The doubling chip has a single-read adapter, whose AIR has no second register
+        // operand to report and so hardcodes `c = 0` on the program bus. Encoding anything
+        // else here leaves that bus unbalanced.
+        Rv32WeierstrassOpcode::EC_DOUBLE | Rv32WeierstrassOpcode::SETUP_EC_DOUBLE => 0,
+    };
+    heap_r_type(opcode, rd_reg, rs1_reg, rs2_reg)
+}
+
+/// Pairing final-exponentiation hint for the `curve_idx`-th configured pairing curve.
+///
+/// The pairing extension has no chips of its own, only this hint: it runs the Miller loop
+/// over the given points on the host and pushes the residue witness onto the hint stream,
+/// which the guest then reads back and verifies with the Fp2 and modular chips.
+///
+/// `p_desc_reg` and `q_desc_reg` hold pointers to two-word descriptors `{ptr, len}` in the
+/// heap, naming an array of G1 and an array of G2 points respectively. Both `ptr`s are
+/// absolute heap addresses, so a caller working in wasm offsets has to rebase them.
+pub fn pairing_hint_final_exp<F: PrimeField32>(
+    curve_idx: usize,
+    p_desc_reg: usize,
+    q_desc_reg: usize,
+) -> Instruction<F> {
+    Instruction::phantom(
+        PhantomDiscriminant(PairingPhantom::HintFinalExp as u16),
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * p_desc_reg),
+        F::from_usize(riscv::RV32_REGISTER_NUM_LIMBS * q_desc_reg),
+        curve_idx as u16,
     )
 }
 
