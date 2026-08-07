@@ -4,9 +4,7 @@ use std::{
     rc::Rc,
 };
 
-use crate::adapters::{
-    VecHeapAdapterAir, VecHeapAdapterExecutor, VecHeapAdapterFiller,
-};
+use crate::adapters::{VecHeapAdapterAir, VecHeapAdapterExecutor, VecHeapAdapterFiller};
 use num_bigint::BigUint;
 use num_traits::One;
 use openvm_circuit::{
@@ -68,9 +66,8 @@ pub fn ec_double_ne_expr(
 // Note: PreflightExecutor is implemented manually in preflight.rs with fast native arithmetic
 #[derive(Clone)]
 pub struct EcDoubleExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize> {
-    pub(crate) inner: FieldExpressionExecutor<
-        VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-    >,
+    pub(crate) inner:
+        FieldExpressionExecutor<VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>,
     pub(crate) cached_curve_type: Option<CurveType>,
 }
 
@@ -93,9 +90,8 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> EcDoubleExecutor<BLOCKS, BLOC
 }
 
 impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Deref for EcDoubleExecutor<BLOCKS, BLOCK_SIZE> {
-    type Target = FieldExpressionExecutor<
-        VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-    >;
+    type Target =
+        FieldExpressionExecutor<VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>;
 
     fn deref(&self) -> &Self::Target {
         &self.inner

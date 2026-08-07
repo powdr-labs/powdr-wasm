@@ -20,9 +20,6 @@ pub use config::*;
 pub use fp12::*;
 pub use pairing_extension::*;
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "cuda")] {
-                            } else {
-        pub use config::Rv32PairingCpuBuilder as Rv32PairingBuilder;
-    }
-}
+// Unconditional: there is no GPU builder to select between. The extension contributes no
+// AIRs, and `CrushGpuBuilder` rejects the arithmetic extensions a guest pairing needs.
+pub use config::Rv32PairingCpuBuilder as Rv32PairingBuilder;

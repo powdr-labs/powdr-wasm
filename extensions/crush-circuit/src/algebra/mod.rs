@@ -14,11 +14,6 @@ use std::ops::{Deref, DerefMut};
 use crate::adapters::VecHeapAdapterExecutor;
 use openvm_circuit::arch::DEFAULT_BLOCK_SIZE;
 use openvm_mod_circuit_builder::FieldExpressionExecutor;
-#[cfg(feature = "cuda")]
-use {
-    openvm_mod_circuit_builder::FieldExpressionCoreRecordMut,
-    openvm_rv32_adapters::VecHeapAdapterRecord,
-};
 
 // Number of limbs for different modulus sizes (bytes)
 /// Number of limbs for 256-bit (32-byte) moduli
@@ -58,9 +53,8 @@ pub struct FieldExprVecHeapExecutor<
     const BLOCK_SIZE: usize,
     const IS_FP2: bool,
 > {
-    inner: FieldExpressionExecutor<
-        VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-    >,
+    inner:
+        FieldExpressionExecutor<VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>,
     pub(crate) cached_field_type: Option<FieldType>,
 }
 
@@ -87,9 +81,8 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
 impl<const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool> Deref
     for FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, IS_FP2>
 {
-    type Target = FieldExpressionExecutor<
-        VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-    >;
+    type Target =
+        FieldExpressionExecutor<VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
@@ -103,14 +96,3 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool> DerefMut
         &mut self.inner
     }
 }
-
-#[cfg(feature = "cuda")]
-pub(crate) type AlgebraRecord<
-    'a,
-    const NUM_READS: usize,
-    const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
-> = (
-    &'a mut VecHeapAdapterRecord<NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-    FieldExpressionCoreRecordMut<'a>,
-);

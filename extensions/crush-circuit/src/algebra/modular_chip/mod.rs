@@ -1,6 +1,6 @@
 use crate::adapters::{
-    IsEqualModAdapterAir, IsEqualModAdapterExecutor, IsEqualModAdapterFiller,
-    VecHeapAdapterAir, VecHeapAdapterFiller,
+    IsEqualModAdapterAir, IsEqualModAdapterExecutor, IsEqualModAdapterFiller, VecHeapAdapterAir,
+    VecHeapAdapterFiller,
 };
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 use openvm_circuit_derive::PreflightExecutor;

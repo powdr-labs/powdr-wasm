@@ -4,9 +4,7 @@ use std::{
     rc::Rc,
 };
 
-use crate::adapters::{
-    VecHeapAdapterAir, VecHeapAdapterExecutor, VecHeapAdapterFiller,
-};
+use crate::adapters::{VecHeapAdapterAir, VecHeapAdapterExecutor, VecHeapAdapterFiller};
 use openvm_algebra_circuit::fields::{FieldType, get_field_type};
 use openvm_circuit::{
     arch::*,
@@ -58,9 +56,8 @@ pub fn ec_add_ne_expr(
 // Note: PreflightExecutor is implemented manually in preflight.rs with fast native arithmetic
 #[derive(Clone)]
 pub struct EcAddNeExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize> {
-    pub(crate) inner: FieldExpressionExecutor<
-        VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-    >,
+    pub(crate) inner:
+        FieldExpressionExecutor<VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>,
     pub(crate) cached_field_type: Option<FieldType>,
 }
 
@@ -79,9 +76,8 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddNeExecutor<BLOCKS, BLOCK
 }
 
 impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Deref for EcAddNeExecutor<BLOCKS, BLOCK_SIZE> {
-    type Target = FieldExpressionExecutor<
-        VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-    >;
+    type Target =
+        FieldExpressionExecutor<VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>;
 
     fn deref(&self) -> &Self::Target {
         &self.inner

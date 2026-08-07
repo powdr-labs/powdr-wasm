@@ -7,11 +7,6 @@
 //! the heap adapters (`crate::adapters`) and the two interpreters here.
 
 use openvm_circuit::arch::DEFAULT_BLOCK_SIZE;
-#[cfg(feature = "cuda")]
-use {
-    openvm_mod_circuit_builder::FieldExpressionCoreRecordMut,
-    openvm_rv32_adapters::VecHeapAdapterRecord,
-};
 
 mod extension;
 mod weierstrass_chip;
@@ -26,14 +21,3 @@ pub use weierstrass_chip::*;
 pub const ECC_BLOCKS_32: usize = 2 * (NUM_LIMBS_32 / DEFAULT_BLOCK_SIZE);
 /// Blocks for ECC with 48-limb coordinates: 2 * (48 / 4) = 24 blocks
 pub const ECC_BLOCKS_48: usize = 2 * (NUM_LIMBS_48 / DEFAULT_BLOCK_SIZE);
-
-#[cfg(feature = "cuda")]
-pub(crate) type EccRecord<
-    'a,
-    const NUM_READS: usize,
-    const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
-> = (
-    &'a mut VecHeapAdapterRecord<NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-    FieldExpressionCoreRecordMut<'a>,
-);

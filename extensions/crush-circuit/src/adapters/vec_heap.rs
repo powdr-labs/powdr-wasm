@@ -355,13 +355,7 @@ impl<
     const READ_SIZE: usize,
     const WRITE_SIZE: usize,
 > AdapterTraceExecutor<F>
-    for VecHeapAdapterExecutor<
-        NUM_READS,
-        BLOCKS_PER_READ,
-        BLOCKS_PER_WRITE,
-        READ_SIZE,
-        WRITE_SIZE,
-    >
+    for VecHeapAdapterExecutor<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
 {
     const WIDTH: usize = VecHeapAdapterCols::<
         F,
@@ -486,13 +480,7 @@ impl<
     const READ_SIZE: usize,
     const WRITE_SIZE: usize,
 > AdapterTraceFiller<F>
-    for VecHeapAdapterFiller<
-        NUM_READS,
-        BLOCKS_PER_READ,
-        BLOCKS_PER_WRITE,
-        READ_SIZE,
-        WRITE_SIZE,
-    >
+    for VecHeapAdapterFiller<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
 {
     const WIDTH: usize = VecHeapAdapterCols::<
         F,

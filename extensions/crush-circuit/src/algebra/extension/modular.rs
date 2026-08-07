@@ -1,8 +1,6 @@
 use std::{array, sync::Arc};
 
-use crate::adapters::{
-    IsEqualModAdapterAir, IsEqualModAdapterExecutor, IsEqualModAdapterFiller,
-};
+use crate::adapters::{IsEqualModAdapterAir, IsEqualModAdapterExecutor, IsEqualModAdapterFiller};
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, One};
 use openvm_algebra_transpiler::{ModularPhantom, Rv32ModularArithmeticOpcode};

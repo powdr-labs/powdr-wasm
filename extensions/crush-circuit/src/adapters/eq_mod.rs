@@ -100,8 +100,7 @@ impl<
     const BLOCKS_PER_READ: usize,
     const BLOCK_SIZE: usize,
     const TOTAL_READ_SIZE: usize,
-> ColumnsAir<F>
-    for IsEqualModAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+> ColumnsAir<F> for IsEqualModAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 {
     fn columns(&self) -> Option<Vec<String>> {
         <IsEqualModAdapterCols<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE> as openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
@@ -328,12 +327,8 @@ where
         IsEqualModAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>::width();
     type ReadData = [[u8; TOTAL_READ_SIZE]; NUM_READS];
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
-    type RecordMut<'a> = &'a mut IsEqualModAdapterRecord<
-        NUM_READS,
-        BLOCKS_PER_READ,
-        BLOCK_SIZE,
-        TOTAL_READ_SIZE,
-    >;
+    type RecordMut<'a> =
+        &'a mut IsEqualModAdapterRecord<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>;
 
     fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
         record.from_pc = pc;

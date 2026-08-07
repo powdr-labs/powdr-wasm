@@ -1,8 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::adapters::{
-    VecHeapAdapterAir, VecHeapAdapterExecutor, VecHeapAdapterFiller,
-};
+use crate::adapters::{VecHeapAdapterAir, VecHeapAdapterExecutor, VecHeapAdapterFiller};
 use openvm_algebra_transpiler::Fp2Opcode;
 use openvm_circuit::{
     arch::ExecutionBridge,

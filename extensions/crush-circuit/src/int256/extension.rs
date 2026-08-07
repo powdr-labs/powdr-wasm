@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use crate::adapters::{
-    VecHeapAdapterAir, VecHeapAdapterExecutor, VecHeapAdapterFiller,
-    VecHeapBranchAdapterAir, VecHeapBranchAdapterExecutor, VecHeapBranchAdapterFiller,
+    VecHeapAdapterAir, VecHeapAdapterExecutor, VecHeapAdapterFiller, VecHeapBranchAdapterAir,
+    VecHeapBranchAdapterExecutor, VecHeapBranchAdapterFiller,
 };
 use derive_more::derive::From;
 use openvm_circuit::{

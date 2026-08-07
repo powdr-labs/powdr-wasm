@@ -22,8 +22,8 @@ use openvm_rv32_adapters::{
 };
 
 use crate::adapters::{
-    VecHeapAdapterAir, VecHeapAdapterExecutor, VecHeapAdapterFiller,
-    VecHeapBranchAdapterAir, VecHeapBranchAdapterExecutor, VecHeapBranchAdapterFiller,
+    VecHeapAdapterAir, VecHeapAdapterExecutor, VecHeapAdapterFiller, VecHeapBranchAdapterAir,
+    VecHeapBranchAdapterExecutor, VecHeapBranchAdapterFiller,
 };
 // Core AIRs, executors and fillers are reused from OpenVM unchanged: only the register
 // addressing differs under crush, and that lives in the adapter and the interpreter.
