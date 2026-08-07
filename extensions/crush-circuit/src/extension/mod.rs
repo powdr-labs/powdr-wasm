@@ -99,24 +99,24 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
     )
 )]
 pub enum CrushExecutor {
-    BaseAlu(Rv32BaseAluExecutor),
+    BaseAlu(BaseAlu32Executor),
     BaseAlu64(BaseAlu64Executor),
-    Mul(Rv32MultiplicationExecutor),
+    Mul(Multiplication32Executor),
     Mul64(Mul64Executor),
-    LessThan(Rv32LessThanExecutor),
+    LessThan(LessThan32Executor),
     LessThan64(LessThan64Executor),
-    DivRem(Rv32DivRemExecutor),
+    DivRem(DivRem32Executor),
     DivRem64(DivRem64Executor),
-    Eq(Rv32EqExecutor),
+    Eq(Eq32Executor),
     Eq64(Eq64Executor),
-    Shift(Rv32ShiftExecutor),
+    Shift(Shift32Executor),
     Shift64(Shift64Executor),
-    LoadStore(Rv32LoadStoreExecutor),
-    LoadSignExtend(Rv32LoadSignExtendExecutor),
+    LoadStore(LoadStore32Executor),
+    LoadSignExtend(LoadSignExtend32Executor),
     Jump(JumpExecutor),
     Const32(Const32Executor),
-    Call(Rv32CallExecutor),
-    HintStore(Rv32HintStoreExecutor),
+    Call(Call32Executor),
+    HintStore(HintStoreExecutor),
 }
 
 // ============ VmExtension Implementations ============
@@ -130,8 +130,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Crush {
     ) -> Result<(), ExecutorInventoryError> {
         let pointer_max_bits = inventory.pointer_max_bits();
 
-        let base_alu = Rv32BaseAluExecutor::new(
-            Rv32BaseAluAdapterExecutor::default(),
+        let base_alu = BaseAlu32Executor::new(
+            BaseAluAdapter32Executor::default(),
             BaseAluOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(base_alu, BaseAluOpcode::iter().map(|x| x.global_opcode()))?;
@@ -145,8 +145,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Crush {
             BaseAlu64Opcode::iter().map(|x| x.global_opcode()),
         )?;
 
-        let mul = Rv32MultiplicationExecutor::new(
-            Rv32BaseAluAdapterExecutor::default(),
+        let mul = Multiplication32Executor::new(
+            BaseAluAdapter32Executor::default(),
             MulOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(mul, MulOpcode::iter().map(|x| x.global_opcode()))?;
@@ -154,8 +154,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Crush {
         let mul_64 =
             Mul64Executor::new(BaseAluAdapterExecutor::default(), Mul64Opcode::CLASS_OFFSET);
         inventory.add_executor(mul_64, Mul64Opcode::iter().map(|x| x.global_opcode()))?;
-        let less_than = Rv32LessThanExecutor::new(
-            Rv32BaseAluAdapterExecutor::default(),
+        let less_than = LessThan32Executor::new(
+            BaseAluAdapter32Executor::default(),
             LessThanOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(less_than, LessThanOpcode::iter().map(|x| x.global_opcode()))?;
@@ -169,8 +169,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Crush {
             LessThan64Opcode::iter().map(|x| x.global_opcode()),
         )?;
 
-        let divrem = Rv32DivRemExecutor::new(
-            Rv32BaseAluAdapterExecutor::default(),
+        let divrem = DivRem32Executor::new(
+            BaseAluAdapter32Executor::default(),
             DivRemOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(divrem, DivRemOpcode::iter().map(|x| x.global_opcode()))?;
@@ -181,10 +181,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Crush {
         );
         inventory.add_executor(divrem_64, DivRem64Opcode::iter().map(|x| x.global_opcode()))?;
 
-        let eq = Rv32EqExecutor::new(
-            Rv32BaseAluAdapterExecutor::default(),
-            EqOpcode::CLASS_OFFSET,
-        );
+        let eq = Eq32Executor::new(BaseAluAdapter32Executor::default(), EqOpcode::CLASS_OFFSET);
         inventory.add_executor(eq, EqOpcode::iter().map(|x| x.global_opcode()))?;
 
         let eq_64 = Eq64Executor::new(
@@ -193,8 +190,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Crush {
         );
         inventory.add_executor(eq_64, Eq64Opcode::iter().map(|x| x.global_opcode()))?;
 
-        let shift = Rv32ShiftExecutor::new(
-            Rv32BaseAluAdapterExecutor::default(),
+        let shift = Shift32Executor::new(
+            BaseAluAdapter32Executor::default(),
             ShiftOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(shift, ShiftOpcode::iter().map(|x| x.global_opcode()))?;
@@ -206,7 +203,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Crush {
         inventory.add_executor(shift_64, Shift64Opcode::iter().map(|x| x.global_opcode()))?;
 
         let load_store = LoadStoreExecutor::new(
-            Rv32LoadStoreAdapterExecutor::new(pointer_max_bits),
+            LoadStoreAdapterExecutor::new(pointer_max_bits),
             LoadStoreOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(
@@ -217,7 +214,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Crush {
         )?;
 
         let load_sign_extend =
-            LoadSignExtendExecutor::new(Rv32LoadStoreAdapterExecutor::new(pointer_max_bits));
+            LoadSignExtendExecutor::new(LoadStoreAdapterExecutor::new(pointer_max_bits));
         inventory.add_executor(
             load_sign_extend,
             [LoadStoreOpcode::LOADB, LoadStoreOpcode::LOADH].map(|x| x.global_opcode()),
@@ -229,11 +226,10 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Crush {
         let const32 = Const32Executor::new(ConstOpcodes::CLASS_OFFSET);
         inventory.add_executor(const32, ConstOpcodes::iter().map(|x| x.global_opcode()))?;
 
-        let call = Rv32CallExecutor::new(CallAdapterExecutor, CallOpcode::CLASS_OFFSET);
+        let call = Call32Executor::new(CallAdapterExecutor, CallOpcode::CLASS_OFFSET);
         inventory.add_executor(call, CallOpcode::iter().map(|x| x.global_opcode()))?;
 
-        let hint_store =
-            Rv32HintStoreExecutor::new(pointer_max_bits, HintStoreOpcode::CLASS_OFFSET);
+        let hint_store = HintStoreExecutor::new(pointer_max_bits, HintStoreOpcode::CLASS_OFFSET);
         inventory.add_executor(
             hint_store,
             HintStoreOpcode::iter().map(|x| x.global_opcode()),
@@ -290,8 +286,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Crush {
             }
         };
 
-        let base_alu = Rv32BaseAluAir::new(
-            Rv32BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
+        let base_alu = BaseAlu32Air::new(
+            BaseAluAdapter32Air::new(exec_bridge, memory_bridge, bitwise_lu),
             BaseAluCoreAir::new(bitwise_lu, BaseAluOpcode::CLASS_OFFSET),
         );
         inventory.add_air(base_alu);
@@ -321,8 +317,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Crush {
             }
         };
 
-        let mul = Rv32MultiplicationAir::new(
-            Rv32BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
+        let mul = Multiplication32Air::new(
+            BaseAluAdapter32Air::new(exec_bridge, memory_bridge, bitwise_lu),
             MultiplicationCoreAir::new(range_tuple_bus, MulOpcode::CLASS_OFFSET),
         );
         inventory.add_air(mul);
@@ -336,8 +332,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Crush {
             MultiplicationCoreAir::new(range_tuple_bus, Mul64Opcode::CLASS_OFFSET),
         );
         inventory.add_air(mul_64);
-        let less_than = Rv32LessThanAir::new(
-            Rv32BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
+        let less_than = LessThan32Air::new(
+            BaseAluAdapter32Air::new(exec_bridge, memory_bridge, bitwise_lu),
             LessThanCoreAir::new(bitwise_lu, LessThanOpcode::CLASS_OFFSET),
         );
         inventory.add_air(less_than);
@@ -352,8 +348,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Crush {
         );
         inventory.add_air(less_than_64);
 
-        let divrem = Rv32DivRemAir::new(
-            Rv32BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
+        let divrem = DivRem32Air::new(
+            BaseAluAdapter32Air::new(exec_bridge, memory_bridge, bitwise_lu),
             DivRemCoreAir::new(bitwise_lu, range_tuple_bus, DivRemOpcode::CLASS_OFFSET),
         );
         inventory.add_air(divrem);
@@ -364,8 +360,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Crush {
         );
         inventory.add_air(divrem_64);
 
-        let eq = Rv32EqAir::new(
-            Rv32BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
+        let eq = Eq32Air::new(
+            BaseAluAdapter32Air::new(exec_bridge, memory_bridge, bitwise_lu),
             EqCoreAir::new(EqOpcode::CLASS_OFFSET),
         );
         inventory.add_air(eq);
@@ -376,8 +372,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Crush {
         );
         inventory.add_air(eq_64);
 
-        let shift = Rv32ShiftAir::new(
-            Rv32BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
+        let shift = Shift32Air::new(
+            BaseAluAdapter32Air::new(exec_bridge, memory_bridge, bitwise_lu),
             ShiftCoreAir::new(bitwise_lu, range_checker, ShiftOpcode::CLASS_OFFSET),
         );
         inventory.add_air(shift);
@@ -392,24 +388,14 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Crush {
         );
         inventory.add_air(shift_64);
 
-        let load_store = Rv32LoadStoreAir::new(
-            Rv32LoadStoreAdapterAir::new(
-                memory_bridge,
-                exec_bridge,
-                range_checker,
-                pointer_max_bits,
-            ),
+        let load_store = LoadStoreAir::new(
+            LoadStoreAdapterAir::new(memory_bridge, exec_bridge, range_checker, pointer_max_bits),
             LoadStoreCoreAir::new(LoadStoreOpcode::CLASS_OFFSET),
         );
         inventory.add_air(load_store);
 
-        let load_sign_extend = Rv32LoadSignExtendAir::new(
-            Rv32LoadStoreAdapterAir::new(
-                memory_bridge,
-                exec_bridge,
-                range_checker,
-                pointer_max_bits,
-            ),
+        let load_sign_extend = LoadSignExtendAir::new(
+            LoadStoreAdapterAir::new(memory_bridge, exec_bridge, range_checker, pointer_max_bits),
             LoadSignExtendCoreAir::new(range_checker),
         );
         inventory.add_air(load_sign_extend);
@@ -434,7 +420,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Crush {
         );
         inventory.add_air(call);
 
-        let hint_store = Rv32HintStoreAir::new(
+        let hint_store = HintStoreAir::new(
             exec_bridge,
             memory_bridge,
             bitwise_lu,
@@ -484,10 +470,10 @@ where
 
         // These calls to next_air are not strictly necessary to construct the chips, but provide a
         // safeguard to ensure that chip construction matches the circuit definition
-        inventory.next_air::<Rv32BaseAluAir>()?;
-        let base_alu = Rv32BaseAluChip::new(
+        inventory.next_air::<BaseAlu32Air>()?;
+        let base_alu = BaseAlu32Chip::new(
             BaseAluFiller::new(
-                Rv32BaseAluAdapterFiller::new(bitwise_lu.clone()),
+                BaseAluAdapter32Filler::new(bitwise_lu.clone()),
                 bitwise_lu.clone(),
                 BaseAluOpcode::CLASS_OFFSET,
             ),
@@ -520,10 +506,10 @@ where
             }
         };
 
-        inventory.next_air::<Rv32MultiplicationAir>()?;
-        let mul = Rv32MultiplicationChip::new(
+        inventory.next_air::<Multiplication32Air>()?;
+        let mul = Multiplication32Chip::new(
             MultiplicationFiller::new(
-                Rv32BaseAluAdapterFiller::new(bitwise_lu.clone()),
+                BaseAluAdapter32Filler::new(bitwise_lu.clone()),
                 range_tuple_chip.clone(),
                 MulOpcode::CLASS_OFFSET,
             ),
@@ -541,10 +527,10 @@ where
             mem_helper.clone(),
         );
         inventory.add_executor_chip(mul_64);
-        inventory.next_air::<Rv32LessThanAir>()?;
-        let less_than = Rv32LessThanChip::new(
+        inventory.next_air::<LessThan32Air>()?;
+        let less_than = LessThan32Chip::new(
             LessThanFiller::new(
-                Rv32BaseAluAdapterFiller::new(bitwise_lu.clone()),
+                BaseAluAdapter32Filler::new(bitwise_lu.clone()),
                 bitwise_lu.clone(),
                 LessThanOpcode::CLASS_OFFSET,
             ),
@@ -563,10 +549,10 @@ where
         );
         inventory.add_executor_chip(less_than_64);
 
-        inventory.next_air::<Rv32DivRemAir>()?;
-        let divrem = Rv32DivRemChip::new(
+        inventory.next_air::<DivRem32Air>()?;
+        let divrem = DivRem32Chip::new(
             DivRemFiller::new(
-                Rv32BaseAluAdapterFiller::new(bitwise_lu.clone()),
+                BaseAluAdapter32Filler::new(bitwise_lu.clone()),
                 bitwise_lu.clone(),
                 range_tuple_chip.clone(),
                 DivRemOpcode::CLASS_OFFSET,
@@ -587,10 +573,10 @@ where
         );
         inventory.add_executor_chip(divrem_64);
 
-        inventory.next_air::<Rv32EqAir>()?;
-        let eq = Rv32EqChip::new(
+        inventory.next_air::<Eq32Air>()?;
+        let eq = Eq32Chip::new(
             EqFiller::new(
-                Rv32BaseAluAdapterFiller::new(bitwise_lu.clone()),
+                BaseAluAdapter32Filler::new(bitwise_lu.clone()),
                 EqOpcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),
@@ -607,10 +593,10 @@ where
         );
         inventory.add_executor_chip(eq_64);
 
-        inventory.next_air::<Rv32ShiftAir>()?;
-        let shift = Rv32ShiftChip::new(
+        inventory.next_air::<Shift32Air>()?;
+        let shift = Shift32Chip::new(
             ShiftFiller::new(
-                Rv32BaseAluAdapterFiller::new(bitwise_lu.clone()),
+                BaseAluAdapter32Filler::new(bitwise_lu.clone()),
                 bitwise_lu.clone(),
                 range_checker.clone(),
                 ShiftOpcode::CLASS_OFFSET,
@@ -631,20 +617,20 @@ where
         );
         inventory.add_executor_chip(shift_64);
 
-        inventory.next_air::<Rv32LoadStoreAir>()?;
-        let load_store_chip = Rv32LoadStoreChip::new(
+        inventory.next_air::<LoadStoreAir>()?;
+        let load_store_chip = LoadStoreChip::new(
             LoadStoreFiller::new(
-                Rv32LoadStoreAdapterFiller::new(pointer_max_bits, range_checker.clone()),
+                LoadStoreAdapterFiller::new(pointer_max_bits, range_checker.clone()),
                 LoadStoreOpcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(load_store_chip);
 
-        inventory.next_air::<Rv32LoadSignExtendAir>()?;
-        let load_sign_extend = Rv32LoadSignExtendChip::new(
+        inventory.next_air::<LoadSignExtendAir>()?;
+        let load_sign_extend = LoadSignExtendChip::new(
             LoadSignExtendFiller::new(
-                Rv32LoadStoreAdapterFiller::new(pointer_max_bits, range_checker.clone()),
+                LoadStoreAdapterFiller::new(pointer_max_bits, range_checker.clone()),
                 range_checker.clone(),
             ),
             mem_helper.clone(),
@@ -675,9 +661,9 @@ where
         );
         inventory.add_executor_chip(call);
 
-        inventory.next_air::<Rv32HintStoreAir>()?;
-        let hint_store = Rv32HintStoreChip::new(
-            Rv32HintStoreFiller::new(pointer_max_bits, bitwise_lu),
+        inventory.next_air::<HintStoreAir>()?;
+        let hint_store = HintStoreChip::new(
+            HintStoreFiller::new(pointer_max_bits, bitwise_lu),
             mem_helper,
         );
         inventory.add_executor_chip(hint_store);

@@ -12,24 +12,24 @@ use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
     adapters::{
-        BaseAluAdapterColsDifferentInputsOutputs, BaseAluAdapterRecordDifferentInputsOutputs,
-        RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, Rv32BaseAluAdapterCols, Rv32BaseAluAdapterRecord,
+        BaseAluAdapter32Cols, BaseAluAdapter32Record, BaseAluAdapterColsDifferentInputsOutputs,
+        BaseAluAdapterRecordDifferentInputsOutputs, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
         W32_REG_OPS, W64_NUM_LIMBS, W64_REG_OPS,
     },
     cuda_abi::{less_than_cuda, less_than64_cuda},
 };
 
 #[derive(new)]
-pub struct Rv32LessThanChipGpu {
+pub struct LessThan32ChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
     pub timestamp_max_bits: usize,
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for Rv32LessThanChipGpu {
+impl Chip<DenseRecordArena, GpuBackend> for LessThan32ChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
-            Rv32BaseAluAdapterRecord,
+            BaseAluAdapter32Record,
             LessThanCoreRecord<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
         )>();
         let records = arena.allocated();
@@ -38,7 +38,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32LessThanChipGpu {
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = Rv32BaseAluAdapterCols::<F>::width()
+        let trace_width = BaseAluAdapter32Cols::<F>::width()
             + LessThanCoreCols::<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
 

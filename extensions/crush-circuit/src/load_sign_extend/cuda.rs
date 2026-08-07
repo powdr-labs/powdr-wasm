@@ -9,21 +9,21 @@ use openvm_rv32im_circuit::{LoadSignExtendCoreCols, LoadSignExtendCoreRecord};
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
-    adapters::{RV32_REGISTER_NUM_LIMBS, Rv32LoadStoreAdapterCols, Rv32LoadStoreAdapterRecord},
+    adapters::{LoadStoreAdapterCols, LoadStoreAdapterRecord, RV32_REGISTER_NUM_LIMBS},
     cuda_abi::load_sign_extend_cuda,
 };
 
 #[derive(new)]
-pub struct Rv32LoadSignExtendChipGpu {
+pub struct LoadSignExtendChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for Rv32LoadSignExtendChipGpu {
+impl Chip<DenseRecordArena, GpuBackend> for LoadSignExtendChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
-            Rv32LoadStoreAdapterRecord,
+            LoadStoreAdapterRecord,
             LoadSignExtendCoreRecord<RV32_REGISTER_NUM_LIMBS>,
         )>();
         let records = arena.allocated();
@@ -32,7 +32,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32LoadSignExtendChipGpu {
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = Rv32LoadStoreAdapterCols::<F>::width()
+        let trace_width = LoadStoreAdapterCols::<F>::width()
             + LoadSignExtendCoreCols::<F, RV32_REGISTER_NUM_LIMBS>::width();
         let height = records.len() / RECORD_SIZE;
         let padded_height = next_power_of_two_or_zero(height);

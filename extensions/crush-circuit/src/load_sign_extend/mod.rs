@@ -3,7 +3,7 @@ use openvm_rv32im_circuit::{LoadSignExtendCoreAir, LoadSignExtendFiller};
 
 use super::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use crate::{
-    adapters::{Rv32LoadStoreAdapterAir, Rv32LoadStoreAdapterFiller},
+    adapters::{LoadStoreAdapterAir, LoadStoreAdapterFiller},
     load_sign_extend::execution::LoadSignExtendExecutor,
 };
 
@@ -12,12 +12,11 @@ pub mod execution;
 #[cfg(feature = "cuda")]
 mod cuda;
 #[cfg(feature = "cuda")]
-pub use cuda::Rv32LoadSignExtendChipGpu;
+pub use cuda::LoadSignExtendChipGpu;
 
-pub type Rv32LoadSignExtendAir = VmAirWrapper<
-    Rv32LoadStoreAdapterAir,
+pub type LoadSignExtendAir = VmAirWrapper<
+    LoadStoreAdapterAir,
     LoadSignExtendCoreAir<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
 >;
-pub type Rv32LoadSignExtendExecutor = LoadSignExtendExecutor<RV32_REGISTER_NUM_LIMBS>;
-pub type Rv32LoadSignExtendChip<F> =
-    VmChipWrapper<F, LoadSignExtendFiller<Rv32LoadStoreAdapterFiller>>;
+pub type LoadSignExtend32Executor = LoadSignExtendExecutor<RV32_REGISTER_NUM_LIMBS>;
+pub type LoadSignExtendChip<F> = VmChipWrapper<F, LoadSignExtendFiller<LoadStoreAdapterFiller>>;

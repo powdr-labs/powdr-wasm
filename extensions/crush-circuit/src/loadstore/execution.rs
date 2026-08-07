@@ -20,17 +20,17 @@ use openvm_rv32im_circuit::LoadStoreExecutor as LoadStoreExecutorInner;
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::adapters::Rv32LoadStoreAdapterExecutor;
+use crate::adapters::LoadStoreAdapterExecutor;
 use crate::memory_config::FpMemory;
 
 /// Newtype wrapper to satisfy orphan rules for trait implementations.
 #[derive(Clone, PreflightExecutor)]
 pub struct LoadStoreExecutor<const NUM_LIMBS: usize>(
-    pub LoadStoreExecutorInner<Rv32LoadStoreAdapterExecutor, NUM_LIMBS>,
+    pub LoadStoreExecutorInner<LoadStoreAdapterExecutor, NUM_LIMBS>,
 );
 
 impl<const NUM_LIMBS: usize> LoadStoreExecutor<NUM_LIMBS> {
-    pub fn new(adapter: Rv32LoadStoreAdapterExecutor, offset: usize) -> Self {
+    pub fn new(adapter: LoadStoreAdapterExecutor, offset: usize) -> Self {
         Self(LoadStoreExecutorInner::new(adapter, offset))
     }
 }
