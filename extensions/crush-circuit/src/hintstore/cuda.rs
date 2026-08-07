@@ -13,12 +13,12 @@ use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
-    Rv32HintStoreCols, Rv32HintStoreLayout, Rv32HintStoreRecordMut, adapters::RV32_CELL_BITS,
+    HintStoreCols, HintStoreLayout, HintStoreRecordMut, adapters::RV32_CELL_BITS,
     cuda_abi::hintstore_cuda::tracegen,
 };
 
 #[derive(new)]
-pub struct Rv32HintStoreChipGpu {
+pub struct HintStoreChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
     pub pointer_max_bits: usize,
@@ -33,9 +33,9 @@ pub struct OffsetInfo {
     pub local_idx: u32,
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for Rv32HintStoreChipGpu {
+impl Chip<DenseRecordArena, GpuBackend> for HintStoreChipGpu {
     fn generate_proving_ctx(&self, mut arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        let width = Rv32HintStoreCols::<u8>::width();
+        let width = HintStoreCols::<u8>::width();
         let records = arena.allocated_mut();
         if records.is_empty() {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
@@ -48,8 +48,8 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32HintStoreChipGpu {
             let prev_offset = offset;
             let record = RecordSeeker::<
                 DenseRecordArena,
-                Rv32HintStoreRecordMut,
-                Rv32HintStoreLayout,
+                HintStoreRecordMut,
+                HintStoreLayout,
             >::get_record_at(&mut offset, records);
             for idx in 0..record.inner.num_words {
                 offsets.push(OffsetInfo::new(prev_offset as u32, idx));

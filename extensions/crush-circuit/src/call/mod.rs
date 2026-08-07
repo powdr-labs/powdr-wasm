@@ -17,6 +17,6 @@ pub use execution::CallExecutor;
 #[cfg(feature = "cuda")]
 pub use cuda::CallChipGpu;
 
-pub type Rv32CallExecutor = CallExecutor<CallAdapterExecutor>;
+pub type Call32Executor = CallExecutor<CallAdapterExecutor>;
 pub type CallAir = VmAirWrapper<CallAdapterAir, CallCoreAir>;
 pub type CallChip<F> = VmChipWrapper<F, CallFiller>;

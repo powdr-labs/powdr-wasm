@@ -531,8 +531,8 @@ pub type BaseAluAdapterRecord<const NUM_OPS: usize> =
     BaseAluAdapterRecordDifferentInputsOutputs<NUM_OPS, NUM_OPS>;
 
 // 32-bit type aliases
-pub type Rv32BaseAluAdapterCols<T> = BaseAluAdapterCols<T, W32_REG_OPS>;
-pub type Rv32BaseAluAdapterAir = BaseAluAdapterAir<RV32_REGISTER_NUM_LIMBS, W32_REG_OPS>;
-pub type Rv32BaseAluAdapterRecord = BaseAluAdapterRecord<W32_REG_OPS>;
-pub type Rv32BaseAluAdapterExecutor = BaseAluAdapterExecutor<RV32_REGISTER_NUM_LIMBS, W32_REG_OPS>;
-pub type Rv32BaseAluAdapterFiller = BaseAluAdapterFiller<W32_REG_OPS>;
+pub type BaseAluAdapter32Cols<T> = BaseAluAdapterCols<T, W32_REG_OPS>;
+pub type BaseAluAdapter32Air = BaseAluAdapterAir<RV32_REGISTER_NUM_LIMBS, W32_REG_OPS>;
+pub type BaseAluAdapter32Record = BaseAluAdapterRecord<W32_REG_OPS>;
+pub type BaseAluAdapter32Executor = BaseAluAdapterExecutor<RV32_REGISTER_NUM_LIMBS, W32_REG_OPS>;
+pub type BaseAluAdapter32Filler = BaseAluAdapterFiller<W32_REG_OPS>;

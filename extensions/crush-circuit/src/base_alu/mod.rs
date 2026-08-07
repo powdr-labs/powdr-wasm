@@ -2,8 +2,8 @@ use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 use openvm_rv32im_circuit::{BaseAluCoreAir, BaseAluFiller};
 
 use super::adapters::{
-    BaseAluAdapterAir, BaseAluAdapterFiller, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
-    Rv32BaseAluAdapterAir, Rv32BaseAluAdapterFiller, W32_REG_OPS, W64_NUM_LIMBS, W64_REG_OPS,
+    BaseAluAdapter32Air, BaseAluAdapter32Filler, BaseAluAdapterAir, BaseAluAdapterFiller,
+    RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, W32_REG_OPS, W64_NUM_LIMBS, W64_REG_OPS,
 };
 
 mod execution;
@@ -11,17 +11,17 @@ mod execution;
 #[cfg(feature = "cuda")]
 mod cuda;
 #[cfg(feature = "cuda")]
-pub use cuda::{BaseAlu64ChipGpu, Rv32BaseAluChipGpu};
+pub use cuda::{BaseAlu32ChipGpu, BaseAlu64ChipGpu};
 
 pub use execution::BaseAluExecutor;
 
 // 32-bit type aliases
-pub type Rv32BaseAluAir =
-    VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;
-pub type Rv32BaseAluExecutor = BaseAluExecutor<RV32_REGISTER_NUM_LIMBS, W32_REG_OPS>;
-pub type Rv32BaseAluChip<F> = VmChipWrapper<
+pub type BaseAlu32Air =
+    VmAirWrapper<BaseAluAdapter32Air, BaseAluCoreAir<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;
+pub type BaseAlu32Executor = BaseAluExecutor<RV32_REGISTER_NUM_LIMBS, W32_REG_OPS>;
+pub type BaseAlu32Chip<F> = VmChipWrapper<
     F,
-    BaseAluFiller<Rv32BaseAluAdapterFiller, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
+    BaseAluFiller<BaseAluAdapter32Filler, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
 >;
 
 // 64-bit type aliases

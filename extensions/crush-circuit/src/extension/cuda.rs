@@ -9,13 +9,13 @@ use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 use crate::{
-    BaseAlu64Air, BaseAlu64ChipGpu, CallAir, CallChipGpu, Const32Air, Const32ChipGpu, DivRem64Air,
-    DivRem64ChipGpu, Eq64Air, Eq64ChipGpu, JumpAir, JumpChipGpu, LessThan64Air, LessThan64ChipGpu,
-    Mul64Air, Mul64ChipGpu, Rv32BaseAluAir, Rv32BaseAluChipGpu, Rv32DivRemAir, Rv32DivRemChipGpu,
-    Rv32EqAir, Rv32EqChipGpu, Rv32HintStoreAir, Rv32HintStoreChipGpu, Rv32LessThanAir,
-    Rv32LessThanChipGpu, Rv32LoadSignExtendAir, Rv32LoadSignExtendChipGpu, Rv32LoadStoreAir,
-    Rv32LoadStoreChipGpu, Rv32MultiplicationAir, Rv32MultiplicationChipGpu, Rv32ShiftAir,
-    Rv32ShiftChipGpu, Shift64Air, Shift64ChipGpu,
+    BaseAlu32Air, BaseAlu32ChipGpu, BaseAlu64Air, BaseAlu64ChipGpu, CallAir, CallChipGpu,
+    Const32Air, Const32ChipGpu, DivRem32Air, DivRem32ChipGpu, DivRem64Air, DivRem64ChipGpu,
+    Eq32Air, Eq32ChipGpu, Eq64Air, Eq64ChipGpu, HintStoreAir, HintStoreChipGpu, JumpAir,
+    JumpChipGpu, LessThan32Air, LessThan32ChipGpu, LessThan64Air, LessThan64ChipGpu,
+    LoadSignExtendAir, LoadSignExtendChipGpu, LoadStoreAir, LoadStoreChipGpu, Mul64Air,
+    Mul64ChipGpu, Multiplication32Air, Multiplication32ChipGpu, Shift32Air, Shift32ChipGpu,
+    Shift64Air, Shift64ChipGpu,
 };
 
 use super::Crush;
@@ -37,8 +37,8 @@ impl VmProverExtension<BabyBearPoseidon2GpuEngine, DenseRecordArena, Crush> for 
         // NOTE: The order of next_air() calls must match the order of add_air()
         // calls in Crush::extend_circuit (extension/mod.rs).
 
-        inventory.next_air::<Rv32BaseAluAir>()?;
-        let base_alu = Rv32BaseAluChipGpu::new(
+        inventory.next_air::<BaseAlu32Air>()?;
+        let base_alu = BaseAlu32ChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
             timestamp_max_bits,
@@ -72,8 +72,8 @@ impl VmProverExtension<BabyBearPoseidon2GpuEngine, DenseRecordArena, Crush> for 
             }
         };
 
-        inventory.next_air::<Rv32MultiplicationAir>()?;
-        let mul = Rv32MultiplicationChipGpu::new(
+        inventory.next_air::<Multiplication32Air>()?;
+        let mul = Multiplication32ChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
             range_tuple_checker.clone(),
@@ -90,8 +90,8 @@ impl VmProverExtension<BabyBearPoseidon2GpuEngine, DenseRecordArena, Crush> for 
         );
         inventory.add_executor_chip(mul_64);
 
-        inventory.next_air::<Rv32LessThanAir>()?;
-        let less_than = Rv32LessThanChipGpu::new(
+        inventory.next_air::<LessThan32Air>()?;
+        let less_than = LessThan32ChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
             timestamp_max_bits,
@@ -106,8 +106,8 @@ impl VmProverExtension<BabyBearPoseidon2GpuEngine, DenseRecordArena, Crush> for 
         );
         inventory.add_executor_chip(less_than_64);
 
-        inventory.next_air::<Rv32DivRemAir>()?;
-        let divrem = Rv32DivRemChipGpu::new(
+        inventory.next_air::<DivRem32Air>()?;
+        let divrem = DivRem32ChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
             range_tuple_checker.clone(),
@@ -124,8 +124,8 @@ impl VmProverExtension<BabyBearPoseidon2GpuEngine, DenseRecordArena, Crush> for 
         );
         inventory.add_executor_chip(divrem_64);
 
-        inventory.next_air::<Rv32EqAir>()?;
-        let eq = Rv32EqChipGpu::new(
+        inventory.next_air::<Eq32Air>()?;
+        let eq = Eq32ChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
             timestamp_max_bits,
@@ -140,8 +140,8 @@ impl VmProverExtension<BabyBearPoseidon2GpuEngine, DenseRecordArena, Crush> for 
         );
         inventory.add_executor_chip(eq_64);
 
-        inventory.next_air::<Rv32ShiftAir>()?;
-        let shift = Rv32ShiftChipGpu::new(
+        inventory.next_air::<Shift32Air>()?;
+        let shift = Shift32ChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
             timestamp_max_bits,
@@ -156,17 +156,14 @@ impl VmProverExtension<BabyBearPoseidon2GpuEngine, DenseRecordArena, Crush> for 
         );
         inventory.add_executor_chip(shift_64);
 
-        inventory.next_air::<Rv32LoadStoreAir>()?;
+        inventory.next_air::<LoadStoreAir>()?;
         let load_store =
-            Rv32LoadStoreChipGpu::new(range_checker.clone(), pointer_max_bits, timestamp_max_bits);
+            LoadStoreChipGpu::new(range_checker.clone(), pointer_max_bits, timestamp_max_bits);
         inventory.add_executor_chip(load_store);
 
-        inventory.next_air::<Rv32LoadSignExtendAir>()?;
-        let load_sign_extend = Rv32LoadSignExtendChipGpu::new(
-            range_checker.clone(),
-            pointer_max_bits,
-            timestamp_max_bits,
-        );
+        inventory.next_air::<LoadSignExtendAir>()?;
+        let load_sign_extend =
+            LoadSignExtendChipGpu::new(range_checker.clone(), pointer_max_bits, timestamp_max_bits);
         inventory.add_executor_chip(load_sign_extend);
 
         inventory.next_air::<JumpAir>()?;
@@ -185,8 +182,8 @@ impl VmProverExtension<BabyBearPoseidon2GpuEngine, DenseRecordArena, Crush> for 
         let call = CallChipGpu::new(range_checker.clone(), pointer_max_bits, timestamp_max_bits);
         inventory.add_executor_chip(call);
 
-        inventory.next_air::<Rv32HintStoreAir>()?;
-        let hint_store = Rv32HintStoreChipGpu::new(
+        inventory.next_air::<HintStoreAir>()?;
+        let hint_store = HintStoreChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
             pointer_max_bits,

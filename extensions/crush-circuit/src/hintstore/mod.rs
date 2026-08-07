@@ -47,11 +47,11 @@ mod execution;
 #[cfg(feature = "cuda")]
 mod cuda;
 #[cfg(feature = "cuda")]
-pub use cuda::{OffsetInfo, Rv32HintStoreChipGpu};
+pub use cuda::{HintStoreChipGpu, OffsetInfo};
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, StructReflection)]
-pub struct Rv32HintStoreCols<T> {
+pub struct HintStoreCols<T> {
     // common
     pub is_single: T,
     pub is_buffer: T,
@@ -74,7 +74,7 @@ pub struct Rv32HintStoreCols<T> {
 }
 
 #[derive(Copy, Clone, Debug, derive_new::new)]
-pub struct Rv32HintStoreAir {
+pub struct HintStoreAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
     pub bitwise_operation_lookup_bus: BitwiseOperationLookupBus,
@@ -82,28 +82,28 @@ pub struct Rv32HintStoreAir {
     pointer_max_bits: usize,
 }
 
-impl<F: Field> BaseAir<F> for Rv32HintStoreAir {
+impl<F: Field> BaseAir<F> for HintStoreAir {
     fn width(&self) -> usize {
-        Rv32HintStoreCols::<F>::width()
+        HintStoreCols::<F>::width()
     }
 }
 
-impl<F: Field> ColumnsAir<F> for Rv32HintStoreAir {
+impl<F: Field> ColumnsAir<F> for HintStoreAir {
     fn columns(&self) -> Option<Vec<String>> {
-        Rv32HintStoreCols::<F>::struct_reflection()
+        HintStoreCols::<F>::struct_reflection()
     }
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for Rv32HintStoreAir {}
-impl<F: Field> PartitionedBaseAir<F> for Rv32HintStoreAir {}
+impl<F: Field> BaseAirWithPublicValues<F> for HintStoreAir {}
+impl<F: Field> PartitionedBaseAir<F> for HintStoreAir {}
 
-impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
+impl<AB: InteractionBuilder> Air<AB> for HintStoreAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0).expect("row_slice(0) should exist");
-        let local_cols: &Rv32HintStoreCols<AB::Var> = (*local).borrow();
+        let local_cols: &HintStoreCols<AB::Var> = (*local).borrow();
         let next = main.row_slice(1).expect("row_slice(1) should exist");
-        let next_cols: &Rv32HintStoreCols<AB::Var> = (*next).borrow();
+        let next_cols: &HintStoreCols<AB::Var> = (*next).borrow();
 
         let timestamp: AB::Var = local_cols.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
@@ -275,23 +275,23 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct Rv32HintStoreMetadata {
+pub struct HintStoreMetadata {
     num_words: usize,
 }
 
-impl MultiRowMetadata for Rv32HintStoreMetadata {
+impl MultiRowMetadata for HintStoreMetadata {
     #[inline(always)]
     fn get_num_rows(&self) -> usize {
         self.num_words
     }
 }
 
-pub type Rv32HintStoreLayout = MultiRowLayout<Rv32HintStoreMetadata>;
+pub type HintStoreLayout = MultiRowLayout<HintStoreMetadata>;
 
 // This is the part of the record that we keep only once per instruction
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv32HintStoreRecordHeader {
+pub struct HintStoreRecordHeader {
     pub num_words: u32,
 
     pub from_pc: u32,
@@ -312,83 +312,82 @@ pub struct Rv32HintStoreRecordHeader {
 // This is the part of the record that we keep `num_words` times per instruction
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv32HintStoreVar {
+pub struct HintStoreVar {
     pub data_write_aux: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
     pub data: [u8; RV32_REGISTER_NUM_LIMBS],
 }
 
-/// **SAFETY**: the order of the fields in `Rv32HintStoreRecord` and `Rv32HintStoreVar` is
+/// **SAFETY**: the order of the fields in `HintStoreRecordHeader` and `HintStoreVar` is
 /// important. The chip also assumes that the offset of the fields `write_aux` and `data` in
-/// `Rv32HintStoreCols` is bigger than `size_of::<Rv32HintStoreRecord>()`
+/// `HintStoreCols` is bigger than `size_of::<HintStoreRecordHeader>()`
 #[derive(Debug)]
-pub struct Rv32HintStoreRecordMut<'a> {
-    pub inner: &'a mut Rv32HintStoreRecordHeader,
-    pub var: &'a mut [Rv32HintStoreVar],
+pub struct HintStoreRecordMut<'a> {
+    pub inner: &'a mut HintStoreRecordHeader,
+    pub var: &'a mut [HintStoreVar],
 }
 
-/// Custom borrowing that splits the buffer into a fixed `Rv32HintStoreRecord` header
-/// followed by a slice of `Rv32HintStoreVar`'s of length `num_words` provided at runtime.
-/// Uses `align_to_mut()` to make sure the slice is properly aligned to `Rv32HintStoreVar`.
+/// Custom borrowing that splits the buffer into a fixed `HintStoreRecordHeader` header
+/// followed by a slice of `HintStoreVar`'s of length `num_words` provided at runtime.
+/// Uses `align_to_mut()` to make sure the slice is properly aligned to `HintStoreVar`.
 /// Has debug assertions to make sure the above works as expected.
-impl<'a> CustomBorrow<'a, Rv32HintStoreRecordMut<'a>, Rv32HintStoreLayout> for [u8] {
-    fn custom_borrow(&'a mut self, layout: Rv32HintStoreLayout) -> Rv32HintStoreRecordMut<'a> {
+impl<'a> CustomBorrow<'a, HintStoreRecordMut<'a>, HintStoreLayout> for [u8] {
+    fn custom_borrow(&'a mut self, layout: HintStoreLayout) -> HintStoreRecordMut<'a> {
         // SAFETY:
         // - Caller guarantees through the layout that self has sufficient length for all splits
-        // - size_of::<Rv32HintStoreRecordHeader>() is guaranteed <= self.len() by layout
+        // - size_of::<HintStoreRecordHeader>() is guaranteed <= self.len() by layout
         //   precondition
         let (header_buf, rest) =
-            unsafe { self.split_at_mut_unchecked(size_of::<Rv32HintStoreRecordHeader>()) };
+            unsafe { self.split_at_mut_unchecked(size_of::<HintStoreRecordHeader>()) };
 
         // SAFETY:
-        // - rest contains bytes that will be interpreted as Rv32HintStoreVar records
-        // - align_to_mut ensures proper alignment for Rv32HintStoreVar type
+        // - rest contains bytes that will be interpreted as HintStoreVar records
+        // - align_to_mut ensures proper alignment for HintStoreVar type
         // - The layout guarantees sufficient space for layout.metadata.num_words records
-        let (_, vars, _) = unsafe { rest.align_to_mut::<Rv32HintStoreVar>() };
-        Rv32HintStoreRecordMut {
+        let (_, vars, _) = unsafe { rest.align_to_mut::<HintStoreVar>() };
+        HintStoreRecordMut {
             inner: header_buf.borrow_mut(),
             var: &mut vars[..layout.metadata.num_words],
         }
     }
 
-    unsafe fn extract_layout(&self) -> Rv32HintStoreLayout {
-        let header: &Rv32HintStoreRecordHeader = self.borrow();
-        MultiRowLayout::new(Rv32HintStoreMetadata {
+    unsafe fn extract_layout(&self) -> HintStoreLayout {
+        let header: &HintStoreRecordHeader = self.borrow();
+        MultiRowLayout::new(HintStoreMetadata {
             num_words: header.num_words as usize,
         })
     }
 }
 
-impl SizedRecord<Rv32HintStoreLayout> for Rv32HintStoreRecordMut<'_> {
-    fn size(layout: &Rv32HintStoreLayout) -> usize {
-        let mut total_len = size_of::<Rv32HintStoreRecordHeader>();
-        // Align the pointer to the alignment of `Rv32HintStoreVar`
-        total_len = total_len.next_multiple_of(align_of::<Rv32HintStoreVar>());
-        total_len += size_of::<Rv32HintStoreVar>() * layout.metadata.num_words;
+impl SizedRecord<HintStoreLayout> for HintStoreRecordMut<'_> {
+    fn size(layout: &HintStoreLayout) -> usize {
+        let mut total_len = size_of::<HintStoreRecordHeader>();
+        // Align the pointer to the alignment of `HintStoreVar`
+        total_len = total_len.next_multiple_of(align_of::<HintStoreVar>());
+        total_len += size_of::<HintStoreVar>() * layout.metadata.num_words;
         total_len
     }
 
-    fn alignment(_layout: &Rv32HintStoreLayout) -> usize {
-        align_of::<Rv32HintStoreRecordHeader>()
+    fn alignment(_layout: &HintStoreLayout) -> usize {
+        align_of::<HintStoreRecordHeader>()
     }
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv32HintStoreExecutor {
+pub struct HintStoreExecutor {
     pub pointer_max_bits: usize,
     pub offset: usize,
 }
 
 #[derive(Clone, derive_new::new)]
-pub struct Rv32HintStoreFiller {
+pub struct HintStoreFiller {
     pointer_max_bits: usize,
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
-impl<F, RA> PreflightExecutor<F, RA> for Rv32HintStoreExecutor
+impl<F, RA> PreflightExecutor<F, RA> for HintStoreExecutor
 where
     F: PrimeField32,
-    for<'buf> RA:
-        RecordArena<'buf, MultiRowLayout<Rv32HintStoreMetadata>, Rv32HintStoreRecordMut<'buf>>,
+    for<'buf> RA: RecordArena<'buf, MultiRowLayout<HintStoreMetadata>, HintStoreRecordMut<'buf>>,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
         if opcode == HINT_STOREW.global_opcode().as_usize() {
@@ -425,7 +424,7 @@ where
             read_rv32_register(state.memory.data(), a + fp)
         };
 
-        let record = state.ctx.alloc(MultiRowLayout::new(Rv32HintStoreMetadata {
+        let record = state.ctx.alloc(MultiRowLayout::new(HintStoreMetadata {
             num_words: num_words as usize,
         }));
 
@@ -496,7 +495,7 @@ where
     }
 }
 
-impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreFiller {
+impl<F: PrimeField32> TraceFiller<F> for HintStoreFiller {
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
@@ -508,7 +507,7 @@ impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreFiller {
         }
 
         let width = trace.width;
-        debug_assert_eq!(width, size_of::<Rv32HintStoreCols<u8>>());
+        debug_assert_eq!(width, size_of::<HintStoreCols<u8>>());
         let mut trace = &mut trace.values[..width * rows_used];
         let mut sizes = Vec::with_capacity(rows_used);
         let mut chunks = Vec::with_capacity(rows_used);
@@ -518,8 +517,7 @@ impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreFiller {
             // - caller ensures `trace` contains a valid record representation that was previously
             //   written by the executor
             // - header is the first element of the record
-            let record: &Rv32HintStoreRecordHeader =
-                unsafe { get_record_from_slice(&mut trace, ()) };
+            let record: &HintStoreRecordHeader = unsafe { get_record_from_slice(&mut trace, ()) };
             let (chunk, rest) = trace.split_at_mut(width * record.num_words as usize);
             sizes.push(record.num_words);
             chunks.push(chunk);
@@ -537,13 +535,13 @@ impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreFiller {
                 // SAFETY:
                 // - caller ensures `trace` contains a valid record representation that was
                 //   previously written by the executor
-                // - chunk contains a valid Rv32HintStoreRecordMut with the exact layout specified
+                // - chunk contains a valid HintStoreRecordMut with the exact layout specified
                 // - get_record_from_slice will correctly split the buffer into header and variable
                 //   components based on this layout
-                let record: Rv32HintStoreRecordMut = unsafe {
+                let record: HintStoreRecordMut = unsafe {
                     get_record_from_slice(
                         chunk,
-                        MultiRowLayout::new(Rv32HintStoreMetadata {
+                        MultiRowLayout::new(HintStoreMetadata {
                             num_words: num_words as usize,
                         }),
                     )
@@ -569,7 +567,7 @@ impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreFiller {
                                 .request_range(pair[0] as u32, pair[1] as u32);
                         }
 
-                        let cols: &mut Rv32HintStoreCols<F> = row.borrow_mut();
+                        let cols: &mut HintStoreCols<F> = row.borrow_mut();
                         let is_single = record.inner.num_words_ptr == u32::MAX;
                         timestamp -= 4;
                         if idx == 0 && !is_single {
@@ -631,4 +629,4 @@ impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreFiller {
     }
 }
 
-pub type Rv32HintStoreChip<F> = VmChipWrapper<F, Rv32HintStoreFiller>;
+pub type HintStoreChip<F> = VmChipWrapper<F, HintStoreFiller>;

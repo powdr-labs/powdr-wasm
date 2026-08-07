@@ -2190,7 +2190,7 @@ opcode_jump_if_zero_flag * (do_absolute_jump - cond_is_zero) = 0
 (0 + opcode_jump_flag + opcode_skip_flag + opcode_jump_if_flag + opcode_jump_if_zero_flag) * (from_state__timestamp + 1 - rs_read_aux__base__prev_timestamp - 1 - (0 + rs_read_aux__base__timestamp_lt_aux__lower_decomp__0 * 1 + rs_read_aux__base__timestamp_lt_aux__lower_decomp__1 * 131072)) = 0
 
 
-# VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8>
+# VmAirWrapper<LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8>
 Symbolic machine using 40 unique main columns:
   from_state__pc
   from_state__fp
@@ -2284,7 +2284,7 @@ needs_write * (0 + opcode_loadb_flag0 + opcode_loadb_flag1 + opcode_loadh_flag -
 needs_write * (from_state__timestamp + 3 - write_base_aux__prev_timestamp - 1 - (0 + write_base_aux__timestamp_lt_aux__lower_decomp__0 * 1 + write_base_aux__timestamp_lt_aux__lower_decomp__1 * 131072)) = 0
 
 
-# VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4>
+# VmAirWrapper<LoadStoreAdapterAir, LoadStoreCoreAir<4>
 Symbolic machine using 45 unique main columns:
   from_state__pc
   from_state__fp

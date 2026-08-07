@@ -17,7 +17,7 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::Rv32HintStoreExecutor;
+use super::HintStoreExecutor;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -27,7 +27,7 @@ struct HintStorePreCompute {
     b: u8,
 }
 
-impl Rv32HintStoreExecutor {
+impl HintStoreExecutor {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -69,7 +69,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F> InterpreterExecutor<F> for Rv32HintStoreExecutor
+impl<F> InterpreterExecutor<F> for HintStoreExecutor
 where
     F: PrimeField32,
 {
@@ -107,9 +107,9 @@ where
 }
 
 #[cfg(feature = "aot")]
-impl<F> AotExecutor<F> for Rv32HintStoreExecutor where F: PrimeField32 {}
+impl<F> AotExecutor<F> for HintStoreExecutor where F: PrimeField32 {}
 
-impl<F> InterpreterMeteredExecutor<F> for Rv32HintStoreExecutor
+impl<F> InterpreterMeteredExecutor<F> for HintStoreExecutor
 where
     F: PrimeField32,
 {
@@ -153,7 +153,7 @@ where
 }
 
 #[cfg(feature = "aot")]
-impl<F> AotMeteredExecutor<F> for Rv32HintStoreExecutor where F: PrimeField32 {}
+impl<F> AotMeteredExecutor<F> for HintStoreExecutor where F: PrimeField32 {}
 /// Return the number of used rows.
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HINT_STOREW: bool>(
