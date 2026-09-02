@@ -1,8 +1,9 @@
 name: Nightly Benchmark
 
 on:
-  schedule:
-    - cron: '0 2 * * *' # 2 AM UTC daily
+  # Scheduled run disabled for now; dispatch manually when a benchmark is wanted.
+  # schedule:
+  #   - cron: '0 2 * * *' # 2 AM UTC daily
   workflow_dispatch:
 
 concurrency:
