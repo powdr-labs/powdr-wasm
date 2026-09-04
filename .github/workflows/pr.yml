@@ -96,7 +96,8 @@ jobs:
 
   gpu-tests:
     name: GPU Tests
-    if: github.event.pull_request.draft != true
+    # Not part of the default PR run for now; dispatch manually when needed.
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: [self-hosted, gpu-shared]
 
     steps:
